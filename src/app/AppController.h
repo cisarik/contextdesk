@@ -1,0 +1,107 @@
+#pragma once
+
+#include "actions/PowerActions.h"
+#include "context/ContextReceiver.h"
+#include "core/Persistence.h"
+#include "core/Types.h"
+#include "rgb/OpenRgbClient.h"
+
+#include <QObject>
+#include <QString>
+#include <QVariantList>
+#include <QVariantMap>
+
+namespace contextdeck {
+
+enum class SessionLightingMode {
+    Automatic,
+    TemporaryColor,
+    LightsOff,
+};
+
+class AppController : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString currentApplication READ currentApplication NOTIFY contextChanged)
+    Q_PROPERTY(QString currentProfile READ currentProfile NOTIFY contextChanged)
+    Q_PROPERTY(QString remappingState READ remappingState CONSTANT)
+    Q_PROPERTY(QString lightingMode READ lightingMode NOTIFY lightingModeChanged)
+    Q_PROPERTY(QString lightingConnection READ lightingConnection NOTIFY diagnosticsChanged)
+    Q_PROPERTY(QString lastError READ lastError NOTIFY diagnosticsChanged)
+    Q_PROPERTY(bool bridgeConnected READ bridgeConnected NOTIFY contextChanged)
+    Q_PROPERTY(bool degraded READ degraded NOTIFY contextChanged)
+    Q_PROPERTY(QString globalColor READ globalColor NOTIFY documentChanged)
+    Q_PROPERTY(QVariantList inventory READ inventory NOTIFY inventoryChanged)
+    Q_PROPERTY(QVariantList profiles READ profiles NOTIFY documentChanged)
+    Q_PROPERTY(QVariantList controls READ controls NOTIFY documentChanged)
+    Q_PROPERTY(QVariantMap diagnostics READ diagnostics NOTIFY diagnosticsChanged)
+
+public:
+    AppController(ContextReceiver *context, OpenRgbClient *rgb, PowerActions *power, QObject *parent = nullptr);
+
+    void load();
+    void applyLighting();
+
+    [[nodiscard]] QString currentApplication() const;
+    [[nodiscard]] QString currentProfile() const;
+    [[nodiscard]] QString remappingState() const { return QStringLiteral("inactive-until-M2"); }
+    [[nodiscard]] QString lightingMode() const;
+    [[nodiscard]] QString lightingConnection() const;
+    [[nodiscard]] QString lastError() const;
+    [[nodiscard]] bool bridgeConnected() const;
+    [[nodiscard]] bool degraded() const;
+    [[nodiscard]] QString globalColor() const;
+    [[nodiscard]] QVariantList inventory() const;
+    [[nodiscard]] QVariantList profiles() const;
+    [[nodiscard]] QVariantList controls() const;
+    [[nodiscard]] QVariantMap diagnostics() const;
+    [[nodiscard]] const ProfileDocument &document() const { return m_document; }
+    [[nodiscard]] SessionLightingMode sessionLightingMode() const { return m_sessionLighting; }
+
+    Q_INVOKABLE QString saveStatus() const { return m_saveStatus; }
+    Q_INVOKABLE bool save();
+    Q_INVOKABLE void setGlobalColor(const QString &hex);
+    Q_INVOKABLE void setApplicationColor(const QString &id, const QString &hex);
+    Q_INVOKABLE void addProfileFromInventory(int index);
+    Q_INVOKABLE void removeProfile(const QString &id);
+    Q_INVOKABLE void setAutomatic(bool enabled);
+    Q_INVOKABLE void lightsOff();
+    Q_INVOKABLE void restoreAutomatic();
+    Q_INVOKABLE void setTemporaryColor(const QString &hex);
+    Q_INVOKABLE void displaysOff();
+    Q_INVOKABLE bool canSuspend() const;
+    Q_INVOKABLE bool suspend();
+    Q_INVOKABLE void assignEmitShortcut(const QString &controlName, const QString &key, const QStringList &modifiers,
+                                        bool applicationLevel, const QString &applicationId);
+
+signals:
+    void contextChanged();
+    void lightingModeChanged();
+    void diagnosticsChanged();
+    void documentChanged();
+    void inventoryChanged();
+
+private:
+    void onIdentityChanged();
+    void onInventoryChanged();
+    void refreshResolvedProfile();
+    [[nodiscard]] bool isOwnSurface(const ApplicationIdentity &identity) const;
+    [[nodiscard]] Lighting effectiveLighting() const;
+    void sendLighting(const Lighting &lighting);
+    [[nodiscard]] static std::optional<Rgb> parseHex(const QString &hex);
+    [[nodiscard]] static QString toHex(const Rgb &color);
+
+    ContextReceiver *m_context = nullptr;
+    OpenRgbClient *m_rgb = nullptr;
+    PowerActions *m_power = nullptr;
+    ProfileStore m_store;
+    ProfileDocument m_document;
+    SessionLightingMode m_sessionLighting = SessionLightingMode::Automatic;
+    Rgb m_temporaryColor{0x7c, 0x3a, 0xed};
+    QString m_resolvedProfileId;
+    QString m_saveStatus;
+    quint64 m_identityUpdates = 0;
+    quint64 m_lightingUpdates = 0;
+};
+
+} // namespace contextdeck

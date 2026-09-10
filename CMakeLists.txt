@@ -10,7 +10,10 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/contextdeck-warnings.cmake")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Network Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Network Qml Quick QuickControls2 Svg Test)
+find_package(KF6StatusNotifierItem REQUIRED)
+find_package(KF6Kirigami REQUIRED)
+find_package(KF6Screen REQUIRED)
 
 add_library(contextdeck_core STATIC
     src/core/ControlCatalog.cpp
@@ -33,11 +36,45 @@ add_library(contextdeck_rgb STATIC
 target_include_directories(contextdeck_rgb PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_rgb PUBLIC contextdeck_core Qt6::Network)
 
+add_library(contextdeck_actions STATIC
+    src/actions/PowerActions.cpp
+)
+target_include_directories(contextdeck_actions PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(contextdeck_actions PUBLIC Qt6::DBus Qt6::Gui KF6::ScreenDpms)
+
 add_executable(contextdeck
     src/app/main.cpp
     src/app/SessionApplication.cpp
+    src/app/AppController.cpp
+    src/app/TrayController.cpp
+    src/app/SettingsHost.cpp
+    src/app/ChordRecorder.cpp
 )
-target_link_libraries(contextdeck PRIVATE contextdeck_context contextdeck_rgb Qt6::Widgets Qt6::Gui)
+target_link_libraries(contextdeck PRIVATE
+    contextdeck_context
+    contextdeck_rgb
+    contextdeck_actions
+    Qt6::Widgets
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Svg
+    KF6::StatusNotifierItem
+    KF6::Kirigami
+)
+
+qt_add_qml_module(contextdeck
+    URI io.github.cisarik.ContextDeck
+    VERSION 1.0
+    QML_FILES
+        ui/Main.qml
+        ui/OverviewPage.qml
+        ui/ProfilesPage.qml
+        ui/ControlsPage.qml
+        ui/DiagnosticsPage.qml
+    NO_RESOURCE_TARGET_PATH
+)
 
 enable_testing()
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=ContextDeck session application (G213 context lighting)
+Documentation=https://github.com/cisarik/contextdesk
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/contextdeck
+Restart=no
+# No [Install] section: this unit is started manually. Do not enable autostart.

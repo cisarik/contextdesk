@@ -13,8 +13,14 @@ SessionApplication::SessionApplication(QApplication *app, QObject *parent)
     : QObject(parent)
     , m_app(app)
     , m_context(this)
+    , m_rgb(this)
+    , m_power(this)
+    , m_controller(&m_context, &m_rgb, &m_power, this)
+    , m_tray(&m_controller, this)
+    , m_settings(&m_controller, this)
 {
     Q_UNUSED(m_app);
+    connect(&m_tray, &TrayController::showSettingsRequested, &m_settings, &SettingsHost::show);
 }
 
 bool SessionApplication::start()
@@ -25,6 +31,9 @@ bool SessionApplication::start()
     } else {
         qCWarning(lcApp) << "running degraded:" << m_context.lastError();
     }
+    m_controller.load();
+    m_rgb.start();
+    m_tray.start();
     return registered;
 }
 
