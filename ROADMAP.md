@@ -16,11 +16,12 @@ reconciliation.
   Planner report 01/01 reconciled and accepted as **PARTIAL**, archived in META.
   PARTIAL is the correct outcome — the architecture is routable, but hardware
   evidence gates remain open.
-- Next whole: **M1 `g213-contextdeck-mvp-context-lighting`** — one aggressive
-  slice that merges the former V1+V2+V3 (plus the typed power-action IDs from
-  V7) into a single IRL-testable product: build skeleton, typed profile model,
-  KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client,
-  and typed `DisplaysOff` / `Suspend` actions. **No input interception.**
+- Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented in
+  five local commits (`1b024e4`..`d04b126`), 3/3 CTest units green, independently
+  rebuilt by the ORCHESTRATOR. **Awaiting COOPERATOR IRL acceptance** with
+  `docs/operations.md` (host enablement) and `docs/testing.md` (9-step script).
+  M1 merges the former V1+V2+V3 plus the typed power-action IDs from V7 into one
+  physically testable product. **It contains no input interception.**
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -52,7 +53,7 @@ done-as-planned.
 | # | Identity | What it delivers | Depends on | Status |
 |---|----------|------------------|------------|--------|
 | V0 | baseline reconciliation | Confirmed baseline, trace continuation | — | Done (G0) |
-| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model + validated atomic persistence, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (five zones, one base color), typed `DisplaysOff`/`Suspend` actions, three safety test units, COOPERATOR IRL test pack | G0, P2 | **Next** |
+| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model + validated atomic persistence, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (five zones, one base color), typed `DisplaysOff`/`Suspend` actions, three safety test units, COOPERATOR IRL test pack | G0, P2 | **Implemented — awaiting IRL acceptance** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install incl. its udev rules, loopback SDK server, KWin script load — the G2 five-zone evidence | — | Granted, parallel |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
 | M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | Planned |
@@ -73,12 +74,12 @@ ship:
 |------|-----------------|--------|--------|
 | G0 | Baseline ownership confirmed | Any repository mutation | Confirmed; ORCHESTRATOR-owned docs commits moved `main` past `6b4e4b3` — M1's exact baseline is the re-route commit |
 | G1 | Routing matrix for all 20 requested controls | Special-button remapping | Open (physical probe) |
-| G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **Granted** — COOPERATOR installs/runs the server and reports IRL results |
+| G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **IRL pending** — code and protocol codec are in; the physical five-zone result is M1 test step 3 |
 | G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | Granted in principle, **reserved for M2** — unused by M1 |
 | G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | Planned |
 | G5 | KWin lifecycle, identity, focus-race measurements | Contextual behavior claims | Planned |
 | G6 | License decision + dependency provenance | Release | Planned |
-| G7 | Authorized display-off and suspend acceptance | Enabling power actions | Folded into M1 IRL testing (`CanSuspend=yes` verified; `KScreen::Dpms` verified) |
+| G7 | Authorized display-off and suspend acceptance | Enabling power actions | **IRL pending** — M1 test steps 7–8 (`CanSuspend=yes` verified; `KScreen::Dpms` linked; see the known suspect note) |
 | G8 | Independent acceptance, install/remove, autostart recovery | Shipping an automatically grabbing install | Planned |
 
 ## Notes per logical whole
@@ -110,9 +111,9 @@ ship:
   GCC 16.2.1 / Clang 22.1.8, libevdev 1.13.7. `extra-cmake-modules` is absent
   — early slices must not require it.
 
-### M1 context + lighting — next whole
+### M1 context + lighting — implemented, awaiting IRL acceptance
 
-One slice, five stages, one commit per stage:
+One slice, five stages, one commit per stage (all five green):
 
 | Stage | Delivers |
 |-------|----------|
@@ -131,6 +132,29 @@ One slice, five stages, one commit per stage:
   conditional on G1 and **not wired to any action in M1**).
 - M1 writes lighting and reads window context only. It must not read, grab,
   filter, or inject any input event.
+
+#### As-built corrections (Worker report 01/01, reconciled by the ORCHESTRATOR)
+
+- KWin's Workspace signal is `windowRemoved`, not `windowClosed` (that one
+  belongs to the effects API). The bridge uses `windowRemoved`.
+- `login1.Manager.CanSuspend` is a **method**, not a property; it returns
+  `"yes"` on this host. `Suspend(false)` is called on the system bus.
+- `callDBus` carries all six `ContextReport` arguments; JS numbers arrive as
+  doubles and the receiver coerces integer-valued doubles without changing the
+  advertised D-Bus signature.
+- The OpenRGB `UPDATELEDS` payload frames each LED as `0x00BBGGRR`; the header is
+  little-endian on this host, not network byte order.
+- Not wired in M1 (accepted, deferred): KService/desktop-file friendly names in
+  the app picker (labels use `desktop_file_name`, then `resource_class`), and
+  KConfig window-geometry persistence.
+- **Known IRL suspect:** `KScreen::Dpms` is constructed on the stack inside
+  `PowerActions::displaysOff()` and destroyed immediately after `switchMode()`.
+  DPMS is asynchronous (`hasPendingChanges`), so if step 7 of the IRL script
+  does nothing, this lifetime is the first thing to fix — make the helper a
+  long-lived member.
+- Worker environment note: this coding client needed a clean `PATH` for CMake
+  (`CMAKE_ROOT`). The ORCHESTRATOR's independent rebuild in a normal shell
+  configured, built, and passed 3/3 without that workaround.
 
 ### Verified build baseline (ORCHESTRATOR-measured, no ECM needed)
 

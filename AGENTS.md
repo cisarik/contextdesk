@@ -7,13 +7,17 @@ this project.
 
 ## Current repository state
 
-- Pre-implementation bootstrap for **G213 ContextDeck**: a Linux/KDE/Wayland control
-  utility for the Logitech G213 Prodigy keyboard only. Canonical repo:
+- **M1 is implemented, not yet accepted.** ContextDeck is a Linux/KDE/Wayland
+  control utility for the Logitech G213 Prodigy keyboard only. Canonical repo:
   `https://github.com/cisarik/contextdesk`.
 - Tree: `handout.md`, `AGENTS.md`, `README.md`, `ROADMAP.md`, `LICENSE`, `docs/`,
-  and the pinned `.ap/` protocol submodule. No source, build system, tests, lint,
-  or CI yet. Do not invent build/test commands. Implementation happens only under
-  an explicit Orchestrator-issued Worker prompt; nothing in this file grants it.
+  `CMakeLists.txt`, `cmake/`, `src/`, `ui/`, `kwin/`, `tests/unit/`,
+  `packaging/systemd/`, and the pinned `.ap/` protocol submodule.
+- Real build/test commands (verified by the ORCHESTRATOR, not invented):
+  `cmake -S . -B build -G Ninja` ; `cmake --build build` ;
+  `ctest --test-dir build --output-on-failure` (3 units). There is still no lint
+  config and no CI. Implementation happens only under an explicit
+  Orchestrator-issued Worker prompt; nothing in this file grants it.
 - `handout.md` is the COOPERATOR-to-ORCHESTRATOR bootstrap contract (47 sections,
   ~2300 lines). Read it before planning or routing; treat it as immutable history.
   Fast path: §1–6 (roles, manual dispatch, AP/META/trace), §33–34 (mandatory first
@@ -32,14 +36,16 @@ this project.
   `g213-contextdeck-foundation-architecture`) was reconciled and accepted as
   PARTIAL, archived in META. The accepted plan is summarized in `ROADMAP.md` and
   `docs/architecture.md` — read them before proposing new components.
-- Next implementation whole: **M1 `g213-contextdeck-mvp-context-lighting`** —
-  one aggressive slice (build skeleton, typed profile model + validated
-  persistence, KWin context bridge, tray + Kirigami settings, OpenRGB
-  protocol-5 client, typed `DisplaysOff`/`Suspend`) with three safety-only test
-  units. Allowlist: `CMakeLists.txt`, `.gitignore`, `cmake/`, `src/`, `ui/`,
-  `kwin/`, `tests/unit/`, `packaging/systemd/`, `docs/specification.md`,
-  `docs/operations.md`, `docs/testing.md`. **No input interception of any kind.**
-  Only the ORCHESTRATOR routes it further.
+- M1 `g213-contextdeck-mvp-context-lighting` is **implemented** (five local
+  commits `1b024e4`..`d04b126` on `main`, 3/3 CTest units green, independently
+  rebuilt by the ORCHESTRATOR) and **awaiting COOPERATOR IRL acceptance** via
+  `docs/operations.md` + `docs/testing.md`. G2 (five-zone lighting) and G7
+  (power actions) are decided by that IRL run, not by code review.
+- The next route is chosen after IRL results: an M1 bounded correction exchange,
+  or **M2 `g213-contextdeck-input-passthrough-safety`**, which still requires the
+  G1 physical-control probe and the reserved event-node access grant. **No input
+  interception exists in the tree today, and none may be added outside M2.**
+  Only the ORCHESTRATOR routes further.
 - COOPERATOR-granted mutation classes for M1 host enablement (named, bounded):
   install `openrgb` from the repo including its udev rules; run the OpenRGB SDK
   server on loopback; install/load the KWin script via `kpackagetool6` or
