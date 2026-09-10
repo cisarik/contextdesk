@@ -101,3 +101,24 @@ file, and everything outside that block stays authoritative for this project.
 - Licensing is unresolved: root `LICENSE` is MIT, but handout §25 says the
   COOPERATOR has not selected the license. Never copy external code (G213Tray is
   GPL-3.0-or-later) before an explicit compatible decision.
+
+
+<!-- BEGIN MANAGED AP INTEGRATION -->
+## Analytic Programming
+
+This project uses Analytic Programming through the pinned Git submodule at `.ap/`.
+The exact AP version is the commit recorded by this repository's `.ap` gitlink.
+
+Required reading:
+- All participants read `.ap/AP.md`.
+- Orchestrators also read `.ap/AP_ORCHESTRATOR.md`.
+- Workers also read `.ap/AP_WORKER.md`.
+- Prompt structures are in `.ap/PROMPT_CONTRACTS.md`.
+
+Project-specific rules outside this managed block remain authoritative within
+their scope. Task authority comes only from the current authoritative
+Orchestrator prompt.
+
+Treat `.ap/` as read-only during ordinary project work. Protocol updates require
+a separate explicit AP update task.
+<!-- END MANAGED AP INTEGRATION -->
