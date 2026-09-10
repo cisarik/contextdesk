@@ -145,3 +145,64 @@ Never `/sys/power/state`, never `systemctl`, never `QProcess`.
 
 Chord recording, when present in the settings window, captures keys only while
 its own control has focus inside that window. That is not input interception.
+
+## Context D-Bus API
+
+Session-bus name `io.github.cisarik.ContextDeck` is requested **without**
+replacing an existing owner. If the name is taken, the application stays up in
+a degraded read-only state and does not steal the name.
+
+Object `/io/github/cisarik/ContextDeck/Context1`, interface
+`io.github.cisarik.ContextDeck.Context1`:
+
+| Member | Kind | Arguments / type |
+|--------|------|------------------|
+| `ContextReport` | method | `bridge_id s`, `sequence u`, `desktop_file_name s`, `resource_class s`, `resource_name s`, `parent_window_id x` |
+| `InventoryReport` | method | `bridge_id s`, `sequence u`, `payload_json s` (hard cap 64 KiB, max 200 unique identity entries) |
+| `Heartbeat` | method | `bridge_id s`, `sequence u` |
+| `CurrentIdentity` | property | `s` (JSON of the three identity fields only) |
+| `BridgeConnected` | property | `b` |
+| `PolicyRevision` | property | `u` |
+
+Every argument is untrusted and bounded. Stale or out-of-order sequence numbers
+are rejected. There is no method that injects input or executes anything.
+Heartbeat interval is 5 s; three missed heartbeats mark the bridge lost.
+
+The KWin script lives at `kwin/contextdeck-bridge/` as a `KWin/Script` package.
+It uses `workspace.windowActivated`, `windowAdded`, and `windowRemoved`
+(KWin 6.7.5 scripting has no `windowClosed` on Workspace; that name is an
+effects API). Identity is resolved by walking `transientFor` with a cycle
+guard. Captions, PIDs, and executable paths are never sent.
+
+KWin 6.7.5 `callDBus` is varargs (up to nine extra arguments) and converts
+JavaScript numbers to doubles. The receiver coerces integer-valued doubles
+(and strings of digits) into `u`/`x` rather than changing the advertised
+signature.
+
+## OpenRGB client (protocol 5)
+
+Loopback only (`127.0.0.1:6742`). Client name `ContextDeck`. Protocol version
+is negotiated first; a server version newer than 5 is rejected (lighting
+disabled, application stays up). Controllers are selected by Logitech + G213
+identity, not by a stored index. `DEVICE_LIST_UPDATED` and reconnects
+re-enumerate. Direct/custom mode is selected, then whole-device `UPDATELEDS`
+for five little-endian `0x00BBGGRR` colors.
+
+Frames: magic `ORGB`, 16-byte little-endian header (device index, packet id,
+payload size). Wrong magic, truncated frames, and payloads above 1 MiB are
+rejected. Connect timeout 2 s, request timeout 5 s. Latest desired color
+wins; updates coalesce at 20 Hz. Reconnect uses bounded backoff. Failure
+disables lighting only. "Sent successfully" is not hardware confirmation:
+desired color, connection state, and last error are separate.
+
+## Session lighting overrides
+
+Tray and Overview can set **automatic**, **temporary_color**, or **lights_off**.
+An override is never labelled Automatic. `temporary_color` expires on the next
+*external* application-identity change; opening this application's tray or
+settings does not expire it. `lights_off` holds until automatic is restored.
+
+## Optional user unit
+
+`packaging/systemd/contextdeck-session.service` is a user unit with **no**
+`[Install]` section. It is started manually. It is not enabled by default.
