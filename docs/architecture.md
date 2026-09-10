@@ -127,6 +127,36 @@ this document grants none.
   against a compromised desktop session; same-user compromise remains a
   residual risk owned by the COOPERATOR.
 
+### Packaged OpenRGB udev exposure (measured on the target host, M1)
+
+The foundation plan warned that "lighting-only" device access can expand input
+visibility. Installing the distribution `openrgb` package proved that warning
+true, and further. `60-openrgb.rules` applies `TAG+="uaccess"` broadly, so
+`logind` granted the session user ACLs well beyond the keyboard:
+
+| Node | Rule that granted it | Consequence |
+|------|----------------------|-------------|
+| `/dev/port` (group `kmem`) | `KERNEL=="port", TAG+="uaccess"` | raw x86 I/O port access from a user session |
+| `/dev/i2c-*` | `KERNEL=="i2c-[0-99]*", TAG+="uaccess"` | SMBus access; OpenRGB's own help warns it can brick boards |
+| `/dev/input/event7`, `event8` (G213) | `SUBSYSTEMS=="usb\|hidraw"` + `046d:c336` — `SUBSYSTEMS` walks the parent chain, so the rule also matches the keyboard's **input** devices | any process running as the session user can read raw G213 keystrokes |
+| `/dev/hidraw2`, `hidraw3` (G213) | same rule, intended target | required for RGB; granted as `uaccess`, **not** `MODE=0666` |
+
+COOPERATOR decision (M1): **narrow revert**. A host-local
+`/etc/udev/rules.d/61-contextdeck-input-guard.rules` removes `uaccess` from the
+G213 input devices, `/dev/port`, and `/dev/i2c-*`, and leaves the hidraw grant
+intact so keyboard lighting keeps working. Consequences accepted: OpenRGB loses
+motherboard/GPU RGB control on this host, and the guard file is host-local until
+packaging owns it.
+
+Durable rules for this project:
+
+- Audit packaged udev rules **before** installing, not after; a package install
+  is a host-policy mutation even when the package looks like a user tool.
+- Never rely on a package's device rules as the product's access model. M2's
+  broker needs its own narrow, reviewed rule or a dedicated identity.
+- Lighting must never be the reason an input event node becomes readable by the
+  session user.
+
 ## Lifecycle and recovery
 
 - Leases and acknowledgements: a policy is effective only after the broker
