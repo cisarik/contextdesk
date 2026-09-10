@@ -10,9 +10,10 @@ this project.
 - Pre-implementation bootstrap for **G213 ContextDeck**: a Linux/KDE/Wayland control
   utility for the Logitech G213 Prodigy keyboard only. Canonical repo:
   `https://github.com/cisarik/contextdesk`.
-- Tree is `handout.md`, `AGENTS.md`, a one-line `README.md` stub, `LICENSE`, and the
-  pinned `.ap/` protocol submodule. No source, build system, tests, lint, or CI. Do
-  not invent build/test commands and do not start implementation or scaffolding.
+- Tree: `handout.md`, `AGENTS.md`, `README.md`, `ROADMAP.md`, `LICENSE`, `docs/`,
+  and the pinned `.ap/` protocol submodule. No source, build system, tests, lint,
+  or CI yet. Do not invent build/test commands. Implementation happens only under
+  an explicit Orchestrator-issued Worker prompt; nothing in this file grants it.
 - `handout.md` is the COOPERATOR-to-ORCHESTRATOR bootstrap contract (47 sections,
   ~2300 lines). Read it before planning or routing; treat it as immutable history.
   Fast path: §1–6 (roles, manual dispatch, AP/META/trace), §33–34 (mandatory first
@@ -27,11 +28,13 @@ this project.
   terminal report.
 - COOPERATOR-facing chat is **Slovak**. Worker prompts and Worker reports are
   **English**.
-- The first Worker must be a plan-only fresh Planner: logical whole
-  `g213-contextdeck-foundation-architecture`, `Worker session ordinal: 01`,
-  `Worker exchange ordinal: 01`, `Worker session target: fresh-worker-session`,
-  `Native planning mode: required`. Do not issue an implementation prompt before
-  its terminal report returns.
+- Foundation planning is done: Planner report 01/01 (logical whole
+  `g213-contextdeck-foundation-architecture`) was reconciled and accepted as
+  PARTIAL, archived in META. The accepted plan is summarized in `ROADMAP.md` and
+  `docs/architecture.md` — read them before proposing new components.
+- Next implementation whole: `g213-contextdeck-profile-contract` (V1). Its Worker
+  prompt exists (allowlist: `CMakeLists.txt`, `.gitignore`, `src/core/`,
+  `tests/unit/`, `docs/specification.md`); only the ORCHESTRATOR routes it further.
 
 ## Hard rule: no automated Worker dispatch
 
@@ -53,9 +56,12 @@ this project.
 - META: `https://github.com/cisarik/meta` — historical evidence only, never current
   truth, task authority, or a roadmap. Local checkout: `/home/agile/meta`. Follow the
   storage contract in its `README.md`; do not assume an old layout or hardcode dates.
-  It currently has an untracked `projects/contextdesk/00/00_handout.md` — verify Git
-  state before treating anything as archived.
-- Trace policy (handout §5): project key `g213-contextdeck`, public,
+  This project's trace lives under `projects/contextdesk/` (foundation exchange
+  archived locally as `f420ec6`); always verify actual META Git state before treating
+  anything as archived or complete.
+- Trace policy (handout §5): handout proposed the provisional key
+  `g213-contextdeck`; the operative META project key is `contextdesk` (matches the
+  repo name and the actual trace directory). Trace is public,
   `historical-evidence-only`, archival owner ORCHESTRATOR. Archive the exact issued
   prompt and exact actual terminal report together, only after the report exists, in
   the same first-add commit. Workers never self-archive; reports are never rewritten
@@ -73,6 +79,20 @@ this project.
 - No live orchestration state files (`BOOT_*`, `NEXT_*`, `WORKERS.md`,
   `SESSION_STATE.md`, `CURRENT_AGENT.md`) and no session diaries. Durable meaning
   belongs to its owner: spec / ADR / security / operations / roadmap / tests / META.
+- No second live task queues (`TODOs.md`, `NOTES.md`, ad-hoc milestone files):
+  `ROADMAP.md` is the single human plan of record, deferred work goes to the
+  roadmap or issues, and history goes to META.
+
+## Documentation
+
+- Repo documentation is **English** and public-facing; keep it human-readable and
+  scannable — this is an open-source project for people, not just agents.
+- Owners: `README.md` = front door; `ROADMAP.md` = human plan of record (updated by
+  the ORCHESTRATOR after each reconciliation); `docs/` = durable technical owners
+  (`specification.md`, `architecture.md`, `adr/`, hardware evidence, testing,
+  operations); META = exact prompt/report history.
+- Never commit local machine paths, workstation details, event-node numbers, or any
+  non-public data into these files — the repository is public.
 
 ## Mutation, Git, and safety
 
@@ -86,9 +106,10 @@ this project.
   leaves the real keyboard usable, no stuck modifiers, no duplicate/phantom events,
   documented TTY recovery. Never autostart an unproven grabbing path.
 - Never log ordinary typed keystrokes. Suspend goes through logind/systemd policy,
-  never `/sys/power/state` (this host reportedly had `sleep.target`/`suspend.target`
-  masked after an upgrade — verify, don't bypass). Display-off must not alter KScreen
-  topology.
+  never `/sys/power/state`. Planner evidence (report 01/01) found
+  `sleep.target`/`suspend.target` loaded and `CanSuspend=yes` — the old "masked
+  targets" assumption was disproven; never bypass policy either way. Display-off
+  must not alter KScreen topology.
 
 ## Product invariants easy to get wrong
 
@@ -101,6 +122,13 @@ this project.
   `desktopFileName`/`resourceClass` identity over `/proc` or window captions.
 - Actions are a typed model; no arbitrary shell strings. Fail-safe default is
   pass-through; unset means inherit, not swallow.
+- Accepted architecture (plan of record in `docs/architecture.md`): the session app
+  never touches raw keyboard devices — only the input broker does, and it starts
+  disabled. One persistent OpenRGB SDK connection on loopback, never a CLI process
+  per focus change; one RGB backend at a time.
+- G213 controls in scope: F1–F12, Previous, Play/Pause, Next, Mute, Volume Down,
+  Volume Up, Game Mode, Backlight. The last two are conditional on hardware evidence
+  (gate G1) — never silently substitute PrintScreen or Pause for them.
 - Licensing is unresolved: root `LICENSE` is MIT, but handout §25 says the
   COOPERATOR has not selected the license. Never copy external code (G213Tray is
   GPL-3.0-or-later) before an explicit compatible decision.

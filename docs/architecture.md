@@ -1,0 +1,162 @@
+# ContextDeck — Architecture (plan of record)
+
+Reconciled from the foundation Planner report (logical whole
+`g213-contextdeck-foundation-architecture`, exchange 01/01, status PARTIAL).
+This is the accepted design for routing the next implementation slices.
+Individual decisions will be formalized as ADRs under `docs/adr/` as they land.
+Implementation authority comes only from Orchestrator-issued Worker prompts —
+this document grants none.
+
+## Process model
+
+| Component | Responsibility | Hard boundaries |
+|-----------|----------------|-----------------|
+| Session application (Qt6/KF6: `QApplication` + `KStatusNotifierItem`, lazy Kirigami/QML settings) | Tray, settings, profiles, KWin context bridge, app inventory, RGB client, approved desktop actions | No raw keyboard-device access |
+| Input broker (C++20, libevdev + uinput) | Verified G213 event routing, policy application, virtual input, lifecycle safety | No GUI/QML, no RGB, no network, no shell execution, no ordinary-key logging |
+| OpenRGB (external service) | G213 lighting transport over the SDK | Separately reviewed device access; loopback only |
+
+- Closing the settings window never stops the tray process; a settings crash
+  never affects input ownership.
+- Losing the session application expires the broker's authority and disarms
+  remapping.
+- No additional daemons for inventory, configuration, or diagnostics.
+
+## Input path
+
+- Match real USB ancestry, exact VID/PID `046d:c336`, approved interfaces, and
+  verified device identity; reject virtual devices and unrelated keyboards.
+- libevdev filter + uinput virtual keyboard. The broker starts **disabled**;
+  autostart is opt-in only after G4 acceptance.
+- Operating contract essentials:
+  - create the virtual device before attempting exclusive ownership;
+  - multi-node acquisition is non-atomic — if any claim fails, release all;
+  - freeze the resolved action at physical key-down;
+  - keep separate physical/synthetic key-ownership records;
+  - balance every synthetic press with a release; never drop a modifier that
+    another device might own;
+  - on `SYN_DROPPED`, reconcile state — reconstructed presses must never
+    trigger commands;
+  - cancel pending mapped actions on invalid context, lock, session loss, or
+    disconnect; never replay queued actions after recovery.
+- v1 shortcut semantics: one completed chord per deliberate press; native
+  repetition preserved for pass-through controls.
+- Never: force-detach USB interface 01, `stop_all` on input-remapper, broad
+  `input`-group membership, or CLI spawns per focus change.
+
+## RGB path
+
+- OpenRGB `1.0rc3` (source commit `6fbcf62`), SDK **protocol 5** — the master
+  SDK docs describe newer protocols and must not be mixed in.
+- The inspected G213 backend exposes one linear zone with **five color
+  entries**, corresponding to the five physical zones. Use whole-device
+  five-color updates.
+- Small, independently authored QtNetwork client: explicit protocol
+  negotiation, bounded packet/string parsing, partial-read and timeout
+  handling, enumeration with exact G213 selection, device-list-change
+  handling, fresh re-enumeration after reconnect; latest desired color wins,
+  stale queued colors are discarded.
+- Controller indices are not durable identities — re-enumerate after changes.
+- Loopback binding only (the SDK is not authentication between local users).
+- "Sent successfully" is not hardware acceptance: the UI must distinguish
+  desired state, connection state, and failure without claiming physical
+  readback.
+
+## Foreground context
+
+- Event-driven KWin script (`windowActivated` / window add/remove) plus an
+  own D-Bus receiver — proposed name `io.github.cisarik.ContextDeck.Context1`
+  (a new product API, not an existing KWin method).
+- Identity resolution order: normalized `desktopFileName` → exact
+  `resourceClass` (with `resourceName` where needed) → bounded, cycle-safe
+  parent resolution for dialogs. Captions, PID, and executable paths are not
+  normal identity sources.
+- Every message carries a bridge instance, sequence number, and context
+  snapshot; the receiver authenticates the expected bus owner, rejects stale
+  messages, and compiles an immutable policy revision. A heartbeat detects
+  bridge loss without title polling.
+- Accepted race model (COOPERATOR decision): measured best-effort —
+  cancel actions known to be stale, pass through when uncertainty is detected
+  before consumption, and measure the residual interval. Exact delivery to the
+  original window across an unobserved compositor focus transition is **not**
+  promised.
+
+| Condition | Mapping behavior |
+|-----------|------------------|
+| Identified app with profile | App overrides over global defaults |
+| Identified app without profile | Global defaults |
+| Unknown/stale context, lock screen, no active window | Pass-through |
+| ContextDeck settings / unsuitable shell surface | Neutral / pass-through |
+| Reconnect or resume | Wait for fresh context + policy sync |
+
+## Configuration contract
+
+- One authoritative versioned document:
+  `$XDG_CONFIG_HOME/contextdeck/profiles.json`
+  (fallback `$HOME/.config/contextdeck/profiles.json`).
+- Resolution: app override → global → pass-through. `Inherit Global` (app
+  level) resolves through the global profile; it is invalid on the global
+  profile itself. `Disabled` is explicit consumption, never inferred from
+  absence.
+- Typed actions only: `InheritGlobal`, `PassThrough`, `Disabled`,
+  `EmitShortcut` (one validated chord), `ApprovedSystemAction` (`Suspend`,
+  `DisplaysOff` — IDs only until G7).
+- Persistence: validate the entire draft before activation → atomic
+  `QSaveFile` replacement (no direct-write fallback) → bounded last-valid
+  backup beside the document. Invalid or newer-schema files are preserved
+  untouched. Cold start with no valid configuration resolves to pass-through.
+- Application matcher stores friendly display identity plus technical match
+  identity. Unknown semantic fields are rejected, not silently discarded.
+- KConfig may hold window geometry/presentation only — never a second owner of
+  profile semantics. No executable config, no shell strings, no scripting.
+
+## Security posture
+
+- Dedicated, unprivileged broker identity with narrowly scoped G213 event
+  device + uinput access; the GUI account keeps no raw input permissions and
+  no broad `input` group membership.
+- **Important:** the G213's RGB HID interface also carries keyboard reports —
+  granting hidraw access to the session account "for lighting" would expand
+  input visibility. The external RGB service gets its own restricted identity.
+- Broker IPC: authenticated system-bus credentials, bound to one eligible
+  active session/seat, bounded policy objects only, no "inject arbitrary keys"
+  operation. Session lock and lifecycle are observed independently.
+- Diagnostics are bounded to state transitions, error classes, and counters.
+  No ordinary keystrokes, window captions, device serials, or raw HID reports
+  in logs; disable core dumps in the input process.
+- Known limits: D-Bus names and window metadata are not a strong boundary
+  against a compromised desktop session; same-user compromise remains a
+  residual risk owned by the COOPERATOR.
+
+## Lifecycle and recovery
+
+- Leases and acknowledgements: a policy is effective only after the broker
+  acknowledges its revision; a stale GUI cannot keep the broker armed;
+  restarts start disarmed; hardware reconnect never replays actions; a crash
+  never triggers an automatic re-grab loop.
+- The systemd watchdog is fed by the real input event loop (a blocked loop
+  must not look healthy via a separate thread). 2 s is a proposed target, not
+  a measured value.
+- Recovery order: disarm → release synthetic state → destroy the virtual
+  device → release real-device ownership → real keyboard stays usable.
+  Kernel close behavior (grab release on evdev close, uinput teardown on
+  close) is verified in source but still needs acceptance on this kernel.
+- RGB failure disables lighting only; input behavior is unaffected. Never
+  auto-switch to direct HID or restart unrelated RGB software.
+- Uninstall reverses only owned units/rules/files; user profiles are preserved
+  by default.
+
+## Licensing posture (pending COOPERATOR decision)
+
+- Repository evidence: MIT file. Recommendation: retain MIT for independently
+  authored code, dynamic-link Qt/KF6 under their reviewed LGPL routes, keep
+  OpenRGB (GPL-2.0-or-later) as a separate external process, and never copy
+  source from G213Tray (GPL-3.0-or-later, research evidence only) or
+  input-remapper (GPL-3.0-or-later, existing independent installation).
+- No third-party source has been copied into the product. Final decision and
+  dependency provenance review are gate G6.
+
+## Open evidence gates
+
+See ROADMAP.md: G1 physical controls, G2 RGB behavior, G3 device authority,
+G4 input safety, G5 desktop behavior, G6 licensing, G7 power actions,
+G8 release lifecycle.
