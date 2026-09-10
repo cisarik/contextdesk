@@ -10,7 +10,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/contextdeck-warnings.cmake")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Test)
 
 add_library(contextdeck_core STATIC
     src/core/ControlCatalog.cpp
@@ -19,6 +19,18 @@ add_library(contextdeck_core STATIC
 )
 target_include_directories(contextdeck_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_core PUBLIC Qt6::Core)
+
+add_library(contextdeck_context STATIC
+    src/context/ContextReceiver.cpp
+)
+target_include_directories(contextdeck_context PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(contextdeck_context PUBLIC contextdeck_core Qt6::DBus)
+
+add_executable(contextdeck
+    src/app/main.cpp
+    src/app/SessionApplication.cpp
+)
+target_link_libraries(contextdeck PRIVATE contextdeck_context Qt6::Widgets Qt6::Gui)
 
 enable_testing()
 

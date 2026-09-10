@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "ContextDeck contributors"
+            }
+        ],
+        "Description": "Reports foreground application identity to ContextDeck. Never sends captions, PIDs, or executable paths.",
+        "Id": "contextdeck-bridge",
+        "License": "MIT",
+        "Name": "ContextDeck Bridge",
+        "Version": "0.1.0",
+        "Website": "https://github.com/cisarik/contextdesk"
+    },
+    "X-Plasma-API": "javascript"
+}
