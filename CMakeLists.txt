@@ -10,7 +10,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/contextdeck-warnings.cmake")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Network Test)
 
 add_library(contextdeck_core STATIC
     src/core/ControlCatalog.cpp
@@ -26,11 +26,18 @@ add_library(contextdeck_context STATIC
 target_include_directories(contextdeck_context PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_context PUBLIC contextdeck_core Qt6::DBus)
 
+add_library(contextdeck_rgb STATIC
+    src/rgb/OpenRgbProtocol.cpp
+    src/rgb/OpenRgbClient.cpp
+)
+target_include_directories(contextdeck_rgb PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(contextdeck_rgb PUBLIC contextdeck_core Qt6::Network)
+
 add_executable(contextdeck
     src/app/main.cpp
     src/app/SessionApplication.cpp
 )
-target_link_libraries(contextdeck PRIVATE contextdeck_context Qt6::Widgets Qt6::Gui)
+target_link_libraries(contextdeck PRIVATE contextdeck_context contextdeck_rgb Qt6::Widgets Qt6::Gui)
 
 enable_testing()
 
@@ -41,3 +48,7 @@ add_test(NAME test_profile_resolver COMMAND test_profile_resolver)
 add_executable(test_profile_persistence tests/unit/test_profile_persistence.cpp)
 target_link_libraries(test_profile_persistence PRIVATE contextdeck_core Qt6::Test)
 add_test(NAME test_profile_persistence COMMAND test_profile_persistence)
+
+add_executable(test_openrgb_protocol tests/unit/test_openrgb_protocol.cpp)
+target_link_libraries(test_openrgb_protocol PRIVATE contextdeck_rgb Qt6::Test)
+add_test(NAME test_openrgb_protocol COMMAND test_openrgb_protocol)
