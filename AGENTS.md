@@ -1,17 +1,18 @@
 # AGENTS.md — G213 ContextDesk
 
 Project-owned rules for any agent session in this repo. Universal AP semantics are
-not stored here; when AP is integrated, its managed block will also live in this
-file, and everything outside that block stays authoritative for this project.
+not stored here; the AP-managed block at the bottom of this file points to the
+pinned `.ap/` submodule, and everything outside that block stays authoritative for
+this project.
 
 ## Current repository state
 
 - Pre-implementation bootstrap for **G213 ContextDeck**: a Linux/KDE/Wayland control
   utility for the Logitech G213 Prodigy keyboard only. Canonical repo:
   `https://github.com/cisarik/contextdesk`.
-- Tree is only `handout.md`, a one-line `README.md` stub, and `LICENSE`. No source,
-  build system, tests, lint, CI, or `.ap/` submodule. Do not invent build/test
-  commands and do not start implementation or scaffolding.
+- Tree is `handout.md`, `AGENTS.md`, a one-line `README.md` stub, `LICENSE`, and the
+  pinned `.ap/` protocol submodule. No source, build system, tests, lint, or CI. Do
+  not invent build/test commands and do not start implementation or scaffolding.
 - `handout.md` is the COOPERATOR-to-ORCHESTRATOR bootstrap contract (47 sections,
   ~2300 lines). Read it before planning or routing; treat it as immutable history.
   Fast path: §1–6 (roles, manual dispatch, AP/META/trace), §33–34 (mandatory first
@@ -61,9 +62,11 @@ file, and everything outside that block stays authoritative for this project.
   or prettified. Archives must be public-safe: no secrets, tokens, private URLs,
   personal data, hidden reasoning, or raw tool logs. Local add/commit only; remote
   push is publication and needs separate authority.
-- AP adoption is planned, not done: pinned `.ap/` submodule plus `./.ap/ap init`
-  (which manages a block in this file). Do not create `.ap/`, run `ap init`, or
-  hand-edit a managed block without explicit bootstrap authority.
+- AP is pinned as the `.ap/` submodule (the gitlink is the exact AP version); the
+  managed block at the bottom of this file is owned by `./.ap/ap init`. Check health
+  with `./.ap/ap doctor`; never hand-edit inside the managed markers. Treat `.ap/` as
+  read-only during ordinary project work; AP updates (`./.ap/ap update --check`,
+  `./.ap/ap update --apply`) are a separate explicitly authorized task.
 
 ## Do not create
 
