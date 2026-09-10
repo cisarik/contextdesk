@@ -40,7 +40,7 @@ you unable to type.
 | Area | State |
 |------|-------|
 | Plan | Reconciled — foundation planning accepted; see [ROADMAP.md](ROADMAP.md) |
-| Code | None yet — the first implementation slice (typed profile contract) is next |
+| Code | None yet — the first slice (`mvp-context-lighting`: profiles, KWin context, tray UI, per-app RGB) is next |
 | Hardware evidence | Partial — physical-button probe and RGB trial are open gates |
 | Build / install | None yet — do not expect a build system or installer |
 

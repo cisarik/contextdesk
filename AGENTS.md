@@ -32,9 +32,29 @@ this project.
   `g213-contextdeck-foundation-architecture`) was reconciled and accepted as
   PARTIAL, archived in META. The accepted plan is summarized in `ROADMAP.md` and
   `docs/architecture.md` — read them before proposing new components.
-- Next implementation whole: `g213-contextdeck-profile-contract` (V1). Its Worker
-  prompt exists (allowlist: `CMakeLists.txt`, `.gitignore`, `src/core/`,
-  `tests/unit/`, `docs/specification.md`); only the ORCHESTRATOR routes it further.
+- Next implementation whole: **M1 `g213-contextdeck-mvp-context-lighting`** —
+  one aggressive slice (build skeleton, typed profile model + validated
+  persistence, KWin context bridge, tray + Kirigami settings, OpenRGB
+  protocol-5 client, typed `DisplaysOff`/`Suspend`) with three safety-only test
+  units. Allowlist: `CMakeLists.txt`, `.gitignore`, `cmake/`, `src/`, `ui/`,
+  `kwin/`, `tests/unit/`, `packaging/systemd/`, `docs/specification.md`,
+  `docs/operations.md`, `docs/testing.md`. **No input interception of any kind.**
+  Only the ORCHESTRATOR routes it further.
+- COOPERATOR-granted mutation classes for M1 host enablement (named, bounded):
+  install `openrgb` from the repo including its udev rules; run the OpenRGB SDK
+  server on loopback; install/load the KWin script via `kpackagetool6` or
+  `org.kde.KWin /Scripting`; a systemd **user** unit started manually with no
+  autostart; local commits on `main` without push. A udev rule or privileged
+  identity for G213 **event nodes** was granted in principle but is **reserved
+  for the input whole (M2)** and must not be used by M1.
+- Verified toolchain reality (measured, do not re-derive): `extra-cmake-modules`
+  is absent and there is **no KF6 umbrella config**, so `find_package(KF6
+  COMPONENTS ...)` fails. Use per-component config-mode lookups
+  (`find_package(KF6Kirigami REQUIRED)`, …). There is no `KF6::Config` target —
+  it is `KF6::ConfigCore`/`KF6::ConfigGui`. Display-off is `KF6::ScreenDpms`
+  (`#include <KScreenDpms/Dpms>`); suspend goes through logind
+  (`CanSuspend=yes` verified). `org.kde.KWin /Scripting` exposes
+  `loadScript/start/unloadScript/isScriptLoaded` for the bridge dev loop.
 
 ## Hard rule: no automated Worker dispatch
 
