@@ -7,7 +7,7 @@ this project.
 
 ## Current repository state
 
-- **M1 is implemented, not yet accepted.** ContextDeck is a Linux/KDE/Wayland
+- **M1 is implemented and accepted IRL.** ContextDeck is a Linux/KDE/Wayland
   control utility for the Logitech G213 Prodigy keyboard only. Canonical repo:
   `https://github.com/cisarik/contextdesk`.
 - Tree: `handout.md`, `AGENTS.md`, `README.md`, `ROADMAP.md`, `LICENSE`, `docs/`,

@@ -16,15 +16,15 @@ reconciliation.
   Planner report 01/01 reconciled and accepted as **PARTIAL**, archived in META.
   PARTIAL is the correct outcome — the architecture is routable, but hardware
   evidence gates remain open.
-- Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented,
-  corrected, and redesigned across five Worker sessions (twenty-one commits
-  `1b024e4`..`4276f5b`), 3/3 CTest units green, independently rebuilt by the
-  ORCHESTRATOR. **Awaiting COOPERATOR IRL acceptance** with `docs/operations.md`
-  and `docs/testing.md` (which includes the five-step zone-map probe for
-  `docs/hardware/g213-zone-map.md`). M1 merges profiles, KWin context,
-  non-destructive OpenRGB lighting with device modes (Wave/Cycle/Breathing/Off/Direct),
-  animation speed control, visual 5-zone gradient generator, typed power actions,
-  and a polished task-oriented desktop UI. **It contains no input interception.**
+- Completed whole: **M1 `g213-contextdeck-mvp-context-lighting`** — **Accepted IRL
+  by the COOPERATOR.** Five-zone lighting, native device modes (Wave/Cycle/Breathing/Off/Direct),
+  animation speed control, visual 5-zone gradient generator, KWin event-driven context,
+  non-destructive startup, typed power actions, and desktop UI are fully verified on hardware
+  across twenty-one local commits.
+- Next whole: **M2 `g213-contextdeck-input-passthrough-safety`** — The safety-critical
+  input broker: hardware routing matrix (G1), privilege boundary (G3), pass-through-only
+  fail-safe broker, crash/hang recovery, and zero-lockout guarantee. Begins with a
+  mandatory Planner Worker in native Plan Mode.
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -56,10 +56,10 @@ done-as-planned.
 | # | Identity | What it delivers | Depends on | Status |
 |---|----------|------------------|------------|--------|
 | V0 | baseline reconciliation | Confirmed baseline, trace continuation | — | Done (G0) |
-| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, 3 CTest units, IRL test pack | G0, P2 | **Implemented & verified IRL** (5 zones work; Breathing/Gradient polish in progress) |
+| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, 3 CTest units, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
-| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | Planned |
+| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Next (Planning phase)** |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
 | M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
