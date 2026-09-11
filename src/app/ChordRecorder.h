@@ -3,12 +3,14 @@
 #include <QQuickItem>
 #include <QString>
 #include <QTimer>
+#include <QtQml/qqmlregistration.h>
 
 namespace contextdeck {
 
 class ChordRecorder : public QQuickItem
 {
     Q_OBJECT
+    QML_ELEMENT
     Q_PROPERTY(bool recording READ recording NOTIFY recordingChanged)
     Q_PROPERTY(QString display READ display NOTIFY displayChanged)
     Q_PROPERTY(QString layoutContext READ layoutContext NOTIFY layoutContextChanged)

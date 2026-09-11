@@ -1,12 +1,10 @@
 #include "app/SettingsHost.h"
 
 #include "app/AppController.h"
-#include "app/ChordRecorder.h"
 
 #include <QLoggingCategory>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
-#include <QtQml>
 #include <QWindow>
 
 namespace contextdeck {
@@ -22,7 +20,6 @@ SettingsHost::SettingsHost(AppController *controller, QObject *parent)
 void SettingsHost::show()
 {
     if (m_engine == nullptr) {
-        qmlRegisterType<ChordRecorder>("io.github.cisarik.ContextDeck", 1, 0, "ChordRecorder");
         m_engine = new QQmlApplicationEngine(this);
         m_engine->rootContext()->setContextProperty(QStringLiteral("app"), m_controller);
         m_engine->loadFromModule(QStringLiteral("io.github.cisarik.ContextDeck"), QStringLiteral("Main"));

@@ -29,7 +29,9 @@ Kirigami.ApplicationWindow {
             Kirigami.Action {
                 text: "Controls"
                 icon.name: "input-keyboard"
-                onTriggered: root.pageStack.replace(controlsPage)
+                // Load by URL so a ControlsPage/ChordRecorder type error cannot
+                // take down Overview and Profiles (needed for M1 IRL).
+                onTriggered: root.pageStack.replace(Qt.resolvedUrl("ControlsPage.qml"))
             },
             Kirigami.Action {
                 text: "Diagnostics"
@@ -46,10 +48,6 @@ Kirigami.ApplicationWindow {
     Component {
         id: profilesPage
         ProfilesPage {}
-    }
-    Component {
-        id: controlsPage
-        ControlsPage {}
     }
     Component {
         id: diagnosticsPage

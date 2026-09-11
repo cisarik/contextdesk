@@ -49,7 +49,6 @@ add_executable(contextdeck
     src/app/AppController.cpp
     src/app/TrayController.cpp
     src/app/SettingsHost.cpp
-    src/app/ChordRecorder.cpp
 )
 target_link_libraries(contextdeck PRIVATE
     contextdeck_context
@@ -64,10 +63,19 @@ target_link_libraries(contextdeck PRIVATE
     KF6::StatusNotifierItem
     KF6::Kirigami
 )
+# qt_add_qml_module emits #include <ChordRecorder.h>; the header lives in src/app/.
+target_include_directories(contextdeck PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/app")
+
+# QML lives under ui/; without this, implicit import is that directory and C++
+# types on the module URI (ChordRecorder) are invisible.
+qt_policy(SET QTP0004 NEW)
 
 qt_add_qml_module(contextdeck
     URI io.github.cisarik.ContextDeck
     VERSION 1.0
+    SOURCES
+        src/app/ChordRecorder.h
+        src/app/ChordRecorder.cpp
     QML_FILES
         ui/Main.qml
         ui/OverviewPage.qml
