@@ -38,6 +38,7 @@ public:
     [[nodiscard]] bool bridgeConnected() const { return m_bridgeConnected; }
     [[nodiscard]] quint32 policyRevision() const { return m_policyRevision; }
     [[nodiscard]] QString currentIdentity() const;
+    [[nodiscard]] QString bridgeId() const { return m_bridgeId; }
     [[nodiscard]] ApplicationIdentity identity() const { return m_identity; }
     [[nodiscard]] QVector<InventoryEntry> inventory() const { return m_inventory; }
     [[nodiscard]] QString lastError() const { return m_lastError; }

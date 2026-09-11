@@ -47,6 +47,32 @@ OpenRgbClient::OpenRgbClient(QObject *parent)
     connect(m_reconnectTimer, &QTimer::timeout, this, &OpenRgbClient::connectToServer);
 }
 
+QString OpenRgbClient::socketStateText() const
+{
+    switch (m_socket->state()) {
+    case QAbstractSocket::UnconnectedState:
+        return QStringLiteral("unconnected");
+    case QAbstractSocket::HostLookupState:
+        return QStringLiteral("host-lookup");
+    case QAbstractSocket::ConnectingState:
+        return QStringLiteral("connecting");
+    case QAbstractSocket::ConnectedState:
+        return QStringLiteral("connected");
+    case QAbstractSocket::BoundState:
+        return QStringLiteral("bound");
+    case QAbstractSocket::ClosingState:
+        return QStringLiteral("closing");
+    case QAbstractSocket::ListeningState:
+        return QStringLiteral("listening");
+    }
+    return QStringLiteral("unknown");
+}
+
+QString OpenRgbClient::sdkEndpoint() const
+{
+    return QStringLiteral("127.0.0.1:%1").arg(openrgb::kDefaultPort);
+}
+
 void OpenRgbClient::start()
 {
     m_lightingEnabled = true;

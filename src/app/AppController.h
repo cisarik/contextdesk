@@ -40,10 +40,19 @@ class AppController : public QObject
     Q_PROPERTY(QStringList globalZones READ globalZones NOTIFY documentChanged)
     Q_PROPERTY(QStringList zoneNames READ zoneNames CONSTANT)
     Q_PROPERTY(QStringList lightingPresets READ lightingPresets CONSTANT)
+    Q_PROPERTY(QStringList lightingPresetLabels READ lightingPresetLabels CONSTANT)
     Q_PROPERTY(QVariantList inventory READ inventory NOTIFY inventoryChanged)
     Q_PROPERTY(QVariantList profiles READ profiles NOTIFY documentChanged)
     Q_PROPERTY(QVariantList controls READ controls NOTIFY documentChanged)
     Q_PROPERTY(QVariantMap diagnostics READ diagnostics NOTIFY diagnosticsChanged)
+    Q_PROPERTY(QString statusSummary READ statusSummary NOTIFY presentationChanged)
+    Q_PROPERTY(bool isSelfWindow READ isSelfWindow NOTIFY presentationChanged)
+    Q_PROPERTY(QString lastExternalApplication READ lastExternalApplication NOTIFY presentationChanged)
+    Q_PROPERTY(QString contextDisplayName READ contextDisplayName NOTIFY presentationChanged)
+    Q_PROPERTY(bool hasSavedProfiles READ hasSavedProfiles NOTIFY presentationChanged)
+    Q_PROPERTY(QString heroKind READ heroKind NOTIFY presentationChanged)
+    Q_PROPERTY(QString heroBadge READ heroBadge NOTIFY presentationChanged)
+    Q_PROPERTY(QStringList heroZones READ heroZones NOTIFY presentationChanged)
 
 public:
     AppController(ContextReceiver *context, OpenRgbClient *rgb, PowerActions *power, QObject *parent = nullptr);
@@ -67,6 +76,15 @@ public:
     [[nodiscard]] QStringList globalZones() const;
     [[nodiscard]] QStringList zoneNames() const;
     [[nodiscard]] QStringList lightingPresets() const;
+    [[nodiscard]] QStringList lightingPresetLabels() const;
+    [[nodiscard]] QString statusSummary() const;
+    [[nodiscard]] bool isSelfWindow() const;
+    [[nodiscard]] QString lastExternalApplication() const;
+    [[nodiscard]] QString contextDisplayName() const;
+    [[nodiscard]] bool hasSavedProfiles() const;
+    [[nodiscard]] QString heroKind() const;
+    [[nodiscard]] QString heroBadge() const;
+    [[nodiscard]] QStringList heroZones() const;
     [[nodiscard]] QVariantList inventory() const;
     [[nodiscard]] QVariantList profiles() const;
     [[nodiscard]] QVariantList controls() const;
@@ -96,6 +114,8 @@ public:
     Q_INVOKABLE bool suspend();
     Q_INVOKABLE void assignEmitShortcut(const QString &controlName, const QString &key, const QStringList &modifiers,
                                         bool applicationLevel, const QString &applicationId);
+    Q_INVOKABLE QStringList previewGradient(const QString &startHex, const QString &endHex) const;
+    Q_INVOKABLE bool isValidHex(const QString &hex) const;
 
 signals:
     void contextChanged();
@@ -103,14 +123,19 @@ signals:
     void diagnosticsChanged();
     void documentChanged();
     void inventoryChanged();
+    void presentationChanged();
 
 private:
     void onIdentityChanged();
     void onInventoryChanged();
+    void rememberExternalContext();
     void refreshResolvedProfile();
     [[nodiscard]] bool isOwnSurface(const ApplicationIdentity &identity) const;
     [[nodiscard]] Lighting effectiveLighting() const;
     void sendLighting(const Lighting &lighting);
+    [[nodiscard]] QString friendlyApplicationName(const ApplicationIdentity &identity) const;
+    [[nodiscard]] QString openRgbPhrase() const;
+    [[nodiscard]] QString lightsPhrase() const;
     [[nodiscard]] static std::optional<Rgb> parseHex(const QString &hex);
     [[nodiscard]] static QString toHex(const Rgb &color);
 
@@ -123,6 +148,7 @@ private:
     Rgb m_temporaryColor{0x7c, 0x3a, 0xed};
     QString m_resolvedProfileId;
     QString m_saveStatus;
+    QString m_lastExternalApplication;
     quint64 m_identityUpdates = 0;
     quint64 m_lightingUpdates = 0;
 };

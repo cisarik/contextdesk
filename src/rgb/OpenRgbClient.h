@@ -44,6 +44,8 @@ public:
     [[nodiscard]] LightingMode recordedRestoreMode() const { return m_recordedRestoreMode; }
     [[nodiscard]] bool hasG213() const { return m_deviceIndex.has_value(); }
     [[nodiscard]] bool hasTakenOver() const { return m_tookOver; }
+    [[nodiscard]] QString socketStateText() const;
+    [[nodiscard]] QString sdkEndpoint() const;
 
 signals:
     void connectionStateChanged();

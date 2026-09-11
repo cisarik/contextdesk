@@ -1,5 +1,6 @@
 #include "app/AppController.h"
 
+#include "context/DBusNames.h"
 #include "core/ControlCatalog.h"
 #include "core/Resolver.h"
 #include "core/ZoneMap.h"
@@ -104,6 +105,10 @@ AppController::AppController(ContextReceiver *context, OpenRgbClient *rgb, Power
     connect(m_rgb, &OpenRgbClient::connectionStateChanged, this, &AppController::diagnosticsChanged);
     connect(m_rgb, &OpenRgbClient::lastErrorChanged, this, &AppController::diagnosticsChanged);
     connect(m_rgb, &OpenRgbClient::lightingEnabledChanged, this, &AppController::diagnosticsChanged);
+    connect(this, &AppController::contextChanged, this, &AppController::presentationChanged);
+    connect(this, &AppController::lightingModeChanged, this, &AppController::presentationChanged);
+    connect(this, &AppController::diagnosticsChanged, this, &AppController::presentationChanged);
+    connect(this, &AppController::documentChanged, this, &AppController::presentationChanged);
 }
 
 void AppController::load()
@@ -125,6 +130,7 @@ void AppController::load()
     if (m_document.preferences.automaticEnabled) {
         m_sessionLighting = SessionLightingMode::Automatic;
     }
+    rememberExternalContext();
     refreshResolvedProfile();
     applyLighting();
     emit documentChanged();
@@ -271,6 +277,109 @@ QStringList AppController::lightingPresets() const
     };
 }
 
+QStringList AppController::lightingPresetLabels() const
+{
+    return {
+        QStringLiteral("Predvolené firmware (Wave)"),
+        QStringLiteral("Wave"),
+        QStringLiteral("Cycle"),
+        QStringLiteral("Breathing"),
+        QStringLiteral("Vypnuté"),
+        QStringLiteral("Vlastné farby"),
+    };
+}
+
+QString AppController::statusSummary() const
+{
+    return QStringLiteral("%1 · kontext: %2 · svetlá: %3")
+        .arg(openRgbPhrase(), contextDisplayName(), lightsPhrase());
+}
+
+bool AppController::isSelfWindow() const
+{
+    return isOwnSurface(m_context->identity());
+}
+
+QString AppController::lastExternalApplication() const
+{
+    return m_lastExternalApplication;
+}
+
+QString AppController::contextDisplayName() const
+{
+    if (isSelfWindow()) {
+        if (!m_lastExternalApplication.isEmpty()) {
+            return QStringLiteral("Posledná aplikácia: %1").arg(m_lastExternalApplication);
+        }
+        return QStringLiteral("ContextDeck (toto okno)");
+    }
+    const ApplicationIdentity identity = m_context->identity();
+    if (!identity.isIdentified()) {
+        return QStringLiteral("neidentifikovaný");
+    }
+    return friendlyApplicationName(identity);
+}
+
+bool AppController::hasSavedProfiles() const
+{
+    if (!m_document.applications.isEmpty()) {
+        return true;
+    }
+    return m_document.globalLighting.mode != LightingMode::Untouched;
+}
+
+QString AppController::heroKind() const
+{
+    const Lighting lighting = effectiveLighting();
+    if (lighting.mode == LightingMode::Off) {
+        return QStringLiteral("off");
+    }
+    if (lighting.mode == LightingMode::Untouched) {
+        return QStringLiteral("untouched");
+    }
+    if (lighting.mode == LightingMode::Direct) {
+        return QStringLiteral("direct");
+    }
+    return QStringLiteral("effect");
+}
+
+QString AppController::heroBadge() const
+{
+    const Lighting lighting = effectiveLighting();
+    if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
+        return QStringLiteral("Temporary override");
+    }
+    if (lighting.mode == LightingMode::Untouched) {
+        QString restore = lightingModeJsonName(m_rgb->recordedRestoreMode());
+        if (restore.isEmpty()) {
+            restore = QStringLiteral("wave");
+        }
+        restore[0] = restore[0].toUpper();
+        return QStringLiteral("Device default (%1)").arg(restore);
+    }
+    if (lighting.mode == LightingMode::Wave) {
+        return QStringLiteral("Wave");
+    }
+    if (lighting.mode == LightingMode::Cycle) {
+        return QStringLiteral("Cycle");
+    }
+    if (lighting.mode == LightingMode::Breathing) {
+        return QStringLiteral("Breathing");
+    }
+    if (lighting.mode == LightingMode::Off) {
+        return QStringLiteral("Off");
+    }
+    if (lighting.mode == LightingMode::Direct) {
+        return QStringLiteral("Direct");
+    }
+    return lightingModeJsonName(lighting.mode);
+}
+
+QStringList AppController::heroZones() const
+{
+    return zoneHexList(effectiveLighting());
+}
+
 QVariantList AppController::inventory() const
 {
     QVariantList list;
@@ -345,6 +454,15 @@ QVariantMap AppController::diagnostics() const
     map.insert(QStringLiteral("lightingUpdates"), QVariant::fromValue(m_lightingUpdates));
     map.insert(QStringLiteral("lastError"), lastError());
     map.insert(QStringLiteral("inventoryCount"), m_context->inventory().size());
+    map.insert(QStringLiteral("dbusService"), QString(kServiceName));
+    map.insert(QStringLiteral("dbusObjectPath"), QString(kContextObjectPath));
+    map.insert(QStringLiteral("dbusInterface"), QString(kContextInterface));
+    map.insert(QStringLiteral("bridgeId"), m_context->bridgeId());
+    map.insert(QStringLiteral("currentIdentity"), m_context->currentIdentity());
+    map.insert(QStringLiteral("socketState"), m_rgb->socketStateText());
+    map.insert(QStringLiteral("sdkEndpoint"), m_rgb->sdkEndpoint());
+    map.insert(QStringLiteral("isSelfWindow"), isSelfWindow());
+    map.insert(QStringLiteral("lastExternalApplication"), m_lastExternalApplication);
     return map;
 }
 
@@ -645,6 +763,7 @@ void AppController::assignEmitShortcut(const QString &controlName, const QString
 void AppController::onIdentityChanged()
 {
     ++m_identityUpdates;
+    rememberExternalContext();
     const ApplicationIdentity identity = m_context->identity();
     if (m_sessionLighting == SessionLightingMode::TemporaryColor && !isOwnSurface(identity)
         && identity.isIdentified()) {
@@ -665,6 +784,14 @@ void AppController::onInventoryChanged()
     emit diagnosticsChanged();
 }
 
+void AppController::rememberExternalContext()
+{
+    const ApplicationIdentity identity = m_context->identity();
+    if (identity.isIdentified() && !isOwnSurface(identity)) {
+        m_lastExternalApplication = friendlyApplicationName(identity);
+    }
+}
+
 void AppController::refreshResolvedProfile()
 {
     const ApplicationProfile *profile = matchApplication(m_document, m_context->identity());
@@ -678,7 +805,76 @@ bool AppController::isOwnSurface(const ApplicationIdentity &identity) const
     };
     return containsCi(identity.desktopFileName, QStringLiteral("contextdeck"))
         || containsCi(identity.resourceClass, QStringLiteral("contextdeck"))
+        || containsCi(identity.resourceName, QStringLiteral("contextdeck"))
         || containsCi(identity.desktopFileName, QStringLiteral("io.github.cisarik.ContextDeck"));
+}
+
+QString AppController::friendlyApplicationName(const ApplicationIdentity &identity) const
+{
+    QString raw;
+    if (!identity.desktopFileName.isEmpty()) {
+        raw = identity.desktopFileName;
+    } else if (!identity.resourceClass.isEmpty()) {
+        raw = identity.resourceClass;
+    } else {
+        raw = identity.resourceName;
+    }
+    if (raw.endsWith(QLatin1String(".desktop"))) {
+        raw.chop(8);
+    }
+    const int dot = raw.lastIndexOf(QLatin1Char('.'));
+    if (dot >= 0 && dot + 1 < raw.size()) {
+        raw = raw.sliced(dot + 1);
+    }
+    if (!raw.isEmpty()) {
+        raw[0] = raw[0].toUpper();
+    }
+    return raw;
+}
+
+QString AppController::openRgbPhrase() const
+{
+    switch (m_rgb->connectionState()) {
+    case LightingConnectionState::Ready:
+        return QStringLiteral("OpenRGB pripojený");
+    case LightingConnectionState::Connecting:
+    case LightingConnectionState::Negotiating:
+        return QStringLiteral("OpenRGB sa pripája");
+    case LightingConnectionState::Failed:
+        return QStringLiteral("OpenRGB nedostupný");
+    case LightingConnectionState::Disconnected:
+        break;
+    }
+    return QStringLiteral("OpenRGB odpojený");
+}
+
+QString AppController::lightsPhrase() const
+{
+    if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
+        return QStringLiteral("dočasné pretíženie");
+    }
+    const Lighting lighting = effectiveLighting();
+    switch (lighting.mode) {
+    case LightingMode::Untouched: {
+        QString restore = lightingModeJsonName(m_rgb->recordedRestoreMode());
+        if (restore.isEmpty()) {
+            restore = QStringLiteral("wave");
+        }
+        restore[0] = restore[0].toUpper();
+        return QStringLiteral("firmware %1").arg(restore);
+    }
+    case LightingMode::Wave:
+        return QStringLiteral("Wave");
+    case LightingMode::Cycle:
+        return QStringLiteral("Cycle");
+    case LightingMode::Breathing:
+        return QStringLiteral("Breathing");
+    case LightingMode::Off:
+        return QStringLiteral("vypnuté");
+    case LightingMode::Direct:
+        return QStringLiteral("vlastné farby");
+    }
+    return lightingModeJsonName(lighting.mode);
 }
 
 Lighting AppController::effectiveLighting() const
@@ -739,6 +935,25 @@ QString AppController::toHex(const Rgb &color)
         .arg(color.r, 2, 16, QLatin1Char('0'))
         .arg(color.g, 2, 16, QLatin1Char('0'))
         .arg(color.b, 2, 16, QLatin1Char('0'));
+}
+
+QStringList AppController::previewGradient(const QString &startHex, const QString &endHex) const
+{
+    const auto start = parseHex(startHex);
+    const auto end = parseHex(endHex);
+    if (!start || !end) {
+        return {};
+    }
+    QStringList list;
+    for (const Rgb &color : gradientColors(*start, *end)) {
+        list.push_back(toHex(color));
+    }
+    return list;
+}
+
+bool AppController::isValidHex(const QString &hex) const
+{
+    return parseHex(hex).has_value();
 }
 
 } // namespace contextdeck
