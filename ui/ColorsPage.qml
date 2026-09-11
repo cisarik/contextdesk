@@ -25,7 +25,7 @@ Kirigami.ScrollablePage {
             zones: app.globalZones
             applicationLevel: false
             speedPercent: app.globalSpeedPercent
-            breathingColor: app.globalBreathingColor
+            breathingHex: app.globalBreathingColor
         }
         Kirigami.InlineMessage {
             Layout.fillWidth: true
