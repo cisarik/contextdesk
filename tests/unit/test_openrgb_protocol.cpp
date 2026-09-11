@@ -223,6 +223,134 @@ private slots:
         QCOMPARE(header->packetId, PacketId::UpdateMode);
         QVERIFY(header->packetId != PacketId::SetCustomMode);
     }
+
+    void desiredBreathingEncodesModeSpecificColorAndSpeed()
+    {
+        QVector<ControllerMode> modes = g213Modes();
+        modes[4].colors.clear();
+
+        DesiredLighting desired;
+        desired.mode = LightingMode::Breathing;
+        desired.baseColor = Rgb{0x7c, 0x3a, 0xed};
+        desired.speed = 80;
+
+        DecodeError error;
+        const auto frames = encodeDesiredStateFrames(0, desired, modes, kProtocolVersion, &error);
+        QVERIFY2(frames.has_value(), qPrintable(error.reason));
+        QCOMPARE(frames->size(), 1);
+        const auto decoded = decodeUpdateMode(frames->at(0), &error);
+        QVERIFY2(decoded.has_value(), qPrintable(error.reason));
+        QCOMPARE(decoded->name, QStringLiteral("Breathing"));
+        QCOMPARE(decoded->colors.size(), 1);
+        QCOMPARE(decoded->colors.at(0).r, quint8(0x7c));
+        QCOMPARE(decoded->colors.at(0).g, quint8(0x3a));
+        QCOMPARE(decoded->colors.at(0).b, quint8(0xed));
+        QCOMPARE(decoded->speed, quint32(80));
+    }
+
+    void desiredBreathingDefaultsColorWhenUnset()
+    {
+        QVector<ControllerMode> modes = g213Modes();
+        modes[4].colors.push_back(Rgb{0, 0, 0});
+
+        DesiredLighting desired;
+        desired.mode = LightingMode::Breathing;
+
+        DecodeError error;
+        const auto frames = encodeDesiredStateFrames(0, desired, modes, kProtocolVersion, &error);
+        QVERIFY2(frames.has_value(), qPrintable(error.reason));
+        const auto decoded = decodeUpdateMode(frames->at(0), &error);
+        QVERIFY2(decoded.has_value(), qPrintable(error.reason));
+        QCOMPARE(decoded->colors.size(), 1);
+        QCOMPARE(decoded->colors.at(0).r, quint8(0x7c));
+        QCOMPARE(decoded->colors.at(0).g, quint8(0x3a));
+        QCOMPARE(decoded->colors.at(0).b, quint8(0xed));
+        QCOMPARE(decoded->speed, modes[4].speed);
+    }
+
+    void desiredWaveAndCycleEncodeSpeed()
+    {
+        QVector<ControllerMode> modes = g213Modes();
+
+        DesiredLighting wave;
+        wave.mode = LightingMode::Wave;
+        wave.speed = 120;
+        DecodeError error;
+        const auto waveFrames = encodeDesiredStateFrames(0, wave, modes, kProtocolVersion, &error);
+        QVERIFY2(waveFrames.has_value(), qPrintable(error.reason));
+        const auto decodedWave = decodeUpdateMode(waveFrames->at(0), &error);
+        QVERIFY2(decodedWave.has_value(), qPrintable(error.reason));
+        QCOMPARE(decodedWave->name, QStringLiteral("Wave"));
+        QCOMPARE(decodedWave->speed, quint32(120));
+        QCOMPARE(decodedWave->colors.size(), 0);
+
+        DesiredLighting cycle;
+        cycle.mode = LightingMode::Cycle;
+        cycle.speed = 40;
+        const auto cycleFrames = encodeDesiredStateFrames(1, cycle, modes, kProtocolVersion, &error);
+        QVERIFY2(cycleFrames.has_value(), qPrintable(error.reason));
+        const auto decodedCycle = decodeUpdateMode(cycleFrames->at(0), &error);
+        QVERIFY2(decodedCycle.has_value(), qPrintable(error.reason));
+        QCOMPARE(decodedCycle->name, QStringLiteral("Cycle"));
+        QCOMPARE(decodedCycle->speed, quint32(40));
+    }
+
+    void desiredAnimatedSpeedIsClampedToModeRange()
+    {
+        QVector<ControllerMode> modes = g213Modes();
+
+        DesiredLighting tooFast;
+        tooFast.mode = LightingMode::Breathing;
+        tooFast.speed = 5;
+        DecodeError error;
+        const auto fastFrames = encodeDesiredStateFrames(0, tooFast, modes, kProtocolVersion, &error);
+        QVERIFY2(fastFrames.has_value(), qPrintable(error.reason));
+        QCOMPARE(decodeUpdateMode(fastFrames->at(0), &error)->speed, quint32(10));
+
+        DesiredLighting tooSlow;
+        tooSlow.mode = LightingMode::Wave;
+        tooSlow.speed = 500;
+        const auto slowFrames = encodeDesiredStateFrames(0, tooSlow, modes, kProtocolVersion, &error);
+        QVERIFY2(slowFrames.has_value(), qPrintable(error.reason));
+        QCOMPARE(decodeUpdateMode(slowFrames->at(0), &error)->speed, quint32(200));
+    }
+
+private:
+    static QVector<ControllerMode> g213Modes()
+    {
+        QVector<ControllerMode> modes(5);
+        modes[0].name = QStringLiteral("Direct");
+        modes[1].name = QStringLiteral("Off");
+        modes[2].name = QStringLiteral("Cycle");
+        modes[2].speedMin = 200;
+        modes[2].speedMax = 10;
+        modes[2].speed = 50;
+        modes[3].name = QStringLiteral("Wave");
+        modes[3].speedMin = 200;
+        modes[3].speedMax = 10;
+        modes[3].speed = 50;
+        modes[4].name = QStringLiteral("Breathing");
+        modes[4].speedMin = 200;
+        modes[4].speedMax = 10;
+        modes[4].speed = 50;
+        modes[4].colorsMin = 1;
+        modes[4].colorsMax = 1;
+        return modes;
+    }
+
+    static std::optional<ControllerMode> decodeUpdateMode(const QByteArray &packet, DecodeError *error)
+    {
+        const auto header = decodeHeader(packet, error);
+        if (!header || header->packetId != PacketId::UpdateMode) {
+            if (error && error->reason.isEmpty()) {
+                error->reason = QStringLiteral("not an UPDATEMODE frame");
+            }
+            return std::nullopt;
+        }
+        const QByteArrayView payload(packet.constData() + kHeaderSize, packet.size() - kHeaderSize);
+        int offset = 8;
+        return decodeModeData(payload, offset, kProtocolVersion, error);
+    }
 };
 
 QTEST_MAIN(TestOpenRgbProtocol)

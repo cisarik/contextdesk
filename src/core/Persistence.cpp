@@ -303,6 +303,7 @@ std::optional<Lighting> parseLighting(const QJsonObject &object, const QString &
         QStringLiteral("base_color"),
         QStringLiteral("zones"),
         QStringLiteral("restore_mode"),
+        QStringLiteral("speed"),
     };
     if (!checkObjectKeys(object, allowed, path, error)) {
         return std::nullopt;
@@ -346,6 +347,16 @@ std::optional<Lighting> parseLighting(const QJsonObject &object, const QString &
         if (!parseZoneArray(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), lighting.zones, error)) {
             return std::nullopt;
         }
+    }
+
+    if (object.contains(QStringLiteral("speed"))) {
+        const QJsonValue speedValue = object.value(QStringLiteral("speed"));
+        if (!isInteger(speedValue) || speedValue.toDouble() < 0) {
+            error = makeError(QStringLiteral("lighting.speed must be a non-negative integer"),
+                              path + QStringLiteral(".speed"));
+            return std::nullopt;
+        }
+        lighting.speed = static_cast<quint32>(speedValue.toInt());
     }
 
     if (lighting.mode == LightingMode::Direct && !lighting.baseColor && !lighting.zones) {
@@ -472,6 +483,9 @@ QJsonObject lightingToJson(const Lighting &lighting)
         object.insert(QStringLiteral("zones"), zones);
     } else {
         object.insert(QStringLiteral("zones"), QJsonValue::Null);
+    }
+    if (lighting.speed) {
+        object.insert(QStringLiteral("speed"), static_cast<qint64>(*lighting.speed));
     }
     return object;
 }

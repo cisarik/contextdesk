@@ -117,11 +117,14 @@ struct ZoneValue {
     [[nodiscard]] bool operator==(const ZoneValue &other) const = default;
 };
 
+inline constexpr Rgb kDefaultEffectColor{0x7c, 0x3a, 0xed};
+
 struct Lighting {
     LightingMode mode = LightingMode::Untouched;
     std::optional<Rgb> baseColor;
     std::optional<std::array<ZoneValue, kZoneCount>> zones;
     LightingMode restoreMode = LightingMode::Wave;
+    std::optional<quint32> speed;
 
     [[nodiscard]] bool operator==(const Lighting &other) const = default;
 };
@@ -129,6 +132,8 @@ struct Lighting {
 struct DesiredLighting {
     LightingMode mode = LightingMode::Untouched;
     std::array<Rgb, kZoneCount> colors{};
+    std::optional<Rgb> baseColor;
+    std::optional<quint32> speed;
 
     [[nodiscard]] bool operator==(const DesiredLighting &other) const = default;
 };
@@ -186,8 +191,13 @@ struct DesiredLighting {
 {
     DesiredLighting desired;
     desired.mode = preset.mode;
+    desired.speed = preset.speed;
+    desired.baseColor = preset.baseColor;
     if (preset.mode == LightingMode::Direct) {
         desired.colors = zoneColorsFromPreset(preset);
+    }
+    if (preset.mode == LightingMode::Breathing && !desired.baseColor) {
+        desired.baseColor = kDefaultEffectColor;
     }
     return desired;
 }

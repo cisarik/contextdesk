@@ -101,8 +101,9 @@ void OpenRgbClient::setDesiredState(const DesiredLighting &state)
 {
     if (state.mode == LightingMode::Untouched && m_tookOver) {
         m_restoreThenUntouched = true;
-        m_desired.mode = m_recordedRestoreMode;
-        m_desired.colors = {};
+        DesiredLighting restore;
+        restore.mode = m_recordedRestoreMode;
+        m_desired = restore;
     } else {
         m_restoreThenUntouched = false;
         m_desired = state;

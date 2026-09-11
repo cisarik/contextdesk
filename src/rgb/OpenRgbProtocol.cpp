@@ -2,6 +2,7 @@
 
 #include <QtEndian>
 
+#include <algorithm>
 #include <cstring>
 
 namespace contextdeck::openrgb {
@@ -96,6 +97,31 @@ void setError(DecodeError *error, const QString &reason)
     if (error) {
         error->reason = reason;
     }
+}
+
+quint32 clampModeSpeed(const ControllerMode &mode, quint32 speed)
+{
+    const quint32 lo = std::min(mode.speedMin, mode.speedMax);
+    const quint32 hi = std::max(mode.speedMin, mode.speedMax);
+    if (lo >= hi) {
+        return lo;
+    }
+    return std::clamp(speed, lo, hi);
+}
+
+ControllerMode modeForDesiredUpdate(const ControllerMode &source, const DesiredLighting &desired)
+{
+    ControllerMode modeCopy = source;
+    if (desired.mode == LightingMode::Breathing) {
+        modeCopy.colors.resize(1);
+        modeCopy.colors[0] = desired.baseColor.value_or(kDefaultEffectColor);
+    }
+    const bool animated = desired.mode == LightingMode::Wave || desired.mode == LightingMode::Cycle
+        || desired.mode == LightingMode::Breathing;
+    if (animated && desired.speed.has_value()) {
+        modeCopy.speed = clampModeSpeed(modeCopy, *desired.speed);
+    }
+    return modeCopy;
 }
 
 } // namespace
@@ -371,7 +397,8 @@ std::optional<QVector<QByteArray>> encodeDesiredStateFrames(quint32 deviceIndex,
         return std::nullopt;
     }
     QVector<QByteArray> frames;
-    frames.push_back(encodeUpdateMode(deviceIndex, *index, modes.at(*index), protocolVersion));
+    frames.push_back(encodeUpdateMode(deviceIndex, *index, modeForDesiredUpdate(modes.at(*index), desired),
+                                      protocolVersion));
     if (desired.mode == LightingMode::Direct) {
         frames.push_back(encodeUpdateLeds(deviceIndex, desired.colors));
     }

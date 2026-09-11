@@ -302,6 +302,65 @@ private slots:
         QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Direct);
         QCOMPARE((*loaded.document.globalLighting.zones)[0].color.r, quint8(0x11));
         QCOMPARE(loaded.document.globalLighting.baseColor->r, quint8(0xff));
+        QVERIFY(!loaded.document.globalLighting.speed.has_value());
+    }
+
+    void schema2SpeedRoundTrip()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        const QByteArray json = R"({
+            "schema_version": 2,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {
+                "lighting": {
+                    "mode": "breathing",
+                    "restore_mode": "wave",
+                    "base_color": "#7c3aed",
+                    "zones": null,
+                    "speed": 80
+                }
+            }
+        })";
+        const LoadOutcome parsed = ProfileStore::parseDocument(json);
+        QVERIFY2(parsed.ok, qPrintable(parsed.error.reason));
+        QCOMPARE(parsed.document.globalLighting.mode, LightingMode::Breathing);
+        QVERIFY(parsed.document.globalLighting.speed.has_value());
+        QCOMPARE(*parsed.document.globalLighting.speed, quint32(80));
+        QCOMPARE(parsed.document.globalLighting.baseColor->r, quint8(0x7c));
+        QVERIFY(store.save(parsed.document).ok);
+        const LoadOutcome loaded = store.load();
+        QVERIFY(loaded.ok);
+        QVERIFY(loaded.document.globalLighting.speed.has_value());
+        QCOMPARE(*loaded.document.globalLighting.speed, quint32(80));
+        QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Breathing);
+        QCOMPARE(loaded.document.globalLighting.baseColor->b, quint8(0xed));
+    }
+
+    void schema2AbsentSpeedRemainsUnset()
+    {
+        const QByteArray json = R"({
+            "schema_version": 2,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}}
+        })";
+        const LoadOutcome loaded = ProfileStore::parseDocument(json);
+        QVERIFY2(loaded.ok, qPrintable(loaded.error.reason));
+        QVERIFY(!loaded.document.globalLighting.speed.has_value());
+    }
+
+    void schema2RejectsNonIntegerSpeed()
+    {
+        const QByteArray json = R"({
+            "schema_version": 2,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "cycle", "zones": null, "speed": 12.5}}
+        })";
+        const LoadOutcome loaded = ProfileStore::parseDocument(json);
+        QVERIFY(!loaded.ok);
+        QVERIFY(loaded.error.reason.contains(QStringLiteral("speed")));
+        QVERIFY(loaded.error.preserved);
     }
 };
 
