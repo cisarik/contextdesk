@@ -59,7 +59,7 @@ done-as-planned.
 | M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, 3 CTest units, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
-| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Planned — Planner report 01/01 PASS (native Plan Mode), archived in META** |
+| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — Planner PASS; S1 engine without grab done (6/6 CTest); S2 needs G3 host install |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
 | M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
@@ -79,7 +79,7 @@ ship:
 | G0 | Baseline ownership confirmed | Any repository mutation | Confirmed; ORCHESTRATOR-owned docs commits moved `main` past `6b4e4b3` — M1's exact baseline is the re-route commit |
 | G1 | Routing matrix for all 20 requested controls | Special-button remapping | **Closed** — probe measured 2026-09-11: F1–F12 on if00 (59–68/87/88), media+volume on if01 (165/164/163, 113/114/115) all host-remappable; Game Mode and Backlight emit **zero** host events — firmware-only, permanently out of the remap catalog (`docs/hardware/g213-control-matrix.md`) |
 | G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **Closed — proven IRL** during M1 (five zones, modes, speed, gradient all verified physically) |
-| G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Pending COOPERATOR acceptance** — M2 plan recommends: system user `contextdeck-broker`, guard udev revoking `uaccess` from G213 event nodes + `/dev/port` + `i2c`, narrow event-node grant, uinput ACL; never autostart an unproven broker |
+| G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Accepted by COOPERATOR, not yet installed** — model: system user `contextdeck-broker`, guard udev revoking `uaccess` from G213 event nodes + `/dev/port` + `i2c`, narrow event-node grant, uinput ACL; never autostart an unproven broker |
 | G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | Planned (M2 stage S5) |
 | G5 | KWin lifecycle, identity, focus-race measurements | Contextual behavior claims | Partially exercised in M1 (bridge, heartbeat, self-context) |
 | G6 | License decision + dependency provenance | Release | Planned |
@@ -304,6 +304,57 @@ restoring the full automated context ecosystem without manual steps.
      effective model seamlessly.
 3. **5 physical zones confirmed working IRL:**
    - Individual zone color control on the Logitech G213 is physically proven!
+
+### M2 input passthrough safety — in progress
+
+Planner report 01/01 PASS (native Plan Mode, archived in META). Implementation
+session 02/01 delivered the broker core **without grab** (commits
+`1d9d6f1`..`553e75b`, 6/6 CTest green):
+
+- Fail-closed identity matcher (`046d:c336` if00/if01 only; rejects virtual
+  devices and anything named `ContextDeck*`; udev properties are identity).
+- Balanced synthetic key ledger with LIFO disarm; repeat is a ledger no-op.
+- 1:1 forwarding engine with strict `SYN_REPORT` pairing on FakeSource/FakeSink;
+  `RealSink` (virtual device) is compiled but has never been constructed.
+- `SYN_DROPPED` reconciliation without replaying reconstructed presses.
+- All-or-nothing acquisition and **ungrab-first** teardown ordering, testable
+  on fakes. `contextdeck-broker selftest` runs with zero device access.
+
+Remaining stages: S2 (udev guard + sysusers + system unit + real grab — needs
+the G3 host install), S3 (watchdog + crash harness), S4 (session IPC + lease),
+S5 (IRL G4 acceptance pack). Grabbing stays forbidden until G3 is installed.
+
+### Deck layer — COOPERATOR brainstorm, classified future whole
+
+**Idea (COOPERATOR):** one spare key (the Windows/Super key was proposed)
+behaves like **Shift for the whole deck**: hold it and the keyboard switches to
+a temporary layer — the lighting changes to a distinctive signature and keys
+gain temporary functions (including launching a chosen program); release and
+everything returns to exactly the previous state, both functions and lighting.
+Per-key customization inside the layer comes later.
+
+**Classification:** future-logical-whole (natural extension of M3 remapping):
+`g213-contextdeck-deck-layer`. Not implementation authority.
+
+**Why it fits the existing architecture (ORCHESTRATOR analysis):**
+
+- The Super key (`KEY_LEFTMETA`, 125, if00) is an ordinary host event — the G1
+  probe filtered it silently as a typing key, which proves it reaches evdev.
+  It is remappable in principle; a one-time confirmation press in the G1
+  style is still required before binding it.
+- A layer is exactly the existing **temporary lighting override** (M1, already
+  shipped) combined with a **temporary key policy** — both scoped to a hold,
+  both expiring on release. The broker crash case is inherently safe: crash
+  releases the grab, which exits the layer and returns Win to native behavior.
+- "Launch a program on layer entry" must stay a **typed action** (a desktop
+  file / KService id), never a shell string — same rule as every other action.
+- Product decisions the COOPERATOR will own later: tap-vs-hold semantics for
+  Super (tap keeps the KDE launcher? hold opens the layer), what each key does
+  inside the layer, the layer's lighting signature, and whether Super-chords
+  (Super+E …) pass through while held.
+
+**Hard dependencies:** M2 grab + G3/G4 (the layer cannot exist without
+exclusive claiming), then the M3 consume-and-inject mechanism it reuses.
 
 ## Explicitly out of scope for v1
 

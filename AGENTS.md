@@ -42,11 +42,15 @@ this project.
   via `docs/operations.md` + `docs/testing.md` (including the 5-step zone-map probe).
   G2 (five-zone lighting) and G7 (power actions) are decided by that IRL run,
   not by code review.
-- The next route is chosen after IRL results: an M1 final acceptance reconciliation,
-  or **M2 `g213-contextdeck-input-passthrough-safety`**, which still requires the
-  G1 physical-control probe and the reserved event-node access grant. **No input
-  interception exists in the tree today, and none may be added outside M2.**
-  Only the ORCHESTRATOR routes further.
+- The next route is **M2 `g213-contextdeck-input-passthrough-safety`, in
+  progress**: the Planner report passed (native Plan Mode) and the broker core
+  engine exists without grab (`src/broker/`, 6/6 CTest, `RealSink` never
+  constructed). Remaining: S2 host files + real grab (needs the accepted-but-
+  uninstalled G3), S3 watchdog/crash harness, S4 session IPC, S5 IRL G4 pack.
+  The COOPERATOR also brainstormed a Super-key **deck layer** (hold to switch
+  lighting + temporary key functions) — classified as a future whole after M3,
+  recorded in ROADMAP. **No input interception is wired yet**, and nothing may
+  grab before G3 is installed. Only the ORCHESTRATOR routes further.
 - COOPERATOR-granted mutation classes for M1 host enablement (named, bounded):
   install `openrgb` from the repo including its udev rules; run the OpenRGB SDK
   server on loopback; install/load the KWin script via `kpackagetool6` or
