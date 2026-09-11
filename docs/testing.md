@@ -30,50 +30,60 @@ Reload the KWin script after this tree's bridge change so heartbeat
    **Expect:** tray icon; stderr contains `bus name registered`,
    `status notifier started`, and `cold start: no profile document,
    pass-through, writing nothing`. Lighting connection may become `ready`.
-   The keyboard **keeps the same firmware effect**. Overview lighting label
+   The keyboard **keeps the same firmware effect**. Overview (**Stav**) shows
+   hollow/dashed Hero strips with a `Device default (Wave)` badge — not solid
+   black — and a single status sentence (`… · svetlá: firmware Wave`). Lighting
    is `untouched — device default`, never Automatic.  
    **Fail:** the board goes dark, snaps to a flat color, or the process exits.
 
 2. **Keyboard still types normally everywhere**  
-   Type in a terminal, in a browser, and in the ContextDeck settings window.  
+   Type in any ordinary text field: a terminal, a browser, and a text input
+   inside ContextDeck. The hex color field is **not** on Overview; it lives
+   under **Farby → Pokročilé: hex** (optional). You do not need that field to
+   complete this step.  
    **Expect:** every key works as before. No stuck modifiers, no missing
    keys, no duplicate characters. This tree does not intercept input.  
    **Fail:** any change in typing — unload the KWin script, quit ContextDeck,
    report immediately.
 
 3. **Restore device default**  
-   In Settings → Profiles, set the global preset to Direct with a saturated
-   color (for example all five zones `#ff0000`) and Save. Confirm the board
-   shows that color. Tray or Overview → **Restore device default**.  
+   In Settings → **Farby**, set the global preset to Direct with a saturated
+   color (click a zone swatch, or enable **Pokročilé: hex** and enter
+   `#ff0000` on all five zones) and **Uložiť**. Confirm the board shows that
+   color. Tray, or Overview overflow → **Restore device default**.  
    **Expect:** the previously recorded device mode returns (Wave unless you
-   saw a different non-Direct effect at connect). The UI returns to
-   `untouched — device default` and stops touching the device.  
-   **Fail:** it stays red, goes dark, or the label says Automatic.
+   saw a different non-Direct effect at connect). The Hero returns to hollow
+   strips / `Device default (Wave)` and stops touching the device.  
+   **Fail:** it stays red, goes dark, or the UI says Automatic.
 
 4. **Each device preset**  
-   With Follow profile active, set the global preset in turn to `wave`,
-   `cycle`, `breathing`, `off`, then `direct` (use a non-black color). Save
-   each time and look at the keyboard before changing the next.  
-   **Expect:** Wave/Cycle/Breathing animate in firmware; Off is dark; Direct
-   is a static five-zone color. The lighting label names that preset, never
-   Automatic.  
+   With Follow profile visible (it appears after a preset exists), set the
+   global preset in **Farby** in turn to `wave`, `cycle`, `breathing`, `off`,
+   then `direct` (use a non-black color). **Uložiť** each time and look at the
+   keyboard before changing the next.  
+   **Expect:** Wave/Cycle/Breathing animate in firmware; Off is dark (Hero
+   strips may be solid black — that means Off); Direct is a static five-zone
+   color. The status sentence names that preset, never Automatic.  
    **Fail:** a named preset does nothing, or Direct leaves all zones black.
 
 5. **Per-zone gradient**  
-   Global preset Direct. Use **Fill five-zone gradient** from a start color
-   (for example `#ff0000`) to an end color (`#0000ff`).  
+   Global preset Direct on **Farby**. Pick Start Color and End Color, confirm
+   the live five-band preview, then **Použiť gradient** (for example `#ff0000`
+   → `#0000ff`).  
    **Expect:** five distinct bands, left → numpad, matching the labelled
    swatches: Left Area, Middle Area, Right Area, Arrow and Homekeys, Numpad.
    Not per-key RGB.  
    **Fail:** only one color, or more than five independently colored keys.
 
 6. **Per-application preset on focus change**  
-   Add a profile from the inventory picker. Give it a different preset (for
-   example Direct `#0000ff` while global is Direct `#ff0000`, or Wave vs
-   Direct). Save. Alt-Tab between that application and another window.  
+   On **Aplikácie**, add a profile from the inventory picker. Give it a
+   different preset (for example Direct `#0000ff` while global is Direct
+   `#ff0000`, or Wave vs Direct). **Uložiť**. Alt-Tab between that application
+   and another window.  
    **Expect:** lighting follows the focused application's preset when one
    exists, otherwise the global preset. Tray shows the current application
-   and resolved profile.  
+   and resolved profile. With the settings window focused, Overview must not
+   show the raw D-Bus name as the context line.  
    **Fail:** it never changes, or it changes on window title rather than
    identity.
 
@@ -97,10 +107,10 @@ Reload the KWin script after this tree's bridge change so heartbeat
    With the bridge loaded and some application focused, quit ContextDeck
    (tray Quit) and start it again **without** changing focus. Wait up to
    one heartbeat interval (5 s).  
-   **Expect:** Overview shows that application's identity without an
-   extra Alt-Tab. Diagnostics `BridgeConnected` is true and
+   **Expect:** Overview (**Stav**) shows that application's identity without an
+   extra Alt-Tab. **Diagnostika** `bridgeConnected` is true and
    `CurrentIdentity` is not empty. Repeating heartbeats do not spam
-   lighting changes or bump `PolicyRevision` for the same identity.  
+   lighting changes or bump `policyRevision` for the same identity.  
    **Fail:** identity stays empty until you click another window.
 
 10. **Displays Off (D2)**  

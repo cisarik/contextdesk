@@ -127,8 +127,11 @@ Unknown mode names, wrong zone counts, and unknown semantic fields are
 rejected. `direct` requires `base_color` or exactly five zones.
 
 Default is **non-destructive**: until the user expresses intent, ContextDeck
-does not touch the device. The honest UI label is `untouched — device default`.
-`untouched` is never displayed as Automatic.
+does not touch the device. The honest lighting label remains
+`untouched — device default` and is never displayed as Automatic. The Overview
+Hero must not paint `untouched` as solid black; black means `off`. Untouched
+zones are hollow/dashed placeholders with a badge such as
+`Device default (Wave)`.
 
 Resolver lighting: application preset wins; otherwise global preset; otherwise
 `untouched`. An unidentified or stale context resolves to the global preset.
@@ -250,6 +253,50 @@ default**. An override is never labelled Automatic. A temporary override
 expires on the next *external* application-identity change; opening this
 application's tray or settings does not expire it. `off` holds until
 automatic is restored or device default is restored.
+
+## Settings UI (Kirigami, Plasma 6 desktop)
+
+The settings window is a task-oriented desktop UI, not a map of internal
+code units. Primary navigation is a persistent sidebar (not a cramped overlay
+drawer):
+
+| Section | Purpose |
+|---------|---------|
+| **Stav** (Overview) | Five-zone Hero preview, one human-readable status sentence, empty-state CTA |
+| **Farby** | Global lighting preset, visual zone pickers, gradient helper |
+| **Aplikácie** | Per-application lighting presets from the KWin inventory |
+| **Diagnostika** | D-Bus names, bridge id, socket/SDK state, counters, power actions |
+| **Pokročilé** | Inactive M2 shortcut catalog and chord recorder |
+
+Overview must be readable in about two seconds: whether OpenRGB is connected,
+which context is in view, and whether lights are still firmware Wave or a
+ContextDeck preset. Technical fields (`ready`, `policyRevision`, the D-Bus
+name `io.github.cisarik.ContextDeck`, bridge id, socket state) belong only on
+Diagnostika.
+
+When the settings window itself has focus, Overview must not present the raw
+D-Bus service name or an empty identity as the live context. It shows
+`ContextDeck (toto okno)` or the last observed external application
+(`Posledná aplikácia: …`).
+
+Hero presentation:
+
+| Resolved lighting | Hero |
+|-------------------|------|
+| `untouched` | Hollow/dashed zone strips + `Device default (Wave)` (or the recorded restore mode) |
+| `direct` | Five solid strips in the resolved hex colors |
+| `wave` / `cycle` / `breathing` | Effect badge; strips are not claimed as measured per-zone colors |
+| `off` | Solid black strips + `Off` (black means off) |
+
+Zone swatches open a system `ColorDialog`. Hex text fields are an advanced
+option on Farby, not on Overview. The gradient helper is two visual pickers
+plus a live five-band preview and **Použiť gradient**. Persistence is **Uložiť**,
+never a filename. Overview's primary action is **Nastaviť farby**; **Follow
+profile** appears only when a preset exists; **Restore device default** and
+**Lights off** sit in overflow.
+
+Key remapping is not on the primary path. Pokročilé states that remapping
+becomes active in M2 and that M1 lights and detects context.
 
 ## Optional user unit
 
