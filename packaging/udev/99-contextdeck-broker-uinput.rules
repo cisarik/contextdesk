@@ -1,0 +1,4 @@
+# Add an ACL for contextdeck-broker on /dev/uinput after 73-seat-late.rules queues
+# RUN{builtin}+="uaccess". Do not set OWNER, GROUP, or MODE: the existing node
+# identity and the session-user uaccess ACL (KDE Connect) must stay intact.
+ACTION=="add|change", KERNEL=="uinput", SUBSYSTEM=="misc", RUN+="/usr/bin/setfacl -m u:contextdeck-broker:rw /dev/uinput"

@@ -217,7 +217,7 @@ rather than trust, but these removed real guesswork from the M1 routing:
 | KWin script dev loop | `org.kde.KWin /Scripting` exposes `loadScript(path, pluginName)`, `start()`, `isScriptLoaded`, `unloadScript` — no packaging needed to test the bridge; `kpackagetool6` is the persistent route |
 | OpenRGB not installed | Available as `openrgb 1.0rc3` (`extra`) / `1.0rc3-3.1` (`cachyos-extra-v3`); `hidraw*` is `root:root 0600` |
 | G213 topology | `046d:c336`; `event7` = if00, `event8` = if01; `hidraw2`/`hidraw3`; event nodes `root:input 0660` with no user ACL, and the session user is **not** in `input` |
-| `/dev/uinput` | Already carries a user ACL (KDE Connect) — injection is possible for the session user, reading the G213 is not |
+| `/dev/uinput` | Session-user ACL from KDE Connect `uaccess`; broker `user:contextdeck-broker:rw-` is added by `99-contextdeck-broker-uinput.rules` after that builtin so the session ACL is not replaced |
 
 Consequence for routing: the lighting + context vertical needs no new
 privilege, while the input vertical cannot run at all without a udev rule or a

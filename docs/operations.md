@@ -204,7 +204,13 @@ Authors the system identity, udev guard/grant, and the **system** unit
 stays disarmed until an authenticated session lease arms it (S4). Real
 pass-through IRL is S5. This install also closes the measured OpenRGB `uaccess` keylogging
 hole on G213 **input** nodes, `/dev/port`, and `/dev/i2c-*`. HID RGB
-(`hidraw`) must keep working.
+(`hidraw`) must keep working. The broker's `/dev/uinput` grant is an
+**additive named-user ACL** from `99-contextdeck-broker-uinput.rules`, queued
+after the seat `uaccess` builtin so it is not overwritten.
+
+If these udev files are already installed from an earlier G3 run, re-run the
+udev `install` / `reload-rules` / `trigger` commands below so the late uinput
+rule replaces the old `62-` `setfacl` RUN line.
 
 Run every command from the repository root. Adjust nothing to a private
 home path in public notes.
@@ -221,10 +227,13 @@ sudo install -m 0644 packaging/udev/61-contextdeck-input-guard.rules \
   /etc/udev/rules.d/61-contextdeck-input-guard.rules
 sudo install -m 0644 packaging/udev/62-contextdeck-broker.rules \
   /etc/udev/rules.d/62-contextdeck-broker.rules
+sudo install -m 0644 packaging/udev/99-contextdeck-broker-uinput.rules \
+  /etc/udev/rules.d/99-contextdeck-broker-uinput.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=input
 sudo udevadm trigger --subsystem-match=i2c-dev
 sudo udevadm trigger --sysname-match=port
+sudo udevadm trigger --action=add --sysname-match=uinput --settle
 
 sudo install -m 0644 packaging/systemd/contextdeck-broker.service \
   /etc/systemd/system/contextdeck-broker.service
@@ -257,12 +266,16 @@ copy node numbers into public notes.
 |-------|----------|
 | `getfacl` on each G213 **event** node | group `contextdeck-broker`, mode `0660`, **no** session-user ACL |
 | `getfacl` on each G213 **hidraw** node | session-user ACL **still present** (OpenRGB lighting) |
-| `getfacl /dev/port` and `/dev/i2c-*` | **no** session-user ACL; no longer user-readable |
+| `getfacl /dev/port` and `/dev/i2c-*` | **no** session-user ACL; not session-readable |
+| `getfacl /dev/uinput` | existing group and mode **unchanged**; session-user ACL **still present**; `user:contextdeck-broker:rw-` present |
+| `sudo -u contextdeck-broker test -r /dev/uinput && sudo -u contextdeck-broker test -w /dev/uinput` | both succeed (`test` uses `access(2)`; it does not inject events) |
 | input-remapper | still enabled/active; G213 preset untouched |
 | `systemctl is-enabled contextdeck-broker` | not enabled (expected fail / `not-found` / `disabled`) |
 
 If hidraw lost the session ACL, rollback immediately — lighting would break
-and this install over-reached.
+and this install over-reached. If `/dev/uinput` lost the session-user ACL or
+never gained `user:contextdeck-broker:rw-`, rollback the uinput rule and
+re-check before any broker start.
 
 ### Rollback
 
@@ -274,12 +287,14 @@ packaged OpenRGB may restore session `uaccess` on G213 event nodes,
 # COOPERATOR-run (privileged)
 sudo rm -f /etc/udev/rules.d/61-contextdeck-input-guard.rules \
            /etc/udev/rules.d/62-contextdeck-broker.rules \
+           /etc/udev/rules.d/99-contextdeck-broker-uinput.rules \
            /etc/systemd/system/contextdeck-broker.service \
            /usr/lib/sysusers.d/contextdeck-broker.conf
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=input
 sudo udevadm trigger --subsystem-match=i2c-dev
 sudo udevadm trigger --sysname-match=port
+sudo udevadm trigger --action=add --sysname-match=uinput --settle
 sudo systemctl daemon-reload
 sudo userdel contextdeck-broker
 sudo groupdel contextdeck-broker

@@ -183,3 +183,14 @@ add_executable(test_broker_production tests/unit/test_broker_production.cpp)
 target_link_libraries(test_broker_production PRIVATE contextdeck_broker_core)
 set_target_properties(test_broker_production PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 add_test(NAME test_broker_production COMMAND test_broker_production)
+
+add_executable(test_udev_policy tests/unit/test_udev_policy.cpp)
+target_compile_definitions(test_udev_policy PRIVATE CONTEXTDECK_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+set_target_properties(test_udev_policy PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_udev_policy COMMAND test_udev_policy)
+
+add_test(NAME test_udev_verify
+         COMMAND udevadm verify --resolve-names=never
+                 "${CMAKE_SOURCE_DIR}/packaging/udev/61-contextdeck-input-guard.rules"
+                 "${CMAKE_SOURCE_DIR}/packaging/udev/62-contextdeck-broker.rules"
+                 "${CMAKE_SOURCE_DIR}/packaging/udev/99-contextdeck-broker-uinput.rules")

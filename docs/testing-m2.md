@@ -32,6 +32,20 @@ ctest --test-dir build --output-on-failure
 - Fake-source ingest on the loop still does 1:1 forwarding with SYN pairing
   and leaves the ledger idle.
 
+`test_udev_policy` and `test_udev_verify` check (no G213, no `/dev/uinput`,
+no live udev mutation):
+
+- Guard/grant/uinput rule files keep the G213 event, hidraw, `/dev/port`, and
+  `/dev/i2c-*` policy.
+- The G213 event grant stays in `62-contextdeck-broker.rules` with no `OWNER`
+  and no uinput `RUN`.
+- The broker uinput ACL is only in `99-contextdeck-broker-uinput.rules`,
+  matching the misc `uinput` node, adding `u:contextdeck-broker:rw` via
+  `setfacl`, and not setting `OWNER`/`GROUP`/`MODE`.
+- That `99-` filename sorts after `73-seat-late.rules` (the file that queues
+  the `uaccess` builtin).
+- `udevadm verify --resolve-names=never` accepts all three rule files.
+
 `test_broker_production` checks (no G213, no `/dev/uinput`, no live udev
 scan):
 
