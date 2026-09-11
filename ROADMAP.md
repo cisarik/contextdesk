@@ -16,14 +16,14 @@ reconciliation.
   Planner report 01/01 reconciled and accepted as **PARTIAL**, archived in META.
   PARTIAL is the correct outcome — the architecture is routable, but hardware
   evidence gates remain open.
-- Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented
-  and corrected across two Worker sessions (ten commits `1b024e4`..`042fa15`),
-  3/3 CTest units green, independently rebuilt by the ORCHESTRATOR. **Awaiting
-  COOPERATOR IRL acceptance** with `docs/operations.md` (host enablement) and
-  `docs/testing.md` (which includes the five-step zone-map probe for
+- Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented,
+  corrected, and redesigned across three Worker sessions (fifteen commits
+  `1b024e4`..`1781a40`), 3/3 CTest units green, independently rebuilt by the
+  ORCHESTRATOR. **Awaiting COOPERATOR IRL acceptance** with `docs/operations.md`
+  and `docs/testing.md` (which includes the five-step zone-map probe for
   `docs/hardware/g213-zone-map.md`). M1 merges profiles, KWin context,
-  non-destructive OpenRGB lighting with device modes, and typed power actions.
-  **It contains no input interception.**
+  non-destructive OpenRGB lighting with device modes, typed power actions,
+  and a polished task-oriented desktop UI. **It contains no input interception.**
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -162,6 +162,16 @@ One slice, five stages, one commit per stage (all five green):
   device modes (`wave`, `cycle`, `breathing`, `off`, `direct`), `UpdateMode`
   packet 1101, five named zone swatches, gradient helper, per-app presets,
   tray **Restore device default**, and unverified zone-accent mechanism.
+- **UX ergonomics redesign (session 03, commits `e46a572`..`1781a40`):**
+  - **Hero 5-Zone Preview:** Visual representation of G213 zones on Overview;
+    untouched state renders hollow/dashed placeholder strips (never misleading black).
+  - **Single-Sentence Status:** Clean summary on Overview and tray tooltip.
+  - **Task-Oriented Navigation:** Persistent sidebar (Stav, Farby, Aplikácie,
+    Diagnostika, Pokročilé) without cramped overlay drawers.
+  - **Visual Color Pickers:** Qt `ColorDialog` swatches, live gradient preview,
+    clean `Uložiť` actions.
+  - **M2 Demotion:** Controls moved behind Pokročilé with inactive M2 banner.
+  - **Self-Context Filtering:** Shows `ContextDeck (toto okno)` or last app.
 - **Zone map:** `docs/hardware/g213-zone-map.md` established with initial
   hypotheses; empty results table ready for COOPERATOR's 5-step IRL probe.
 - Worker environment note: this coding client needed a clean `PATH` for CMake

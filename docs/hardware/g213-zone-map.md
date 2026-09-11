@@ -44,7 +44,7 @@ page may show an unverified preview label only.
 
 ## IRL probe (five steps)
 
-Start ContextDeck with OpenRGB on loopback. Use Settings → Profiles → global
+Start ContextDeck with OpenRGB on loopback. Use Settings → Farby → global
 Direct. After each step, look at the **physical keys**, not the OpenRGB GUI.
 Do not run `openrgb --list-devices`. Write what you see into **Results**.
 A failure stops the run; restore device default before quitting.
