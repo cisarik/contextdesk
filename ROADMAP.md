@@ -55,17 +55,18 @@ done-as-planned.
 | # | Identity | What it delivers | Depends on | Status |
 |---|----------|------------------|------------|--------|
 | V0 | baseline reconciliation | Confirmed baseline, trace continuation | — | Done (G0) |
-| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model + validated atomic persistence, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (five zones, one base color), typed `DisplaysOff`/`Suspend` actions, three safety test units, COOPERATOR IRL test pack | G0, P2 | **Implemented — awaiting IRL acceptance** |
-| P2 | host enablement (COOPERATOR-run) | `openrgb` install incl. its udev rules, loopback SDK server, KWin script load — the G2 five-zone evidence | — | Granted, parallel |
+| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, 3 CTest units, IRL test pack | G0, P2 | **Implemented & verified IRL** (5 zones work; Breathing/Gradient polish in progress) |
+| P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
 | M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | Planned |
-| M3 | `g213-contextdeck-context-shortcuts` | Per-app chord emission across the verified control catalog + recorder | M2 | Planned |
-| M4 | `g213-contextdeck-release-lifecycle` | Packaging, removal, opt-in autostart, release acceptance | M3, G6, G8 | Planned |
+| M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
+| M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
+| M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
 
-Dependency order: P2 unblocks the RGB half of M1 (the code itself does not);
-M1 → M2 → M3 → M4; P1 must land before M2 because the physical routing matrix
-is the only honest basis for remapping; G7 (power actions) is accepted during
-M1's IRL testing rather than as its own slice.
+Dependency order: P2 confirmed five-zone lighting; M1 → M2 (input safety) OR
+M1 → M3 (workspace lighting); M3 → M4 (workspace session manager); M4 + M2 → M5
+(full autostart release). P1 must land before M2 remapping. G7 (power actions)
+tested in M1 IRL.
 
 ## Evidence gates
 
@@ -247,9 +248,54 @@ after M2 — a COOPERATOR choice when the time comes.
 accent roles compete for the same slots; there is no per-key anything; there is
 no readback, so only the COOPERATOR's eyes close a claim.
 
-**Same brainstorm, lower priority:** activities awareness, extra native-effect
-parameters, software animation by streaming five colors (explicitly declined for
-now).
+### Workspace session manager — future whole `g213-contextdeck-workspace-session-manager`
+
+**Need (COOPERATOR):** transform ContextDesk into a true KDE Plasma Context &
+Workspace Manager:
+1. Configure and manage virtual desktops (count, names, custom sessions).
+2. Assign specific applications to specific virtual desktops.
+3. Automatically launch assigned applications on desktop initialization and
+   maximize them to their respective virtual desktops.
+4. Window-title-based matching as a fallback when an unassigned window has focus.
+
+**Classification:** future-logical-whole (milestone M4). Not immediate implementation authority.
+
+**Technical feasibility & route (ORCHESTRATOR verified):**
+- **Virtual desktop management:** `org.kde.KWin.VirtualDesktopManager` exposes
+  `createDesktop(position, name)` and `removeDesktop(id)`.
+- **Window placement & maximization:** KWin Scripting API exposes
+  `window.desktops = [desktop]` and `window.maximized = ...`, while KDE Plasma
+  native Window Rules (`kwinrulesrc`) provide persistent, compositor-enforced
+  placement without polling.
+- **Application launching:** Systemd user transient scopes (`systemd-run --user`)
+  or XDG application launchers (`KRun`/`Gio`) ensure clean cgroups and lifecycles.
+- **Window-title fallback:** KWin bridge already tracks windows; adding title
+  inspection strictly as fallback preserves privacy invariants.
+
+### KDE Plasma autostart & full lifecycle — future whole `g213-contextdeck-system-integration-and-autostart`
+
+**Need (COOPERATOR):** ContextDesk starts automatically upon KDE Plasma login,
+restoring the full automated context ecosystem without manual steps.
+
+**Classification:** future-logical-whole (milestone M5).
+- Clean systemd user unit bound to `graphical-session.target` or standard XDG
+  `~/.config/autostart/contextdeck.desktop`.
+
+### Immediate M1 IRL observations & defects to resolve
+
+1. **Breathing mode requires color & speed:**
+   - *Source evidence (`RGBController_LogitechG213.cpp`):* The G213 Breathing mode
+     has `MODE_FLAG_HAS_MODE_SPECIFIC_COLOR | MODE_FLAG_HAS_SPEED`, requiring
+     `modes[active_mode].colors[0]` and `modes[active_mode].speed`. When sent
+     with empty colors, it breathes black (invisible).
+   - *Fix:* Expose speed control and a primary color for Breathing, Wave, and
+     Cycle, serializing them into the `UpdateMode` payload.
+2. **Gradient UI application:**
+   - In `LightingPresetEditor.qml`, ensure `ColorDialog` binds to valid mutable
+     properties and that "Použiť gradient" updates both live swatches and the
+     effective model seamlessly.
+3. **5 physical zones confirmed working IRL:**
+   - Individual zone color control on the Logitech G213 is physically proven!
 
 ## Explicitly out of scope for v1
 
