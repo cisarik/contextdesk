@@ -96,6 +96,9 @@ add_library(contextdeck_broker_core STATIC
     src/broker/IdentityMatcher.cpp
     src/broker/KeyLedger.cpp
     src/broker/Acquisition.cpp
+    src/broker/FakeGrabber.cpp
+    src/broker/EvdevGrabber.cpp
+    src/broker/GrabbingSource.cpp
     src/broker/FakeSink.cpp
     src/broker/FakeSource.cpp
     src/broker/RealSink.cpp
@@ -138,3 +141,8 @@ add_executable(test_broker_forwarding tests/unit/test_broker_forwarding.cpp)
 target_link_libraries(test_broker_forwarding PRIVATE contextdeck_broker_core)
 set_target_properties(test_broker_forwarding PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 add_test(NAME test_broker_forwarding COMMAND test_broker_forwarding)
+
+add_executable(test_broker_acquisition tests/unit/test_broker_acquisition.cpp)
+target_link_libraries(test_broker_acquisition PRIVATE contextdeck_broker_core)
+set_target_properties(test_broker_acquisition PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_broker_acquisition COMMAND test_broker_acquisition)

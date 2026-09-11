@@ -1,0 +1,5 @@
+# Grant G213 event nodes only to the contextdeck-broker identity; no other keyboards and no hidraw.
+SUBSYSTEM=="input", SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c336", KERNEL=="event*", GROUP="contextdeck-broker", MODE="0660"
+
+# Add an ACL for the broker on /dev/uinput without changing its group or mode, so KDE Connect's session ACL remains.
+KERNEL=="uinput", RUN+="/usr/bin/setfacl -m u:contextdeck-broker:rw /dev/uinput"

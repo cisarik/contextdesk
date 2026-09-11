@@ -1,9 +1,11 @@
 #include "broker/Selftest.h"
 
 #include "broker/Acquisition.h"
+#include "broker/FakeGrabber.h"
 #include "broker/FakeSink.h"
 #include "broker/FakeSource.h"
 #include "broker/ForwardingEngine.h"
+#include "broker/GrabbingSource.h"
 #include "broker/IdentityMatcher.h"
 #include "broker/KeyLedger.h"
 #include "broker/Logger.h"
@@ -12,6 +14,7 @@
 #include <linux/input.h>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace contextdeck::broker {
 namespace {
@@ -21,23 +24,6 @@ public:
     bool createVirtual() override { return true; }
     void destroyVirtual() override { destroyed = true; }
     bool destroyed = false;
-};
-
-class QuietSource final : public ILifecycleSource {
-public:
-    explicit QuietSource(SourceTag tag)
-        : tag_(tag)
-    {
-    }
-    SourceTag tag() const override { return tag_; }
-    bool openSource() override { return true; }
-    bool claimSource() override { return true; }
-    void unclaimSource() override { unclaimed = true; }
-    void closeSource() override {}
-    bool unclaimed = false;
-
-private:
-    SourceTag tag_;
 };
 
 DeviceCandidate sampleIf00()
@@ -103,15 +89,18 @@ int runSelftest()
     engine.ingest(if00Events);
 
     QuietSink lifecycle;
-    QuietSource if00(SourceTag::If00);
-    QuietSource if01(SourceTag::If01);
+    std::vector<std::string> grabLog;
+    FakeGrabber grab00("if00", grabLog);
+    FakeGrabber grab01("if01", grabLog);
+    GrabbingSource if00(SourceTag::If00, grab00);
+    GrabbingSource if01(SourceTag::If01, grab01);
     Acquisition acq(lifecycle, if00, if01, ledger, logger, &sink);
     if (!acq.arm()) {
         std::fprintf(stderr, "contextdeck-broker: error=selftest-arm\n");
         return 1;
     }
     acq.disarm();
-    if (acq.armed() || !if00.unclaimed || !if01.unclaimed || !lifecycle.destroyed) {
+    if (acq.armed() || grab00.grabbed() || grab01.grabbed() || !lifecycle.destroyed) {
         std::fprintf(stderr, "contextdeck-broker: error=selftest-disarm-order\n");
         return 1;
     }

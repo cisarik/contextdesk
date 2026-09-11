@@ -21,7 +21,8 @@ class ILifecycleSource {
 public:
     virtual ~ILifecycleSource() = default;
     virtual SourceTag tag() const = 0;
-    // open/claim are testable hooks. claim must not issue EVIOCGRAB in this stage.
+    // claimSource is the exclusive grab; unclaimSource is the ungrab.
+    // Production: EvdevGrabber (libevdev_grab → EVIOCGRAB). Tests: FakeGrabber.
     virtual bool openSource() = 0;
     virtual bool claimSource() = 0;
     virtual void unclaimSource() = 0;

@@ -1,0 +1,26 @@
+[Unit]
+Description=ContextDeck input broker (G213 passthrough)
+Documentation=https://github.com/cisarik/contextdesk
+# Starts disarmed and idle; later S4 leases arm it. Never enabled, never autostart.
+
+[Service]
+Type=notify
+User=contextdeck-broker
+Group=contextdeck-broker
+WatchdogSec=2
+Restart=no
+LimitCORE=0
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+# DeviceAllow only takes effect with a closed policy.
+DevicePolicy=closed
+DeviceAllow=/dev/uinput rw
+DeviceAllow=char-input rw
+RuntimeDirectory=contextdeck
+RuntimeDirectoryMode=0750
+# COOPERATOR adjusts the path until an install prefix exists.
+ExecStart=/usr/bin/contextdeck-broker
+# No [Install] section: do not enable this unit.

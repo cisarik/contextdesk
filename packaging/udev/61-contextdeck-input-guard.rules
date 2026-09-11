@@ -1,0 +1,9 @@
+# Revoke session uaccess from G213 input devices so packaged OpenRGB cannot expose keystrokes to the seat.
+# RGB hidraw access stays: this file never matches hidraw nodes.
+SUBSYSTEM=="input", SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c336", TAG-="uaccess"
+
+# Revoke session uaccess from /dev/port so packaged OpenRGB cannot grant raw I/O to the seat.
+KERNEL=="port", TAG-="uaccess"
+
+# Revoke session uaccess from i2c device nodes so packaged OpenRGB cannot grant SMBus access to the seat.
+KERNEL=="i2c-[0-9]*", TAG-="uaccess"
