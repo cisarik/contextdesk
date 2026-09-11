@@ -79,6 +79,9 @@ qt_add_qml_module(contextdeck
     QML_FILES
         ui/Main.qml
         ui/OverviewPage.qml
+        ui/ZoneHero.qml
+        ui/ColorsPage.qml
+        ui/ApplicationsPage.qml
         ui/ProfilesPage.qml
         ui/ControlsPage.qml
         ui/DiagnosticsPage.qml

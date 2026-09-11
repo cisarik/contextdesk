@@ -4,7 +4,8 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 Kirigami.ScrollablePage {
-    title: "Overview"
+    id: page
+    title: ""
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
@@ -16,64 +17,59 @@ Kirigami.ScrollablePage {
             text: "Temporary override is active (" + app.lightingLabel + "). It is not Automatic and expires on the next external application-identity change."
         }
 
-        Kirigami.FormLayout {
-            wideMode: true
-            Controls.Label {
-                Kirigami.FormData.label: "Current application"
-                text: app.currentApplication
-            }
-            Controls.Label {
-                Kirigami.FormData.label: "Resolved profile"
-                text: app.currentProfile
-            }
-            Controls.Label {
-                Kirigami.FormData.label: "Remapping"
-                text: app.remappingState + " — stored chords are not emitted yet."
-                wrapMode: Text.WordWrap
-            }
-            Controls.Label {
-                Kirigami.FormData.label: "Lighting"
-                text: app.lightingLabel
-            }
-            Controls.Label {
-                Kirigami.FormData.label: "Session"
-                text: app.sessionLighting === "automatic" ? "follow profile"
-                    : (app.sessionLighting === "temporary" ? "temporary override"
-                    : (app.sessionLighting === "device_default" ? "restore device default" : app.sessionLighting))
-            }
-            Controls.Label {
-                Kirigami.FormData.label: "Lighting connection"
-                text: app.lightingConnection
-            }
-            Controls.Label {
-                Kirigami.FormData.label: "Bridge"
-                text: app.bridgeConnected ? "connected" : (app.degraded ? "degraded" : "not connected")
-            }
+        ZoneHero {
+            Layout.fillWidth: true
         }
 
-        RowLayout {
-            Controls.Button {
-                text: "Follow profile"
-                highlighted: app.sessionLighting === "automatic"
-                onClicked: app.restoreAutomatic()
-            }
-            Controls.Button {
-                text: "Lights off"
-                highlighted: app.sessionLighting === "off"
-                onClicked: app.lightsOff()
-            }
-            Controls.Button {
-                text: "Restore device default"
-                highlighted: app.sessionLighting === "device_default"
-                onClicked: app.restoreDeviceDefault()
-            }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: app.statusSummary
+            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.12
         }
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
-            visible: true
+            visible: !app.hasSavedProfiles && app.sessionLighting !== "temporary" && app.sessionLighting !== "off"
             type: Kirigami.MessageType.Information
-            text: "The G213 has five RGB zones, not per-key color. Until you pick a preset, lighting stays untouched — device default. There is no optical readback."
+            text: "Kým neuložíš preset, G213 ostáva na predvolenom firmware efekte (Wave). Čierna znamená Off, nie predvolené firmware."
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            Controls.Button {
+                text: "Nastaviť farby"
+                highlighted: true
+                onClicked: applicationWindow().showSection("colors")
+            }
+            Controls.Button {
+                text: "Follow profile"
+                visible: app.hasSavedProfiles
+                highlighted: app.sessionLighting === "automatic"
+                onClicked: app.restoreAutomatic()
+            }
+            Item {
+                Layout.fillWidth: true
+            }
+            Controls.ToolButton {
+                icon.name: "overflow-menu"
+                Accessible.name: "Ďalšie akcie"
+                onClicked: overflowMenu.popup()
+
+                Controls.Menu {
+                    id: overflowMenu
+                    Controls.MenuItem {
+                        text: "Restore device default"
+                        onTriggered: app.restoreDeviceDefault()
+                    }
+                    Controls.MenuItem {
+                        text: "Lights off"
+                        onTriggered: app.lightsOff()
+                    }
+                }
+            }
         }
     }
 }

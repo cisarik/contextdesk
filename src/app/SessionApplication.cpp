@@ -3,6 +3,7 @@
 #include "context/DBusNames.h"
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QLoggingCategory>
 
 namespace contextdeck {
@@ -32,7 +33,11 @@ bool SessionApplication::start()
         qCWarning(lcApp) << "running degraded:" << m_context.lastError();
     }
     m_controller.load();
-    m_rgb.start();
+    if (QGuiApplication::platformName() == QLatin1String("offscreen")) {
+        m_settings.show();
+    } else {
+        m_rgb.start();
+    }
     m_tray.start();
     return registered;
 }

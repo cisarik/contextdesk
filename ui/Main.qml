@@ -6,53 +6,89 @@ import org.kde.kirigami as Kirigami
 Kirigami.ApplicationWindow {
     id: root
     title: "ContextDeck"
-    minimumWidth: 720
-    minimumHeight: 520
-    width: 900
-    height: 640
+    minimumWidth: 880
+    minimumHeight: 560
+    width: 1040
+    height: 680
+
+    property string currentSection: "status"
+
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
+    pageStack.globalToolBar.showNavigationButtons: Kirigami.ApplicationHeaderStyle.NoNavigationButtons
+
+    function showSection(section) {
+        if (section === currentSection && pageStack.currentItem) {
+            return;
+        }
+        currentSection = section;
+        let url = "";
+        switch (section) {
+        case "status":
+            url = Qt.resolvedUrl("OverviewPage.qml");
+            break;
+        case "colors":
+            url = Qt.resolvedUrl("ColorsPage.qml");
+            break;
+        case "apps":
+            url = Qt.resolvedUrl("ApplicationsPage.qml");
+            break;
+        case "diagnostics":
+            url = Qt.resolvedUrl("DiagnosticsPage.qml");
+            break;
+        case "advanced":
+            url = Qt.resolvedUrl("ControlsPage.qml");
+            break;
+        }
+        if (url !== "") {
+            pageStack.replace(url);
+        }
+    }
 
     globalDrawer: Kirigami.GlobalDrawer {
         title: "ContextDeck"
         titleIcon: "input-keyboard"
-        isMenu: true
+        isMenu: false
+        modal: Kirigami.Settings.isMobile
+        collapsible: false
+        drawerOpen: !Kirigami.Settings.isMobile
         actions: [
             Kirigami.Action {
-                text: "Overview"
+                text: "Stav"
                 icon.name: "view-visible"
-                onTriggered: root.pageStack.replace(overviewPage)
+                checkable: true
+                checked: root.currentSection === "status"
+                onTriggered: root.showSection("status")
             },
             Kirigami.Action {
-                text: "Profiles"
+                text: "Farby"
+                icon.name: "color-picker"
+                checkable: true
+                checked: root.currentSection === "colors"
+                onTriggered: root.showSection("colors")
+            },
+            Kirigami.Action {
+                text: "Aplikácie"
                 icon.name: "object-group"
-                onTriggered: root.pageStack.replace(profilesPage)
+                checkable: true
+                checked: root.currentSection === "apps"
+                onTriggered: root.showSection("apps")
             },
             Kirigami.Action {
-                text: "Controls"
-                icon.name: "input-keyboard"
-                // Load by URL so a ControlsPage/ChordRecorder type error cannot
-                // take down Overview and Profiles (needed for M1 IRL).
-                onTriggered: root.pageStack.replace(Qt.resolvedUrl("ControlsPage.qml"))
-            },
-            Kirigami.Action {
-                text: "Diagnostics"
+                text: "Diagnostika"
                 icon.name: "help-about"
-                onTriggered: root.pageStack.replace(diagnosticsPage)
+                checkable: true
+                checked: root.currentSection === "diagnostics"
+                onTriggered: root.showSection("diagnostics")
+            },
+            Kirigami.Action {
+                text: "Pokročilé"
+                icon.name: "configure"
+                checkable: true
+                checked: root.currentSection === "advanced"
+                onTriggered: root.showSection("advanced")
             }
         ]
     }
 
-    Component {
-        id: overviewPage
-        OverviewPage {}
-    }
-    Component {
-        id: profilesPage
-        ProfilesPage {}
-    }
-    Component {
-        id: diagnosticsPage
-        DiagnosticsPage {}
-    }
-
-    pageStack.initialPage: overviewPage
+    pageStack.initialPage: Qt.resolvedUrl("OverviewPage.qml")
 }
