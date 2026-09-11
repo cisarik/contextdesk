@@ -14,6 +14,9 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Network Qml Quick Qui
 find_package(KF6StatusNotifierItem REQUIRED)
 find_package(KF6Kirigami REQUIRED)
 find_package(KF6Screen REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBEVDEV REQUIRED IMPORTED_TARGET libevdev)
+pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
 
 add_library(contextdeck_core STATIC
     src/core/ControlCatalog.cpp
@@ -88,6 +91,20 @@ qt_add_qml_module(contextdeck
     NO_RESOURCE_TARGET_PATH
 )
 
+add_library(contextdeck_broker_core STATIC
+    src/broker/Logger.cpp
+    src/broker/IdentityMatcher.cpp
+    src/broker/KeyLedger.cpp
+    src/broker/Acquisition.cpp
+)
+target_include_directories(contextdeck_broker_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(contextdeck_broker_core PUBLIC PkgConfig::LIBEVDEV PkgConfig::LIBUDEV)
+
+add_executable(contextdeck-broker src/broker/main.cpp)
+target_compile_definitions(contextdeck-broker PRIVATE CONTEXTDECK_VERSION="${PROJECT_VERSION}")
+target_link_libraries(contextdeck-broker PRIVATE contextdeck_broker_core)
+set_target_properties(contextdeck_broker_core contextdeck-broker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+
 enable_testing()
 
 add_executable(test_profile_resolver tests/unit/test_profile_resolver.cpp)
@@ -101,3 +118,13 @@ add_test(NAME test_profile_persistence COMMAND test_profile_persistence)
 add_executable(test_openrgb_protocol tests/unit/test_openrgb_protocol.cpp)
 target_link_libraries(test_openrgb_protocol PRIVATE contextdeck_rgb Qt6::Test)
 add_test(NAME test_openrgb_protocol COMMAND test_openrgb_protocol)
+
+add_executable(test_broker_identity tests/unit/test_broker_identity.cpp)
+target_link_libraries(test_broker_identity PRIVATE contextdeck_broker_core)
+set_target_properties(test_broker_identity PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_broker_identity COMMAND test_broker_identity)
+
+add_executable(test_broker_ledger tests/unit/test_broker_ledger.cpp)
+target_link_libraries(test_broker_ledger PRIVATE contextdeck_broker_core)
+set_target_properties(test_broker_ledger PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_broker_ledger COMMAND test_broker_ledger)
