@@ -2,6 +2,7 @@
 #include "core/Persistence.h"
 #include "core/Resolver.h"
 #include "core/Types.h"
+#include "core/ZoneMap.h"
 
 #include <QTest>
 
@@ -202,6 +203,26 @@ private slots:
         QCOMPARE(resolveLighting(document, identity).mode, LightingMode::Cycle);
         QCOMPARE(resolveLighting(document, identity, override).mode, LightingMode::Direct);
         QCOMPARE(resolveLighting(document, identity, override).baseColor->r, quint8(0x10));
+    }
+
+    void unverifiedZoneAccentIsInert()
+    {
+        Lighting base;
+        base.mode = LightingMode::Direct;
+        base.baseColor = Rgb{0x11, 0x22, 0x33};
+        std::array<ZoneValue, kZoneCount> zones{};
+        zones[0].color = Rgb{0x10, 0x00, 0x00};
+        zones[1].color = Rgb{0x00, 0x10, 0x00};
+        zones[2].color = Rgb{0x00, 0x00, 0x10};
+        zones[3].color = Rgb{0x10, 0x10, 0x00};
+        zones[4].color = Rgb{0x00, 0x10, 0x10};
+        base.zones = zones;
+
+        const Lighting accented = applyZoneAccent(base, ControlId::F1, Rgb{0xff, 0x00, 0x00});
+        QCOMPARE(accented, base);
+        QVERIFY(zoneMapEntry(ControlId::F1) != nullptr);
+        QVERIFY(!zoneMapEntry(ControlId::F1)->verified);
+        QCOMPARE(zoneMap().size(), 20);
     }
 };
 

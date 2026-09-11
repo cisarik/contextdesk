@@ -452,6 +452,8 @@ void ContextReceiver::onContextReport(const QString &bridgeId, quint32 sequence,
         bumpPolicy();
         emit currentIdentityChanged();
         qCInfo(lcContext) << "context identity updated, policy" << m_policyRevision;
+    } else {
+        qCDebug(lcContext) << "context identity refresh without policy bump";
     }
 }
 

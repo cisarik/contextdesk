@@ -2,6 +2,7 @@
 
 #include "core/ControlCatalog.h"
 #include "core/Resolver.h"
+#include "core/ZoneMap.h"
 
 #include <QLoggingCategory>
 #include <QStringList>
@@ -312,6 +313,14 @@ QVariantList AppController::controls() const
         map.insert(QStringLiteral("name"), QString::fromLatin1(info.jsonName));
         map.insert(QStringLiteral("conditional"), info.conditionalOnHardwareEvidence);
         map.insert(QStringLiteral("action"), actionJsonName(assignment.action));
+        const ZoneMapEntry *zone = zoneMapEntry(info.id);
+        if (zone != nullptr) {
+            map.insert(QStringLiteral("zoneName"), QString::fromUtf8(zone->zoneName));
+            map.insert(QStringLiteral("zoneVerified"), zone->verified);
+            map.insert(QStringLiteral("zonePreview"),
+                       zone->verified ? QStringLiteral("verified zone")
+                                      : QStringLiteral("unverified preview — no accent writes"));
+        }
         map.insert(QStringLiteral("note"),
                    info.conditionalOnHardwareEvidence
                        ? QStringLiteral("Conditional on hardware evidence (G1); not bound in M1.")

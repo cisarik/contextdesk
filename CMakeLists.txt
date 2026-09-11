@@ -19,6 +19,7 @@ add_library(contextdeck_core STATIC
     src/core/ControlCatalog.cpp
     src/core/Resolver.cpp
     src/core/Persistence.cpp
+    src/core/ZoneMap.cpp
 )
 target_include_directories(contextdeck_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_core PUBLIC Qt6::Core)

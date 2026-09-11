@@ -127,6 +127,7 @@ function sendInventory() {
 }
 
 function sendHeartbeat() {
+    sendContext(workspace.activeWindow);
     callDBus(SERVICE, PATH, IFACE, "Heartbeat", BRIDGE_ID, nextSequence());
 }
 

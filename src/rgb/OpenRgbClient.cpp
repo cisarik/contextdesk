@@ -220,6 +220,7 @@ void OpenRgbClient::handlePacket(const openrgb::PacketHeader &header, const QByt
             m_lightingEnabled = true;
             emit lightingEnabledChanged();
             emit deviceSelectionChanged();
+            qCInfo(lcRgb) << "G213 enumerated; no mode selected without lighting intent";
             applyDesiredState();
         }
         break;

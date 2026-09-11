@@ -64,6 +64,12 @@ Kirigami.ScrollablePage {
                     text: modelData.action + " — " + modelData.note
                     wrapMode: Text.WordWrap
                 }
+                Controls.Label {
+                    visible: modelData.zoneName !== undefined
+                    text: "Zone accent preview: " + modelData.zoneName + " (" + modelData.zonePreview + ")"
+                    wrapMode: Text.WordWrap
+                    opacity: 0.8
+                }
             }
         }
     }

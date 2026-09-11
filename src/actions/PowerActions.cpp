@@ -23,8 +23,7 @@ PowerActions::PowerActions(QObject *parent)
 
 bool PowerActions::displaysOffSupported() const
 {
-    KScreen::Dpms dpms;
-    return dpms.isSupported();
+    return m_dpms.isSupported();
 }
 
 bool PowerActions::suspendAllowed() const
@@ -47,14 +46,13 @@ bool PowerActions::displaysOff()
         qCInfo(lcActions) << "displays_off debounced";
         return false;
     }
-    KScreen::Dpms dpms;
-    if (!dpms.isSupported()) {
+    if (!m_dpms.isSupported()) {
         m_lastError = QStringLiteral("DPMS is not supported");
         emit lastErrorChanged();
         qCWarning(lcActions) << m_lastError;
         return false;
     }
-    dpms.switchMode(KScreen::Dpms::Off);
+    m_dpms.switchMode(KScreen::Dpms::Off);
     m_lastDisplaysOffMs = now;
     qCInfo(lcActions) << "displays_off requested";
     return true;

@@ -202,6 +202,27 @@ private slots:
         QCOMPARE(ledHeader->packetId, PacketId::UpdateLeds);
         QCOMPARE(ledHeader->deviceIndex, quint32(1));
     }
+
+    void desiredStateNeverSelectsCustomMode()
+    {
+        QVector<ControllerMode> modes(5);
+        modes[0].name = QStringLiteral("Direct");
+        modes[1].name = QStringLiteral("Off");
+        modes[2].name = QStringLiteral("Cycle");
+        modes[3].name = QStringLiteral("Wave");
+        modes[4].name = QStringLiteral("Breathing");
+
+        DesiredLighting wave;
+        wave.mode = LightingMode::Wave;
+        DecodeError error;
+        const auto frames = encodeDesiredStateFrames(0, wave, modes, kProtocolVersion, &error);
+        QVERIFY2(frames.has_value(), qPrintable(error.reason));
+        QCOMPARE(frames->size(), 1);
+        const auto header = decodeHeader(frames->at(0), &error);
+        QVERIFY(header.has_value());
+        QCOMPARE(header->packetId, PacketId::UpdateMode);
+        QVERIFY(header->packetId != PacketId::SetCustomMode);
+    }
 };
 
 QTEST_MAIN(TestOpenRgbProtocol)

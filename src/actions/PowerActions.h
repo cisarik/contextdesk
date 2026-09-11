@@ -1,5 +1,6 @@
 #pragma once
 
+#include <KScreenDpms/Dpms>
 #include <QObject>
 
 namespace contextdeck {
@@ -25,6 +26,7 @@ private:
     QString m_lastError;
     qint64 m_lastDisplaysOffMs = 0;
     qint64 m_lastSuspendMs = 0;
+    KScreen::Dpms m_dpms;
 };
 
 } // namespace contextdeck
