@@ -61,19 +61,28 @@ Reload the KWin script after this tree's bridge change so heartbeat
    global preset in **Farby** in turn to `wave`, `cycle`, `breathing`, `off`,
    then `direct` (use a non-black color). **Uložiť** each time and look at the
    keyboard before changing the next.  
-   **Expect:** Wave/Cycle/Breathing animate in firmware; Off is dark (Hero
-   strips may be solid black — that means Off); Direct is a static five-zone
-   color. The status sentence names that preset, never Automatic.  
-   **Fail:** a named preset does nothing, or Direct leaves all zones black.
+   For **Breathing**: pick **Farba dýchania** (not black; `#7c3aed` is the
+   default) and move **Rýchlosť animácie**. The board must pulse that color;
+   faster on the slider must visibly speed up the pulse. Wave and Cycle should
+   also follow the speed slider.  
+   **Expect:** Wave/Cycle/Breathing animate in firmware; Breathing is a visible
+   colored pulse, not a dark keyboard; Off is dark (Hero strips may be solid
+   black — that means Off); Direct is a static five-zone color. The status
+   sentence names that preset, never Automatic.  
+   **Fail:** a named preset does nothing, Breathing stays black/invisible, speed
+   does not change the animation, or Direct leaves all zones black.
 
 5. **Per-zone gradient**  
-   Global preset Direct on **Farby**. Pick Start Color and End Color, confirm
-   the live five-band preview, then **Použiť gradient** (for example `#ff0000`
-   → `#0000ff`).  
+   Global preset Direct on **Farby**. Pick Start Color and End Color (the live
+   five-band preview under the pickers must follow those colors). Then **Použiť
+   gradient** (for example `#ff0000` → `#0000ff`). The five labelled zone
+   swatches must change **immediately**, the preset must switch to Direct if it
+   was not already, and a hint to **Uložiť** may appear. Then **Uložiť**.  
    **Expect:** five distinct bands, left → numpad, matching the labelled
    swatches: Left Area, Middle Area, Right Area, Arrow and Homekeys, Numpad.
    Not per-key RGB.  
-   **Fail:** only one color, or more than five independently colored keys.
+   **Fail:** swatches do not change on **Použiť gradient**, only one color, or
+   more than five independently colored keys.
 
 6. **Per-application preset on focus change**  
    On **Aplikácie**, add a profile from the inventory picker. Give it a

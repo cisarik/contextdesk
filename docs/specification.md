@@ -120,11 +120,14 @@ separate truths. Only the operator's eyes close a lighting claim.
 |-------|---------|
 | `mode` | ∈ {`untouched`, `direct`, `wave`, `cycle`, `breathing`, `off`} |
 | `zones` | `null` or exactly five `#rrggbb` entries. Meaningful for `direct`. |
-| `base_color` | Optional `#rrggbb`. Migration source from version 1, and the single-color form of `direct`. |
+| `base_color` | Optional `#rrggbb`. Migration source from version 1, the single-color form of `direct`, and the **mode-specific Breathing color**. When Breathing is selected without a color, ContextDeck sends `#7c3aed`. |
 | `restore_mode` | Device mode to return to (`direct`, `wave`, `cycle`, `breathing`, `off`). Defaults to `wave`. Not `untouched`. |
+| `speed` | Optional non-negative integer. OpenRGB protocol speed for `wave`, `cycle`, and `breathing`. Absent means the controller's default for that mode. Encoded values are clamped to the mode's `speed_min`/`speed_max` (G213 ranges may be inverted: slower is a larger number). |
 
 Unknown mode names, wrong zone counts, and unknown semantic fields are
-rejected. `direct` requires `base_color` or exactly five zones.
+rejected. `direct` requires `base_color` or exactly five zones. `speed` is
+ignored for `untouched`, `direct`, and `off` at encode time but may still be
+stored.
 
 Default is **non-destructive**: until the user expresses intent, ContextDeck
 does not touch the device. The honest lighting label remains
@@ -231,12 +234,17 @@ device must never be left in Direct with all-zero colors without intent.
 
 Mode changes go through `UPDATEMODE` (packet 1101) using the Mode Data block
 from the server's controller description (protocol 5 includes `mode_value`,
-which the client echoes). Per-zone colors in `direct` go through whole-device
-`UPDATELEDS` for five little-endian `0x00BBGGRR` colors. `untouched` sends
-no frame. `SETCUSTOMMODE` is not used as a connect-time default. If OpenRGB
-reports the active mode as Direct at first enumeration, ContextDeck treats
-that as unknown and records `wave` for restore (OpenRGB's own init must not be
-confused with the keyboard firmware effect).
+which the client echoes). For `wave` and `cycle`, an optional stored `speed` is
+written into that block (clamped to the mode range). For `breathing`, the same
+speed field is written and **exactly one mode-specific color** is required:
+OpenRGB's G213 backend reads `MODE_COLORS_MODE_SPECIFIC` and otherwise breathes
+black. ContextDeck therefore copies `base_color` (default `#7c3aed`) into
+`mode.colors[0]` before encoding. Per-zone colors in `direct` go through
+whole-device `UPDATELEDS` for five little-endian `0x00BBGGRR` colors.
+`untouched` sends no frame. `SETCUSTOMMODE` is not used as a connect-time
+default. If OpenRGB reports the active mode as Direct at first enumeration,
+ContextDeck treats that as unknown and records `wave` for restore (OpenRGB's
+own init must not be confused with the keyboard firmware effect).
 
 Frames: magic `ORGB`, 16-byte little-endian header (device index, packet id,
 payload size). Wrong magic, truncated frames, and payloads above 1 MiB are
@@ -263,7 +271,7 @@ drawer):
 | Section | Purpose |
 |---------|---------|
 | **Stav** (Overview) | Five-zone Hero preview, one human-readable status sentence, empty-state CTA |
-| **Farby** | Global lighting preset, visual zone pickers, gradient helper |
+| **Farby** | Global lighting preset, visual zone pickers, gradient helper, animation speed, Breathing color |
 | **Aplikácie** | Per-application lighting presets from the KWin inventory |
 | **Diagnostika** | D-Bus names, bridge id, socket/SDK state, counters, power actions |
 | **Pokročilé** | Inactive M2 shortcut catalog and chord recorder |
@@ -289,9 +297,13 @@ Hero presentation:
 | `off` | Solid black strips + `Off` (black means off) |
 
 Zone swatches open a system `ColorDialog`. Hex text fields are an advanced
-option on Farby, not on Overview. The gradient helper is two visual pickers
-plus a live five-band preview and **Použiť gradient**. Persistence is **Uložiť**,
-never a filename. Overview's primary action is **Nastaviť farby**; **Follow
+option on Farby, not on Overview. The gradient helper stores start and end as
+`#rrggbb` on the editor (not on the dialog), shows a live five-band preview as
+those colors change, and **Použiť gradient** immediately paints the five zone
+swatches, switches the preset to `direct`, and sends the colors. Persistence is
+still **Uložiť**. Wave, Cycle, and Breathing show **Rýchlosť animácie** (0–100,
+mapped onto the OpenRGB mode speed range). Breathing also shows **Farba
+dýchania**. Overview's primary action is **Nastaviť farby**; **Follow
 profile** appears only when a preset exists; **Restore device default** and
 **Lights off** sit in overflow.
 
