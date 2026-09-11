@@ -59,7 +59,7 @@ done-as-planned.
 | M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, 3 CTest units, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
-| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Next (Planning phase)** |
+| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Planned — Planner report 01/01 PASS (native Plan Mode), archived in META** |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
 | M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
@@ -77,11 +77,11 @@ ship:
 | Gate | Needed evidence | Blocks | Status |
 |------|-----------------|--------|--------|
 | G0 | Baseline ownership confirmed | Any repository mutation | Confirmed; ORCHESTRATOR-owned docs commits moved `main` past `6b4e4b3` — M1's exact baseline is the re-route commit |
-| G1 | Routing matrix for all 20 requested controls | Special-button remapping | Open (physical probe) |
-| G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **IRL pending** — code and protocol codec are in; the physical five-zone result is M1 test step 3 |
-| G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | Granted in principle, **reserved for M2** — unused by M1 |
-| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | Planned |
-| G5 | KWin lifecycle, identity, focus-race measurements | Contextual behavior claims | Planned |
+| G1 | Routing matrix for all 20 requested controls | Special-button remapping | **Next** — P1 probe procedure defined in the M2 plan; COOPERATOR-run |
+| G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **Closed — proven IRL** during M1 (five zones, modes, speed, gradient all verified physically) |
+| G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Pending COOPERATOR acceptance** — M2 plan recommends: system user `contextdeck-broker`, guard udev revoking `uaccess` from G213 event nodes + `/dev/port` + `i2c`, narrow event-node grant, uinput ACL; never autostart an unproven broker |
+| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | Planned (M2 stage S5) |
+| G5 | KWin lifecycle, identity, focus-race measurements | Contextual behavior claims | Partially exercised in M1 (bridge, heartbeat, self-context) |
 | G6 | License decision + dependency provenance | Release | Planned |
 | G7 | Authorized display-off and suspend acceptance | Enabling power actions | **IRL pending** — M1 test steps 7–8 (`CanSuspend=yes` verified; `KScreen::Dpms` linked; see the known suspect note) |
 | G8 | Independent acceptance, install/remove, autostart recovery | Shipping an automatically grabbing install | Planned |
