@@ -54,6 +54,8 @@ Kirigami.ScrollablePage {
                     currentMode: modelData.mode
                     zones: modelData.zones
                     applicationLevel: true
+                    speedPercent: modelData.speedPercent
+                    breathingColor: modelData.breathingColor
                 }
             }
         }

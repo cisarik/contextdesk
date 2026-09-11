@@ -46,6 +46,7 @@ public:
     [[nodiscard]] bool hasTakenOver() const { return m_tookOver; }
     [[nodiscard]] QString socketStateText() const;
     [[nodiscard]] QString sdkEndpoint() const;
+    [[nodiscard]] bool speedRangeFor(LightingMode mode, quint32 &speedMin, quint32 &speedMax) const;
 
 signals:
     void connectionStateChanged();

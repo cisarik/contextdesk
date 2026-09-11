@@ -41,6 +41,8 @@ class AppController : public QObject
     Q_PROPERTY(QStringList zoneNames READ zoneNames CONSTANT)
     Q_PROPERTY(QStringList lightingPresets READ lightingPresets CONSTANT)
     Q_PROPERTY(QStringList lightingPresetLabels READ lightingPresetLabels CONSTANT)
+    Q_PROPERTY(int globalSpeedPercent READ globalSpeedPercent NOTIFY documentChanged)
+    Q_PROPERTY(QString globalBreathingColor READ globalBreathingColor NOTIFY documentChanged)
     Q_PROPERTY(QVariantList inventory READ inventory NOTIFY inventoryChanged)
     Q_PROPERTY(QVariantList profiles READ profiles NOTIFY documentChanged)
     Q_PROPERTY(QVariantList controls READ controls NOTIFY documentChanged)
@@ -77,6 +79,8 @@ public:
     [[nodiscard]] QStringList zoneNames() const;
     [[nodiscard]] QStringList lightingPresets() const;
     [[nodiscard]] QStringList lightingPresetLabels() const;
+    [[nodiscard]] int globalSpeedPercent() const;
+    [[nodiscard]] QString globalBreathingColor() const;
     [[nodiscard]] QString statusSummary() const;
     [[nodiscard]] bool isSelfWindow() const;
     [[nodiscard]] QString lastExternalApplication() const;
@@ -106,9 +110,13 @@ public:
     Q_INVOKABLE void setGlobalLightingMode(const QString &modeName);
     Q_INVOKABLE void setGlobalZoneColor(int index, const QString &hex);
     Q_INVOKABLE void applyGlobalGradient(const QString &startHex, const QString &endHex);
+    Q_INVOKABLE void setGlobalSpeed(int percent);
+    Q_INVOKABLE void setGlobalBreathingColor(const QString &hex);
     Q_INVOKABLE void setApplicationLightingMode(const QString &id, const QString &modeName);
     Q_INVOKABLE void setApplicationZoneColor(const QString &id, int index, const QString &hex);
     Q_INVOKABLE void applyApplicationGradient(const QString &id, const QString &startHex, const QString &endHex);
+    Q_INVOKABLE void setApplicationSpeed(const QString &id, int percent);
+    Q_INVOKABLE void setApplicationBreathingColor(const QString &id, const QString &hex);
     Q_INVOKABLE void displaysOff();
     Q_INVOKABLE bool canSuspend() const;
     Q_INVOKABLE bool suspend();
@@ -138,6 +146,11 @@ private:
     [[nodiscard]] QString lightsPhrase() const;
     [[nodiscard]] static std::optional<Rgb> parseHex(const QString &hex);
     [[nodiscard]] static QString toHex(const Rgb &color);
+    void speedBounds(LightingMode mode, quint32 &slowest, quint32 &fastest) const;
+    [[nodiscard]] quint32 percentToSpeed(int percent, LightingMode mode) const;
+    [[nodiscard]] int speedToPercent(const Lighting &lighting) const;
+    bool applySpeedPercent(Lighting &lighting, int percent);
+    bool applyBreathingColor(Lighting &lighting, const Rgb &color);
 
     ContextReceiver *m_context = nullptr;
     OpenRgbClient *m_rgb = nullptr;

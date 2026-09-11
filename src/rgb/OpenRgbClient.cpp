@@ -73,6 +73,17 @@ QString OpenRgbClient::sdkEndpoint() const
     return QStringLiteral("127.0.0.1:%1").arg(openrgb::kDefaultPort);
 }
 
+bool OpenRgbClient::speedRangeFor(LightingMode mode, quint32 &speedMin, quint32 &speedMax) const
+{
+    const auto index = openrgb::findModeIndex(m_modes, mode);
+    if (!index) {
+        return false;
+    }
+    speedMin = m_modes.at(*index).speedMin;
+    speedMax = m_modes.at(*index).speedMax;
+    return true;
+}
+
 void OpenRgbClient::start()
 {
     m_lightingEnabled = true;

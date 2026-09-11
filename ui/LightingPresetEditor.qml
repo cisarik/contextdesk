@@ -12,6 +12,9 @@ ColumnLayout {
     property bool applicationLevel: false
     property color startColor: "#ff0000"
     property color endColor: "#0000ff"
+    property int speedPercent: 50
+    property color breathingColor: "#7c3aed"
+    readonly property bool animatedMode: currentMode === "wave" || currentMode === "cycle" || currentMode === "breathing"
 
     spacing: Kirigami.Units.smallSpacing
 
@@ -73,12 +76,89 @@ ColumnLayout {
         picker.open();
     }
 
+    function openBreathingPicker() {
+        picker.pendingKind = "breathing";
+        picker.pendingIndex = -1;
+        picker.selectedColor = root.breathingColor;
+        picker.open();
+    }
+
+    function applySpeed(percent) {
+        const value = Math.round(percent);
+        if (root.applicationLevel) {
+            app.setApplicationSpeed(root.profileId, value);
+        } else {
+            app.setGlobalSpeed(value);
+        }
+    }
+
+    function applyBreathingColor(hex) {
+        if (root.applicationLevel) {
+            app.setApplicationBreathingColor(root.profileId, hex);
+        } else {
+            app.setGlobalBreathingColor(hex);
+        }
+    }
+
     Controls.ComboBox {
         id: presetBox
         Layout.fillWidth: true
         model: app.lightingPresetLabels
         currentIndex: Math.max(0, app.lightingPresets.indexOf(root.currentMode))
         onActivated: root.applyMode(app.lightingPresets[currentIndex])
+    }
+
+    Controls.Label {
+        visible: root.animatedMode
+        text: "Rýchlosť animácie"
+        font.bold: true
+        Layout.topMargin: Kirigami.Units.smallSpacing
+    }
+
+    RowLayout {
+        visible: root.animatedMode
+        Layout.fillWidth: true
+
+        Controls.Slider {
+            id: speedSlider
+            Layout.fillWidth: true
+            from: 0
+            to: 100
+            stepSize: 1
+            value: root.speedPercent
+            Accessible.name: "Rýchlosť animácie"
+            onMoved: root.applySpeed(value)
+        }
+        Controls.Label {
+            text: Math.round(speedSlider.value) + " %"
+            Layout.preferredWidth: 48
+        }
+    }
+
+    RowLayout {
+        visible: root.currentMode === "breathing"
+        Layout.fillWidth: true
+        spacing: Kirigami.Units.smallSpacing
+
+        Controls.Label {
+            text: "Farba dýchania"
+            font.bold: true
+            Layout.fillWidth: true
+        }
+        Rectangle {
+            width: 36
+            height: 36
+            radius: 6
+            color: root.breathingColor
+            border.width: 1
+            border.color: Kirigami.Theme.disabledTextColor
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                Accessible.name: "Farba dýchania"
+                onClicked: root.openBreathingPicker()
+            }
+        }
     }
 
     Repeater {
@@ -227,6 +307,9 @@ ColumnLayout {
                 root.startColor = selectedColor;
             } else if (pendingKind === "end") {
                 root.endColor = selectedColor;
+            } else if (pendingKind === "breathing") {
+                root.breathingColor = selectedColor;
+                root.applyBreathingColor(hex);
             } else {
                 root.applyZone(pendingIndex, hex);
             }

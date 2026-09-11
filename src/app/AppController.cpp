@@ -8,6 +8,8 @@
 #include <QLoggingCategory>
 #include <QStringList>
 
+#include <algorithm>
+
 namespace contextdeck {
 
 Q_LOGGING_CATEGORY(lcUi, "contextdeck.ui")
@@ -60,6 +62,9 @@ bool applyMode(Lighting &lighting, LightingMode mode, const Rgb &fallback)
     lighting.mode = mode;
     if (mode == LightingMode::Direct) {
         ensureDirectColors(lighting, fallback);
+    }
+    if (mode == LightingMode::Breathing && !lighting.baseColor) {
+        lighting.baseColor = fallback;
     }
     return true;
 }
@@ -289,6 +294,16 @@ QStringList AppController::lightingPresetLabels() const
     };
 }
 
+int AppController::globalSpeedPercent() const
+{
+    return speedToPercent(m_document.globalLighting);
+}
+
+QString AppController::globalBreathingColor() const
+{
+    return toHex(m_document.globalLighting.baseColor.value_or(kDefaultEffectColor));
+}
+
 QString AppController::statusSummary() const
 {
     return QStringLiteral("%1 · kontext: %2 · svetlá: %3")
@@ -407,6 +422,8 @@ QVariantList AppController::profiles() const
         const Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
         map.insert(QStringLiteral("mode"), lightingModeJsonName(lighting.mode));
         map.insert(QStringLiteral("zones"), zoneHexList(lighting));
+        map.insert(QStringLiteral("speedPercent"), speedToPercent(lighting));
+        map.insert(QStringLiteral("breathingColor"), toHex(lighting.baseColor.value_or(kDefaultEffectColor)));
         list.push_back(map);
     }
     return list;
@@ -649,6 +666,30 @@ void AppController::applyGlobalGradient(const QString &startHex, const QString &
     applyLighting();
 }
 
+void AppController::setGlobalSpeed(int percent)
+{
+    if (!applySpeedPercent(m_document.globalLighting, percent)) {
+        return;
+    }
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    applyLighting();
+}
+
+void AppController::setGlobalBreathingColor(const QString &hex)
+{
+    const auto color = parseHex(hex);
+    if (!color) {
+        return;
+    }
+    applyBreathingColor(m_document.globalLighting, *color);
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    applyLighting();
+}
+
 void AppController::setApplicationLightingMode(const QString &id, const QString &modeName)
 {
     const auto mode = lightingModeFromJsonName(modeName);
@@ -698,6 +739,40 @@ void AppController::applyApplicationGradient(const QString &id, const QString &s
         if (profile.id == id) {
             Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
             applyGradient(lighting, *start, *end);
+            profile.lighting = lighting;
+            emit documentChanged();
+            applyLighting();
+            return;
+        }
+    }
+}
+
+void AppController::setApplicationSpeed(const QString &id, int percent)
+{
+    for (ApplicationProfile &profile : m_document.applications) {
+        if (profile.id == id) {
+            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            if (!applySpeedPercent(lighting, percent)) {
+                return;
+            }
+            profile.lighting = lighting;
+            emit documentChanged();
+            applyLighting();
+            return;
+        }
+    }
+}
+
+void AppController::setApplicationBreathingColor(const QString &id, const QString &hex)
+{
+    const auto color = parseHex(hex);
+    if (!color) {
+        return;
+    }
+    for (ApplicationProfile &profile : m_document.applications) {
+        if (profile.id == id) {
+            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            applyBreathingColor(lighting, *color);
             profile.lighting = lighting;
             emit documentChanged();
             applyLighting();
@@ -906,6 +981,67 @@ void AppController::sendLighting(const Lighting &lighting)
     m_rgb->setDesiredState(toDesiredLighting(lighting));
     ++m_lightingUpdates;
     emit diagnosticsChanged();
+}
+
+void AppController::speedBounds(LightingMode mode, quint32 &slowest, quint32 &fastest) const
+{
+    quint32 speedMin = 0;
+    quint32 speedMax = 0;
+    if (m_rgb->speedRangeFor(mode, speedMin, speedMax)) {
+        slowest = speedMin;
+        fastest = speedMax;
+        return;
+    }
+    slowest = 0xC8;
+    fastest = 0x0A;
+}
+
+quint32 AppController::percentToSpeed(int percent, LightingMode mode) const
+{
+    quint32 slowest = 0;
+    quint32 fastest = 0;
+    speedBounds(mode, slowest, fastest);
+    const int clamped = std::clamp(percent, 0, 100);
+    const qint64 span = static_cast<qint64>(fastest) - static_cast<qint64>(slowest);
+    return static_cast<quint32>(static_cast<qint64>(slowest) + span * clamped / 100);
+}
+
+int AppController::speedToPercent(const Lighting &lighting) const
+{
+    if (!lighting.speed.has_value()) {
+        return 50;
+    }
+    quint32 slowest = 0;
+    quint32 fastest = 0;
+    speedBounds(lighting.mode, slowest, fastest);
+    if (slowest == fastest) {
+        return 50;
+    }
+    const qint64 span = static_cast<qint64>(fastest) - static_cast<qint64>(slowest);
+    const qint64 delta = static_cast<qint64>(*lighting.speed) - static_cast<qint64>(slowest);
+    return std::clamp(static_cast<int>((delta * 100 + span / 2) / span), 0, 100);
+}
+
+bool AppController::applySpeedPercent(Lighting &lighting, int percent)
+{
+    if (percent < 0 || percent > 100) {
+        return false;
+    }
+    LightingMode mode = lighting.mode;
+    if (mode != LightingMode::Wave && mode != LightingMode::Cycle && mode != LightingMode::Breathing) {
+        mode = LightingMode::Wave;
+    }
+    lighting.speed = percentToSpeed(percent, mode);
+    return true;
+}
+
+bool AppController::applyBreathingColor(Lighting &lighting, const Rgb &color)
+{
+    lighting.baseColor = color;
+    if (lighting.mode != LightingMode::Breathing) {
+        lighting.mode = LightingMode::Breathing;
+    }
+    return true;
 }
 
 std::optional<Rgb> AppController::parseHex(const QString &hex)
