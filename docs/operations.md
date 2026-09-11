@@ -197,6 +197,93 @@ point a drop-in at `build/contextdeck` until there is an install prefix.
 
 Do not `systemctl` mask/unmask sleep targets. Do not write `/sys/power/state`.
 
+## 6. G3 host policy (input broker) — COOPERATOR-run
+
+Authors the system identity, udev guard/grant, and the **system** unit
+`contextdeck-broker.service`. **Do not enable. Do not start.** The broker
+stays disarmed and idle until later session IPC (S4). Real pass-through IRL
+is S5. This install also closes the measured OpenRGB `uaccess` keylogging
+hole on G213 **input** nodes, `/dev/port`, and `/dev/i2c-*`. HID RGB
+(`hidraw`) must keep working.
+
+Run every command from the repository root. Adjust nothing to a private
+home path in public notes.
+
+### Install
+
+```sh
+# COOPERATOR-run (privileged). No enable, no start.
+sudo install -m 0644 packaging/sysusers.d/contextdeck-broker.conf \
+  /usr/lib/sysusers.d/contextdeck-broker.conf
+sudo systemd-sysusers contextdeck-broker.conf
+
+sudo install -m 0644 packaging/udev/61-contextdeck-input-guard.rules \
+  /etc/udev/rules.d/61-contextdeck-input-guard.rules
+sudo install -m 0644 packaging/udev/62-contextdeck-broker.rules \
+  /etc/udev/rules.d/62-contextdeck-broker.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=input
+sudo udevadm trigger --subsystem-match=i2c-dev
+sudo udevadm trigger --sysname-match=port
+
+sudo install -m 0644 packaging/systemd/contextdeck-broker.service \
+  /etc/systemd/system/contextdeck-broker.service
+sudo systemctl daemon-reload
+```
+
+Do **not** `systemctl enable contextdeck-broker`. Do **not**
+`systemctl start contextdeck-broker`. The unit has no `[Install]` section.
+The binary does not yet send `sd_notify` or feed the 2 s watchdog (S3);
+starting it now fails closed.
+
+`ExecStart` is `/usr/bin/contextdeck-broker`. Until there is an install
+prefix, leave that path as documentation; do not start the unit from a
+home-directory build (`ProtectHome=yes` would block it).
+
+Do **not** add the session user to group `input`. Do **not** stop, disable,
+or reconfigure input-remapper.
+
+### Verify
+
+Resolve G213 event nodes from udev by USB ancestry `046d:c336` and
+interface number. Do not treat remembered `eventN` as identity, and do not
+copy node numbers into public notes.
+
+| Check | Expected |
+|-------|----------|
+| `getfacl` on each G213 **event** node | group `contextdeck-broker`, mode `0660`, **no** session-user ACL |
+| `getfacl` on each G213 **hidraw** node | session-user ACL **still present** (OpenRGB lighting) |
+| `getfacl /dev/port` and `/dev/i2c-*` | **no** session-user ACL; no longer user-readable |
+| input-remapper | still enabled/active; G213 preset untouched |
+| `systemctl is-enabled contextdeck-broker` | not enabled (expected fail / `not-found` / `disabled`) |
+
+If hidraw lost the session ACL, rollback immediately — lighting would break
+and this install over-reached.
+
+### Rollback
+
+The unit was never enabled, so there is nothing to disable. After rollback,
+packaged OpenRGB may restore session `uaccess` on G213 event nodes,
+`/dev/port`, and i2c — that re-opens the measured hole.
+
+```sh
+# COOPERATOR-run (privileged)
+sudo rm -f /etc/udev/rules.d/61-contextdeck-input-guard.rules \
+           /etc/udev/rules.d/62-contextdeck-broker.rules \
+           /etc/systemd/system/contextdeck-broker.service \
+           /usr/lib/sysusers.d/contextdeck-broker.conf
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=input
+sudo udevadm trigger --subsystem-match=i2c-dev
+sudo udevadm trigger --sysname-match=port
+sudo systemctl daemon-reload
+sudo userdel contextdeck-broker
+sudo groupdel contextdeck-broker
+```
+
+`userdel` may already remove the matching group; ignore `groupdel` if the
+group is gone. Unplug/replug the G213 if event-node ownership stays stale.
+
 ## Logs to keep private
 
 Never paste ordinary typed keystrokes, window captions, USB serial numbers, or
