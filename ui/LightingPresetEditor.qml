@@ -53,7 +53,8 @@ ColumnLayout {
                 return text;
             }
             if (/^#[0-9a-f]{8}$/.test(text)) {
-                return "#" + text.slice(1, 7);
+                // Qt QColor can stringify as #aarrggbb; keep the last six RGB digits.
+                return "#" + text.slice(text.length - 6);
             }
             return "";
         }
@@ -72,13 +73,9 @@ ColumnLayout {
     }
 
     function acceptedPickerHex() {
-        const fromSelected = root.toRrggbb(picker.selectedColor);
-        if (fromSelected.length === 7) {
-            return fromSelected;
-        }
-        const fromCurrent = root.toRrggbb(picker.currentColor);
-        if (fromCurrent.length === 7) {
-            return fromCurrent;
+        const hex = root.toRrggbb(picker.selectedColor);
+        if (hex.length === 7) {
+            return hex;
         }
         return picker.pendingHex;
     }
@@ -162,7 +159,7 @@ ColumnLayout {
         picker.pendingKind = kind;
         picker.pendingIndex = index;
         picker.pendingHex = hex;
-        picker.currentColor = hex;
+        picker.selectedColor = hex;
         picker.open();
     }
 
