@@ -82,7 +82,6 @@ qt_add_qml_module(contextdeck
         ui/ZoneHero.qml
         ui/ColorsPage.qml
         ui/ApplicationsPage.qml
-        ui/ProfilesPage.qml
         ui/ControlsPage.qml
         ui/DiagnosticsPage.qml
         ui/LightingPresetEditor.qml

@@ -25,6 +25,12 @@ Kirigami.ScrollablePage {
             zones: app.globalZones
             applicationLevel: false
         }
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: app.globalMode === "untouched"
+            type: Kirigami.MessageType.Information
+            text: "Kým neuložíš preset, G213 ostáva na predvolenom firmware efekte (Wave)."
+        }
         Controls.Button {
             text: "Uložiť"
             highlighted: true
