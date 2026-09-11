@@ -9,6 +9,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/contextdeck-warnings.cmake")
+include(GNUInstallDirs)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Network Qml Quick QuickControls2 Svg Test)
 find_package(KF6StatusNotifierItem REQUIRED)
@@ -108,10 +109,13 @@ add_library(contextdeck_broker_core STATIC
     src/broker/Acquisition.cpp
     src/broker/FakeGrabber.cpp
     src/broker/EvdevGrabber.cpp
+    src/broker/EvdevSource.cpp
+    src/broker/DeviceEnumerator.cpp
     src/broker/GrabbingSource.cpp
     src/broker/FakeSink.cpp
     src/broker/FakeSource.cpp
     src/broker/RealSink.cpp
+    src/broker/ProductionRuntime.cpp
     src/broker/ForwardingEngine.cpp
     src/broker/Watchdog.cpp
     src/broker/EventLoop.cpp
@@ -127,6 +131,9 @@ add_executable(contextdeck-broker src/broker/main.cpp)
 target_compile_definitions(contextdeck-broker PRIVATE CONTEXTDECK_VERSION="${PROJECT_VERSION}")
 target_link_libraries(contextdeck-broker PRIVATE contextdeck_broker_core)
 set_target_properties(contextdeck_broker_core contextdeck-broker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+install(TARGETS contextdeck-broker
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT broker)
 
 enable_testing()
 
@@ -171,3 +178,8 @@ add_executable(test_broker_ipc tests/unit/test_broker_ipc.cpp)
 target_link_libraries(test_broker_ipc PRIVATE contextdeck_broker_core)
 set_target_properties(test_broker_ipc PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 add_test(NAME test_broker_ipc COMMAND test_broker_ipc)
+
+add_executable(test_broker_production tests/unit/test_broker_production.cpp)
+target_link_libraries(test_broker_production PRIVATE contextdeck_broker_core)
+set_target_properties(test_broker_production PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_broker_production COMMAND test_broker_production)

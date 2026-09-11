@@ -22,6 +22,7 @@ SessionApplication::SessionApplication(QApplication *app, QObject *parent)
     , m_brokerIpc(this)
 {
     Q_UNUSED(m_app);
+    m_controller.setBrokerIpc(&m_brokerIpc);
     connect(&m_tray, &TrayController::showSettingsRequested, &m_settings, &SettingsHost::show);
 }
 

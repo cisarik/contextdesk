@@ -1,5 +1,6 @@
 #include "app/AppController.h"
 
+#include "app/BrokerIpcClient.h"
 #include "context/DBusNames.h"
 #include "core/ControlCatalog.h"
 #include "core/Resolver.h"
@@ -114,6 +115,16 @@ AppController::AppController(ContextReceiver *context, OpenRgbClient *rgb, Power
     connect(this, &AppController::lightingModeChanged, this, &AppController::presentationChanged);
     connect(this, &AppController::diagnosticsChanged, this, &AppController::presentationChanged);
     connect(this, &AppController::documentChanged, this, &AppController::presentationChanged);
+}
+
+void AppController::setBrokerIpc(BrokerIpcClient *client)
+{
+    m_brokerIpc = client;
+    if (m_brokerIpc == nullptr) {
+        return;
+    }
+    connect(m_brokerIpc, &BrokerIpcClient::stateChanged, this, &AppController::diagnosticsChanged);
+    connect(m_brokerIpc, &BrokerIpcClient::stateChanged, this, &AppController::presentationChanged);
 }
 
 void AppController::load()
@@ -478,6 +489,7 @@ QVariantMap AppController::diagnostics() const
     map.insert(QStringLiteral("currentIdentity"), m_context->currentIdentity());
     map.insert(QStringLiteral("socketState"), m_rgb->socketStateText());
     map.insert(QStringLiteral("sdkEndpoint"), m_rgb->sdkEndpoint());
+    map.insert(QStringLiteral("brokerIpcState"), brokerIpcState());
     map.insert(QStringLiteral("isSelfWindow"), isSelfWindow());
     map.insert(QStringLiteral("lastExternalApplication"), m_lastExternalApplication);
     return map;
@@ -1090,6 +1102,35 @@ QStringList AppController::previewGradient(const QString &startHex, const QStrin
 bool AppController::isValidHex(const QString &hex) const
 {
     return parseHex(hex).has_value();
+}
+
+void AppController::armPassThrough()
+{
+    if (m_brokerIpc != nullptr) {
+        m_brokerIpc->arm();
+    }
+}
+
+void AppController::disarmPassThrough()
+{
+    if (m_brokerIpc != nullptr) {
+        m_brokerIpc->disarm();
+    }
+}
+
+void AppController::releaseBrokerLease()
+{
+    if (m_brokerIpc != nullptr) {
+        m_brokerIpc->releaseLease();
+    }
+}
+
+QString AppController::brokerIpcState() const
+{
+    if (m_brokerIpc == nullptr) {
+        return QStringLiteral("disconnected");
+    }
+    return m_brokerIpc->stateText();
 }
 
 } // namespace contextdeck

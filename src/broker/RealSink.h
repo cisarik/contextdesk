@@ -18,7 +18,14 @@ struct SinkCapabilities {
 
 SinkCapabilities unionSourceCapabilities(const SinkCapabilities &if00, const SinkCapabilities &if01);
 
-// Wraps libevdev_uinput. Construction opens /dev/uinput and is forbidden in this exchange.
+// Full pass-through capability set for the union virtual device. Enables the
+// host-remappable G213 catalog (F-block + media/volume) plus ordinary keyboard
+// bits so 1:1 forwarding does not need to open devices before ARM. Game Mode
+// and Backlight stay firmware-only: they have no host EV_KEY and are not a
+// remap catalog. Construction of RealSink still opens /dev/uinput.
+SinkCapabilities passthroughCapabilities();
+
+// Wraps libevdev_uinput. create() opens /dev/uinput; unit tests must not call it.
 class RealSink final : public ISink {
 public:
     static std::unique_ptr<RealSink> create(const SinkCapabilities &capabilities);

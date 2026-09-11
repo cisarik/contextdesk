@@ -25,6 +25,7 @@ signals:
 private:
     void rebuildMenu();
     void confirmSuspend();
+    void confirmArmPassThrough();
 
     AppController *m_controller = nullptr;
     KStatusNotifierItem *m_item = nullptr;

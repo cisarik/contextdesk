@@ -57,6 +57,10 @@ Kirigami.ScrollablePage {
             wideMode: true
 
             Controls.Label {
+                Kirigami.FormData.label: "brokerIpcState"
+                text: String(app.diagnostics.brokerIpcState)
+            }
+            Controls.Label {
                 Kirigami.FormData.label: "D-Bus service"
                 text: String(app.diagnostics.dbusService)
             }
@@ -123,6 +127,21 @@ Kirigami.ScrollablePage {
 
         RowLayout {
             Controls.Button {
+                text: "Arm G213 pass-through…"
+                onClicked: armPrompt.open()
+            }
+            Controls.Button {
+                text: "Disarm pass-through"
+                onClicked: app.disarmPassThrough()
+            }
+            Controls.Button {
+                text: "Release broker lease"
+                onClicked: app.releaseBrokerLease()
+            }
+        }
+
+        RowLayout {
+            Controls.Button {
                 text: "Displays Off"
                 onClicked: app.displaysOff()
             }
@@ -131,6 +150,18 @@ Kirigami.ScrollablePage {
                 enabled: app.canSuspend()
                 onClicked: suspendPrompt.open()
             }
+        }
+
+        Controls.Dialog {
+            id: armPrompt
+            title: "Arm G213 pass-through"
+            modal: true
+            standardButtons: Controls.Dialog.Ok | Controls.Dialog.Cancel
+            Controls.Label {
+                wrapMode: Text.WordWrap
+                text: "Arm G213 pass-through now? This sends LEASE then ARM. The broker claims the keyboard until Disarm, Release, Quit, or lease expiry. Recover from another keyboard, SSH, or an already-open TTY if the G213 goes silent."
+            }
+            onAccepted: app.armPassThrough()
         }
 
         Controls.Dialog {

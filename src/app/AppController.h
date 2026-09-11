@@ -14,6 +14,8 @@
 
 namespace contextdeck {
 
+class BrokerIpcClient;
+
 enum class SessionLightingMode {
     Automatic,
     TemporaryColor,
@@ -61,6 +63,7 @@ public:
 
     void load();
     void applyLighting();
+    void setBrokerIpc(BrokerIpcClient *client);
 
     [[nodiscard]] QString currentApplication() const;
     [[nodiscard]] QString currentProfile() const;
@@ -124,6 +127,10 @@ public:
                                         bool applicationLevel, const QString &applicationId);
     Q_INVOKABLE QStringList previewGradient(const QString &startHex, const QString &endHex) const;
     Q_INVOKABLE bool isValidHex(const QString &hex) const;
+    Q_INVOKABLE void armPassThrough();
+    Q_INVOKABLE void disarmPassThrough();
+    Q_INVOKABLE void releaseBrokerLease();
+    [[nodiscard]] QString brokerIpcState() const;
 
 signals:
     void contextChanged();
@@ -155,6 +162,7 @@ private:
     ContextReceiver *m_context = nullptr;
     OpenRgbClient *m_rgb = nullptr;
     PowerActions *m_power = nullptr;
+    BrokerIpcClient *m_brokerIpc = nullptr;
     ProfileStore m_store;
     ProfileDocument m_document;
     SessionLightingMode m_sessionLighting = SessionLightingMode::Automatic;

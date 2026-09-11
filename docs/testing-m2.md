@@ -1,8 +1,8 @@
 # ContextDeck M2 input safety — crash/hang/watchdog (not G4)
 
-Procedure and S3 evidence for the input broker watchdog. This is **not**
+Procedure and S3/S5 device-free evidence for the input broker. This is **not**
 real-keyboard acceptance. Do **not** start or enable
-`contextdeck-broker.service`. Do **not** grab the G213. G4 / S5 still own
+`contextdeck-broker.service`. Do **not** grab the G213. G4 still owns
 pass-through fidelity and kernel close-on-death on this host.
 
 ## What S3 proves without a keyboard
@@ -32,6 +32,19 @@ ctest --test-dir build --output-on-failure
 - Fake-source ingest on the loop still does 1:1 forwarding with SYN pairing
   and leaves the ledger idle.
 
+`test_broker_production` checks (no G213, no `/dev/uinput`, no live udev
+scan):
+
+- Enumerator filtering by USB ancestry and interface `00`/`01`.
+- Rejection of missing/duplicate interfaces, virtual bus, name prefix, wrong
+  VID/PID, and nodes without USB ancestry. Interface `02` is ignored.
+- Production objects start disarmed; enumerator/`open`/`createVirtual` are
+  not called until explicit `arm()`.
+- Missing devices fail closed without opening sources.
+- Invalid/non-evdev paths fail closed, ungrab/cleanup, no leftover fds.
+- `RealLifecycleSink` construction does not create uinput.
+- `EvdevGrabber::create` refuses a null or fd-less handle.
+
 `test_broker_ipc` checks (no G213, no `/dev/uinput`):
 
 - Frame codec bounds and rejection of client-supplied UID tokens.
@@ -53,8 +66,10 @@ Static unit check (does not start the service):
 systemd-analyze verify packaging/systemd/contextdeck-broker.service
 ```
 
-Missing `/usr/bin/contextdeck-broker` may warn; that binary is not installed
-in S3. `WatchdogSec=2` and `Type=notify` are the live settings.
+Missing `/usr/bin/contextdeck-broker` may warn until the documented `/usr`
+install (operations §9). `WatchdogSec=2` and `Type=notify` are the live
+settings. After install, `systemd-analyze verify` of the installed unit
+should match the repository file, including `RuntimeDirectoryMode=0755`.
 
 ## Watchdog semantics
 
@@ -69,6 +84,34 @@ in S3. `WatchdogSec=2` and `Type=notify` are the live settings.
 
 The feed is the event-loop thread. A second thread that pings while the
 loop is stuck is forbidden and is not present.
+
+## Production hang harness (G4 only)
+
+Do **not** run this during implementation or against an unarmed/unstarted
+broker. There is no hidden hang command in `contextdeck-broker`. Use an
+external signal from a recovery path that does **not** need the G213
+(second physical keyboard, SSH, or a TTY already open).
+
+Preconditions: the broker unit is actually running because a later G4
+session started it; an authenticated lease has armed it if the test is
+about grabbed-keyboard recovery; `Restart=no` remains set.
+
+1. From the recovery path, read the broker PID (`systemctl show -p MainPID
+   --value contextdeck-broker.service`). Do not copy key names or event
+   payloads into notes.
+2. `kill -STOP <pid>`. The event-loop thread cannot feed `WATCHDOG=1`.
+3. Wait for systemd watchdog (`WatchdogSec=2` plus one missed interval).
+   `systemctl status` should move off `running`. If the process stays
+   stopped because `SIGABRT` is pending, `kill -CONT <pid>` so the abort
+   can be delivered, or `kill -KILL <pid>` from the same recovery path.
+4. Confirm the unit stays down (`Restart=no`), is **not** enabled, and was
+   not autostarted.
+5. Confirm typing on a text field from the recovery keyboard. If the G213
+   was grabbed, it must type again after descriptor close.
+6. Do not `systemctl start` to “try again”. Do not change input-remapper.
+
+Fail: the unit restarts and re-grabs; the G213 stays silent after death;
+recovery requires rebooting as the first step.
 
 ## Crash / hang recovery (later, when the unit actually runs)
 
@@ -99,9 +142,10 @@ death; recovery requires rebooting as the first step.
 ## What this file does not cover
 
 Real grab, pass-through fidelity, input-remapper vs the virtual device, and
-kernel ungrab-on-close on this host (S5 / G4). Autostart (G8) stays
+kernel ungrab-on-close on this host remain G4. Autostart (G8) stays
 forbidden until those pass. Session IPC (S4) is covered by `test_broker_ipc`
-and `docs/operations.md` §8; do not start the broker unit to exercise it.
+and `docs/operations.md` §8; production install is `docs/operations.md` §9.
+Do not start the broker unit to exercise either.
 
 Never paste ordinary typed text, key names, scan codes, raw event
 payloads, USB serials, or per-event timing into reports.

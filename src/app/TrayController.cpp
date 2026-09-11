@@ -85,6 +85,11 @@ void TrayController::rebuildMenu()
     m_menu->addAction(QStringLiteral("Displays Off"), this, [this]() { m_controller->displaysOff(); });
     m_menu->addAction(QStringLiteral("Suspend…"), this, [this]() { confirmSuspend(); });
     m_menu->addSeparator();
+    m_menu->addAction(QStringLiteral("Broker: %1").arg(m_controller->brokerIpcState()))->setEnabled(false);
+    m_menu->addAction(QStringLiteral("Arm G213 pass-through…"), this, [this]() { confirmArmPassThrough(); });
+    m_menu->addAction(QStringLiteral("Disarm pass-through"), this, [this]() { m_controller->disarmPassThrough(); });
+    m_menu->addAction(QStringLiteral("Release broker lease"), this, [this]() { m_controller->releaseBrokerLease(); });
+    m_menu->addSeparator();
     m_menu->addAction(QStringLiteral("Settings…"), this, [this]() { emit showSettingsRequested(); });
     m_menu->addAction(QStringLiteral("Quit"), qApp, &QApplication::quit);
 }
@@ -96,6 +101,21 @@ void TrayController::confirmSuspend()
                                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (result == QMessageBox::Yes) {
         m_controller->suspend();
+    }
+}
+
+void TrayController::confirmArmPassThrough()
+{
+    const auto result = QMessageBox::question(
+        nullptr, QStringLiteral("ContextDeck"),
+        QStringLiteral("Arm G213 pass-through now?\n\n"
+                       "This sends LEASE then ARM to the broker. The broker will "
+                       "exclusively claim the G213 until you Disarm, Release, Quit, "
+                       "or the lease expires. Recover from another keyboard, SSH, or "
+                       "an already-open TTY if the G213 goes silent."),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (result == QMessageBox::Yes) {
+        m_controller->armPassThrough();
     }
 }
 

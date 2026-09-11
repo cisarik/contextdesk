@@ -1,6 +1,7 @@
 #include "broker/IdentityMatcher.h"
 
 #include <cctype>
+#include <cstring>
 #include <libudev.h>
 #include <linux/input.h>
 #include <string>
@@ -79,6 +80,72 @@ std::optional<std::string> readProperty(udev_device *device, const char *key)
         if (value != nullptr && value[0] != '\0') {
             return std::string(value);
         }
+    }
+    return std::nullopt;
+}
+
+std::string stripQuotes(std::string_view text)
+{
+    if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
+        text.remove_prefix(1);
+        text.remove_suffix(1);
+    }
+    return std::string(text);
+}
+
+std::optional<std::string> readName(udev_device *device)
+{
+    if (device == nullptr) {
+        return std::nullopt;
+    }
+    const char *name = udev_device_get_sysattr_value(device, "name");
+    if (name != nullptr && name[0] != '\0') {
+        return stripQuotes(name);
+    }
+    udev_device *parent = udev_device_get_parent(device);
+    if (parent != nullptr) {
+        name = udev_device_get_sysattr_value(parent, "name");
+        if (name != nullptr && name[0] != '\0') {
+            return stripQuotes(name);
+        }
+    }
+    name = udev_device_get_property_value(device, "NAME");
+    if (name != nullptr && name[0] != '\0') {
+        return stripQuotes(name);
+    }
+    return std::nullopt;
+}
+
+std::optional<uint16_t> readBustype(udev_device *device)
+{
+    auto fromAttr = [](udev_device *node) -> std::optional<uint16_t> {
+        if (node == nullptr) {
+            return std::nullopt;
+        }
+        const char *attr = udev_device_get_sysattr_value(node, "id/bustype");
+        if (attr == nullptr || attr[0] == '\0') {
+            return std::nullopt;
+        }
+        return parseHexId(attr);
+    };
+    if (const auto value = fromAttr(device)) {
+        return value;
+    }
+    if (const auto value = fromAttr(udev_device_get_parent(device))) {
+        return value;
+    }
+    const char *bus = udev_device_get_property_value(device, "ID_BUS");
+    if (bus == nullptr) {
+        return std::nullopt;
+    }
+    if (std::strcmp(bus, "usb") == 0) {
+        return BUS_USB;
+    }
+    if (std::strcmp(bus, "bluetooth") == 0) {
+        return BUS_BLUETOOTH;
+    }
+    if (std::strcmp(bus, "virtual") == 0) {
+        return BUS_VIRTUAL;
     }
     return std::nullopt;
 }
@@ -165,6 +232,17 @@ DeviceCandidate candidateFromUdev(udev_device *device, uint16_t bustype, std::st
     candidate.vendorId = readProperty(device, "ID_VENDOR_ID");
     candidate.modelId = readProperty(device, "ID_MODEL_ID");
     candidate.interfaceNum = readProperty(device, "ID_USB_INTERFACE_NUM");
+    return candidate;
+}
+
+DeviceCandidate candidateFromUdevDevice(udev_device *device)
+{
+    DeviceCandidate candidate;
+    candidate.vendorId = readProperty(device, "ID_VENDOR_ID");
+    candidate.modelId = readProperty(device, "ID_MODEL_ID");
+    candidate.interfaceNum = readProperty(device, "ID_USB_INTERFACE_NUM");
+    candidate.name = readName(device);
+    candidate.bustype = readBustype(device);
     return candidate;
 }
 

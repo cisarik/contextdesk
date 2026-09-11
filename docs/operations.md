@@ -235,13 +235,14 @@ Do **not** `systemctl enable contextdeck-broker`. Do **not**
 `systemctl start contextdeck-broker`. The unit has no `[Install]` section.
 The binary now sends `READY=1` and feeds `WATCHDOG=1` from its idle event
 loop (S3) and accepts an authenticated session lease on
-`/run/contextdeck/broker.sock` (S4). It still does not open G213 event nodes
-or `/dev/uinput` in this slice (ARM fail-closes without a device enumerator).
-Starting the unit remains forbidden until S5 and G4.
+`/run/contextdeck/broker.sock` (S4). Production ARM (S5) enumerates the G213
+by USB ancestry and may construct `RealSink` / `EvdevGrabber` only after an
+explicit authenticated `ARM`. Do **not** enable or start the unit from this
+G3 section. IRL pass-through remains G4.
 
-`ExecStart` is `/usr/bin/contextdeck-broker`. Until there is an install
-prefix, leave that path as documentation; do not start the unit from a
-home-directory build (`ProtectHome=yes` would block it).
+`ExecStart` is `/usr/bin/contextdeck-broker`. Install that binary with the
+documented `/usr` prefix (section 9) before any later G4 start. Do not start
+the unit from a home-directory build (`ProtectHome=yes` would block it).
 
 Do **not** add the session user to group `input`. Do **not** stop, disable,
 or reconfigure input-remapper.
@@ -311,10 +312,15 @@ FD-close ungrab on this kernel is G4 / S5, not S3.
 
 A hung event loop stops feeding `WATCHDOG=1`. systemd then aborts the
 process (default watchdog signal is `SIGABRT`) after `WatchdogSec=2`.
-Because `Restart=no`, the unit stays dead. If the broker had been armed
-(later S4/S5), descriptor close is what must return the physical keyboard;
-that close-on-death behavior is kernel-side and still needs G4 on this
-host.
+Because `Restart=no`, the unit stays dead. If the broker had been armed,
+descriptor close is what must return the physical keyboard; that
+close-on-death behavior is kernel-side and still needs G4 on this host.
+
+The production hang procedure is external: `SIGSTOP` the broker PID from a
+recovery path, observe that watchdog feeding stops, then let systemd abort
+(or `SIGCONT`/`SIGKILL` if a stopped process holds the abort pending). There
+is no hidden production hang command in the binary. Full steps:
+`docs/testing-m2.md`. Do **not** run that procedure except as G4.
 
 S3 proves the feed/hang coupling in CTest (`test_broker_watchdog`) and
 `contextdeck-broker watchdog-selftest`. It does **not** start the system
@@ -372,8 +378,10 @@ More procedure detail: `docs/testing-m2.md`.
 
 The broker listens on `/run/contextdeck/broker.sock`. Override with
 `CONTEXTDECK_BROKER_SOCKET` only in tests. The session app probes `STATUS` at
-startup and does **not** auto-arm. Do **not** start the system unit to try
-this.
+startup and does **not** auto-arm. Arming is a deliberate tray or Diagnostics
+action (`Arm G213 pass-through…`) that sends authenticated `LEASE` then `ARM`.
+`DISARM` and `RELEASE` are equally explicit. Do **not** start the system unit
+to try this.
 
 ### Protocol
 
@@ -411,9 +419,12 @@ Disconnect, malformed framing, lease expiry, failed authentication, or
 `shutdown`/`SIGTERM` disarms first (ungrab physical, then balanced synthetic
 releases, then destroy virtual), then drops the lease.
 
-S4 production `ARM` still fail-closes: there is no device enumerator and
-`RealSink` is not constructed. Tests drive the same `Acquisition` path with
-`FakeGrabber`. Real grab remains S5/G4.
+S5 production `ARM` enumerates the G213 by USB ancestry (`046d:c336` plus
+interface `00`/`01`), then constructs `RealSink` and `EvdevGrabber` only
+after an authenticated lease holder sends `ARM`. Startup, socket creation,
+`STATUS`, and `LEASE` do not open event nodes or `/dev/uinput`. Game Mode and
+Backlight stay firmware-only and are not in the remap catalog. Missing or
+invalid devices fail closed and leave the broker disarmed.
 
 ### TTY recovery
 
@@ -421,6 +432,44 @@ Same as section 7. Prefer stopping the session app (drops the lease) when the
 seat still types. If the G213 is grabbed and silent, recover from another
 keyboard, SSH, or an already-open TTY, then `systemctl stop
 contextdeck-broker.service` only if that unit was actually started.
+
+## 9. Install the broker binary (S5) — COOPERATOR-run
+
+The G3 unit expects `ExecStart=/usr/bin/contextdeck-broker`. Use the documented
+prefix `/usr`. Do **not** invent another prefix. Do **not** enable, start,
+restart, arm, or grab.
+
+From the repository root, with a clean `PATH` if CMake complains about
+`CMAKE_ROOT`:
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build
+ctest --test-dir build --output-on-failure
+
+# Privileged. No enable, no start.
+sudo cmake --install build --component broker
+sudo install -m 0644 packaging/systemd/contextdeck-broker.service \
+  /etc/systemd/system/contextdeck-broker.service
+sudo systemctl daemon-reload
+```
+
+`cmake --install --component broker` installs only `contextdeck-broker` to
+`/usr/bin/contextdeck-broker`. The unit copy refreshes `RuntimeDirectoryMode=0755`
+so the seat user can traverse `/run/contextdeck` without joining group
+`contextdeck-broker`.
+
+Verify (still no start):
+
+| Check | Expected |
+|-------|----------|
+| `/usr/bin/contextdeck-broker` | exists, executable |
+| `diff packaging/systemd/contextdeck-broker.service /etc/systemd/system/contextdeck-broker.service` | empty |
+| unit `RuntimeDirectoryMode` | `0755` |
+| `systemctl is-enabled contextdeck-broker` | not enabled (`static` / no `[Install]`) |
+| `systemctl is-active contextdeck-broker` | `inactive` |
+
+Do **not** `systemctl start`. IRL G4 is a separate acceptance.
 
 ## Logs to keep private
 

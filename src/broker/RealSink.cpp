@@ -37,6 +37,24 @@ SinkCapabilities unionSourceCapabilities(const SinkCapabilities &if00, const Sin
     return out;
 }
 
+SinkCapabilities passthroughCapabilities()
+{
+    SinkCapabilities out;
+    out.keyCodes.reserve(KEY_CNT);
+    for (unsigned code = 0; code < KEY_CNT; ++code) {
+        out.keyCodes.push_back(static_cast<uint16_t>(code));
+    }
+    out.ledCodes.reserve(LED_CNT);
+    for (unsigned code = 0; code < LED_CNT; ++code) {
+        out.ledCodes.push_back(static_cast<uint16_t>(code));
+    }
+    out.mscCodes.reserve(MSC_CNT);
+    for (unsigned code = 0; code < MSC_CNT; ++code) {
+        out.mscCodes.push_back(static_cast<uint16_t>(code));
+    }
+    return out;
+}
+
 RealSink::RealSink(::libevdev *templateDevice, ::libevdev_uinput *uinputDevice)
     : templateDevice_(templateDevice)
     , uinputDevice_(uinputDevice)

@@ -30,8 +30,9 @@ process live elsewhere; operations and IRL tests have their own owners.
    `untouched` produces no device traffic.
 5. The input broker consumes the same assignments in a later whole. Until
    remapping is armed, `emit_shortcut` values are stored and shown, not
-   executed. S4 session IPC can lease/arm the broker; M2 still has no mapped
-   actions (pass-through only once S5 grabs).
+   executed. S4 session IPC can lease/arm the broker. S5 production ARM is an
+   explicit session-app action (tray / Diagnostics) after an authenticated
+   lease; M2 still has no mapped actions (pass-through only once G4 grabs).
 
 ## Assignment states
 

@@ -171,10 +171,13 @@ Durable rules for this project:
   restarts start disarmed; the listening socket never arms by itself;
   hardware reconnect never replays actions; a crash never triggers an
   automatic re-grab loop. The session-app Unix-socket lease (S4) is the only
-  arming authority: `LEASE` then `ARM`, renewed by `HEARTBEAT`. Default lease
-  is 6000 ms. Losing the peer, a malformed frame, failed `SO_PEERCRED`, lease
-  expiry, or orderly broker stop calls `Acquisition::disarm()` before
-  teardown.
+  arming authority: an explicit user action sends `LEASE` then `ARM`, renewed
+  by `HEARTBEAT`. Default lease is 6000 ms. Socket existence, session-app
+  `start()`, and `STATUS` never arm. Production ARM enumerates the G213 by USB
+  ancestry and interface number (never remembered `eventN`), then opens
+  sources and constructs `RealSink`/`EvdevGrabber`. Losing the peer, a
+  malformed frame, failed `SO_PEERCRED`, lease expiry, or orderly broker stop
+  calls `Acquisition::disarm()` before teardown.
 - The systemd watchdog (`WatchdogSec=2`) is fed from the broker event-loop
   thread with `sd_notify("WATCHDOG=1")` after each wait return (including idle
   timeout) and after that iteration's ingest work. A hung wait or hung ingest

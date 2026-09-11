@@ -116,6 +116,8 @@ void BrokerIpcClient::onReadyRead()
 void BrokerIpcClient::onError(QLocalSocket::LocalSocketError error)
 {
     Q_UNUSED(error);
+    m_wantArm = false;
+    m_wantLease = false;
     stopHeartbeat();
     setState(QStringLiteral("disconnected"));
     if (!m_retry.isActive()) {
@@ -147,6 +149,11 @@ void BrokerIpcClient::handleReply(const QByteArray &payload)
     }
     if (payload.startsWith("OK STATUS")) {
         setState(QString::fromUtf8(payload));
+        return;
+    }
+    if (payload.startsWith("ERR ARM_FAILED")) {
+        m_wantArm = false;
+        setState(QStringLiteral("arm-failed"));
     }
 }
 

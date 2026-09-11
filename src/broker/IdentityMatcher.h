@@ -16,7 +16,10 @@ std::optional<SourceTag> acceptedSource(IdentityVerdict verdict);
 const char *identityVerdictClass(IdentityVerdict verdict);
 
 // Reads ID_VENDOR_ID, ID_MODEL_ID, ID_USB_INTERFACE_NUM via libudev.
-// Does not open /dev/input. Not invoked by this exchange's tests or binary.
+// Does not open /dev/input.
 DeviceCandidate candidateFromUdev(udev_device *device, uint16_t bustype, std::string_view evdevName);
+
+// Same udev property walk, plus sysfs name and bustype. Does not open /dev/input.
+DeviceCandidate candidateFromUdevDevice(udev_device *device);
 
 } // namespace contextdeck::broker

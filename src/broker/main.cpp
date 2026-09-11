@@ -1,6 +1,7 @@
 #include "broker/EventLoop.h"
 #include "broker/IdleWait.h"
 #include "broker/Logger.h"
+#include "broker/ProductionRuntime.h"
 #include "broker/Selftest.h"
 #include "broker/SessionIpc.h"
 #include "broker/Watchdog.h"
@@ -15,7 +16,7 @@
 
 namespace {
 
-int runIdleBroker()
+int runBroker()
 {
     contextdeck::broker::Logger logger;
     std::fprintf(stderr, "contextdeck-broker %s\n", CONTEXTDECK_VERSION);
@@ -27,33 +28,14 @@ int runIdleBroker()
         return 1;
     }
 
-    class FailClosedSink final : public contextdeck::broker::ILifecycleSink {
-    public:
-        bool createVirtual() override { return false; }
-        void destroyVirtual() override {}
-    };
-    class FailClosedSource final : public contextdeck::broker::ILifecycleSource {
-    public:
-        explicit FailClosedSource(contextdeck::broker::SourceTag tag)
-            : tag_(tag)
-        {
-        }
-        contextdeck::broker::SourceTag tag() const override { return tag_; }
-        bool openSource() override { return false; }
-        bool claimSource() override { return false; }
-        void unclaimSource() override {}
-        void closeSource() override {}
-
-    private:
-        contextdeck::broker::SourceTag tag_;
-    };
-
     contextdeck::broker::KeyLedger ledger;
-    FailClosedSink sink;
-    FailClosedSource if00(contextdeck::broker::SourceTag::If00);
-    FailClosedSource if01(contextdeck::broker::SourceTag::If01);
-    contextdeck::broker::Acquisition acquisition(sink, if00, if01, ledger, logger);
-    contextdeck::broker::AcquisitionArmControl control(acquisition);
+    contextdeck::broker::RealLifecycleSink sink(contextdeck::broker::passthroughCapabilities());
+    contextdeck::broker::EvdevSource if00(contextdeck::broker::SourceTag::If00);
+    contextdeck::broker::EvdevSource if01(contextdeck::broker::SourceTag::If01);
+    contextdeck::broker::Acquisition acquisition(sink, if00, if01, ledger, logger, &sink);
+    contextdeck::broker::UdevDeviceEnumerator enumerator;
+    contextdeck::broker::ProductionArmControl control(enumerator, if00, if01, acquisition, logger, &wait);
+    contextdeck::broker::ForwardingEngine engine(sink, ledger, logger);
     contextdeck::broker::KernelPeerCredentials creds;
     contextdeck::broker::LogindSeatAuthorizer auth;
     const char *socketPath = std::getenv("CONTEXTDECK_BROKER_SOCKET");
@@ -66,8 +48,9 @@ int runIdleBroker()
         return 1;
     }
 
+    contextdeck::broker::BrokerLoopWork work(ipc, engine, if00, if01, control, logger);
     contextdeck::broker::SystemdWatchdog watchdog;
-    contextdeck::broker::EventLoop loop(wait, watchdog, contextdeck::broker::watchdogFeedTimeoutMs(), &ipc);
+    contextdeck::broker::EventLoop loop(wait, watchdog, contextdeck::broker::watchdogFeedTimeoutMs(), &work);
     loop.run();
     ipc.shutdown();
     watchdog.notifyStopping();
@@ -90,5 +73,5 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "contextdeck-broker: error=unknown-command\n");
         return 1;
     }
-    return runIdleBroker();
+    return runBroker();
 }

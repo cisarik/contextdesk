@@ -6,7 +6,7 @@
 namespace contextdeck::broker {
 
 // ILifecycleSource whose claimSource/unclaimSource are the exclusive grab.
-// Production later supplies EvdevGrabber; tests supply FakeGrabber.
+// Production supplies EvdevSource (open + EvdevGrabber). Tests supply FakeGrabber.
 class GrabbingSource final : public ILifecycleSource {
 public:
     GrabbingSource(SourceTag tag, IGrabber &grabber);
