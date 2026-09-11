@@ -21,12 +21,13 @@ process live elsewhere; operations and IRL tests have their own owners.
 
 ## Layering
 
-1. Typed profile document (schema_version 1).
+1. Typed profile document (schema_version 2).
 2. Deterministic resolver: identity + control → assignment, and identity →
-   lighting. No I/O, D-Bus, device access, or GUI.
+   lighting preset. No I/O, D-Bus, device access, or GUI.
 3. Context bridge supplies identity to the session application.
-4. Lighting client applies the resolved five-zone color through OpenRGB SDK
-   protocol 5 on loopback.
+4. Lighting client applies the resolved **desired state** (a device mode plus,
+   for `direct`, five zone colors) through OpenRGB SDK protocol 5 on loopback.
+   `untouched` produces no device traffic.
 5. The input broker (later whole) will consume the same assignments. Until it
    exists, `emit_shortcut` values are stored and shown, not executed.
 
@@ -44,7 +45,7 @@ process live elsewhere; operations and IRL tests have their own owners.
 
 Unset means inherit, not swallow. An unidentified or stale context resolves
 through the global profile. A cold start with no valid file resolves to
-pass-through and writes nothing.
+pass-through plus **untouched** lighting and writes nothing.
 
 `inherit_global` on the global profile is rejected.
 
@@ -66,11 +67,18 @@ application profile and uses the global profile.
 
 ## schema_version policy
 
-The current schema is integer `1`. A missing, non-integer, or other
-`schema_version` is refused. A **future** version is refused without rewriting
-the file. Unknown semantic fields in schema 1 are rejected rather than
+The only activatable schema is integer `2`. A missing, non-integer, or other
+`schema_version` is refused. A **future** version (greater than 2) is refused
+without rewriting the file. Unknown semantic fields are rejected rather than
 silently discarded. Device scope other than vendor `046d`, product `c336`,
 model `logitech-g213-prodigy` is rejected.
+
+A version-1 file is read, migrated in memory to schema 2, and used. It is
+**never rewritten on disk** unless the user saves. Version-1 `automatic`
+becomes `untouched` (the color is kept as `base_color` for later Direct use);
+`lights_off` becomes `off`; `temporary_color` becomes `direct`. A failed
+version-1 lighting migration preserves the original bytes and yields
+pass-through plus untouched lighting.
 
 ## Persistence and recovery
 
@@ -96,23 +104,46 @@ substitutes for them.
 
 ## Lighting
 
-Five physical zones, never per-key color.
+Five physical zones, never per-key color. Zone names, in order: Left Area,
+Middle Area, Right Area, Arrow and Homekeys, Numpad. Each zone entry is a
+small typed value (a color today) so a later zone-role model can be added
+without reshaping the document. Zone roles, desktop awareness, and workspace
+logic are out of this whole.
 
-`lighting.mode` ∈ {`automatic`, `temporary_color`, `lights_off`}.
-`base_color` is `#rrggbb`. `zones` is either `null` (all five follow
-`base_color`) or exactly five `#rrggbb` entries.
+The keyboard has **no readback**. "Sent successfully" is never hardware
+acceptance. Desired state, connection state, and last error are three
+separate truths. Only the operator's eyes close a lighting claim.
 
-Session semantics (applied by the session application):
+`lighting` is a preset object:
 
-- **automatic**: the resolved profile owns all five zones.
-- **temporary_color**: holds until the next *external* application-identity
-  change. Opening this application's tray or settings does not expire it.
-- **lights_off**: explicit session override until automatic is resumed.
+| Field | Meaning |
+|-------|---------|
+| `mode` | ∈ {`untouched`, `direct`, `wave`, `cycle`, `breathing`, `off`} |
+| `zones` | `null` or exactly five `#rrggbb` entries. Meaningful for `direct`. |
+| `base_color` | Optional `#rrggbb`. Migration source from version 1, and the single-color form of `direct`. |
+| `restore_mode` | Device mode to return to (`direct`, `wave`, `cycle`, `breathing`, `off`). Defaults to `wave`. Not `untouched`. |
 
-An override must never be labelled as Automatic. Unknown lighting modes are
-rejected.
+Unknown mode names, wrong zone counts, and unknown semantic fields are
+rejected. `direct` requires `base_color` or exactly five zones.
 
-v1 lighting applies one base color to all five zones unless `zones` is set.
+Default is **non-destructive**: until the user expresses intent, ContextDeck
+does not touch the device. The honest UI label is `untouched — device default`.
+`untouched` is never displayed as Automatic.
+
+Resolver lighting: application preset wins; otherwise global preset; otherwise
+`untouched`. An unidentified or stale context resolves to the global preset.
+A temporary override (session, not a document field) outranks the resolved
+preset, expires on the next *external* application-identity change, and is
+never expired by opening this application's UI.
+
+`Restore device default` returns the device to the recorded `restore_mode`
+(assumed `wave` when unknown) and stops touching it.
+
+Zone-accent for mapped keys is specified with an explicit control-to-zone
+table. Every entry ships `verified: false` until the IRL probe fills
+`docs/hardware/g213-zone-map.md`. While unverified, accent writes to hardware
+are inert; the UI may show a labelled preview. No physical key-to-zone fact
+is claimed without measurement.
 
 ## Context conditions and fallbacks
 
@@ -120,9 +151,9 @@ v1 lighting applies one base color to all five zones unless `zones` is set.
 |-----------|--------------------|
 | Identified app with profile | Application overrides, else global, else pass-through |
 | Identified app without profile | Global, else pass-through |
-| Unknown, stale, or missing identity | Global profile; lighting stays on the global colors, never forced to lights-off |
+| Unknown, stale, or missing identity | Global profile; lighting stays on the global preset, never forced to off |
 | Bridge lost (three missed 5 s heartbeats) | Same as unknown identity, with one bounded warning |
-| ContextDeck settings / unsuitable shell surface | Neutral / pass-through |
+| ContextDeck settings / unsuitable shell surface | Neutral / pass-through; does not expire a temporary lighting override |
 
 ## Power actions
 
@@ -185,8 +216,15 @@ Loopback only (`127.0.0.1:6742`). Client name `ContextDeck`. Protocol version
 is negotiated first; a server version newer than 5 is rejected (lighting
 disabled, application stays up). Controllers are selected by Logitech + G213
 identity, not by a stored index. `DEVICE_LIST_UPDATED` and reconnects
-re-enumerate. Direct/custom mode is selected, then whole-device `UPDATELEDS`
-for five little-endian `0x00BBGGRR` colors.
+re-enumerate. Enumeration on connect must not change device state: no mode
+selection and no color write without explicit resolved lighting intent. The
+device must never be left in Direct with all-zero colors without intent.
+
+Mode changes go through `UPDATEMODE` (packet 1101) using the Mode Data block
+from the server's controller description (protocol 5 includes `mode_value`,
+which the client echoes). Per-zone colors in `direct` go through whole-device
+`UPDATELEDS` for five little-endian `0x00BBGGRR` colors. `untouched` sends
+no frame. `SETCUSTOMMODE` is not used as a connect-time default.
 
 Frames: magic `ORGB`, 16-byte little-endian header (device index, packet id,
 payload size). Wrong magic, truncated frames, and payloads above 1 MiB are
@@ -197,10 +235,12 @@ desired color, connection state, and last error are separate.
 
 ## Session lighting overrides
 
-Tray and Overview can set **automatic**, **temporary_color**, or **lights_off**.
-An override is never labelled Automatic. `temporary_color` expires on the next
-*external* application-identity change; opening this application's tray or
-settings does not expire it. `lights_off` holds until automatic is restored.
+Tray and Overview can set a **temporary override**, **lights off** (`off`),
+**restore automatic** (follow the resolved preset), or **restore device
+default**. An override is never labelled Automatic. A temporary override
+expires on the next *external* application-identity change; opening this
+application's tray or settings does not expire it. `off` holds until
+automatic is restored or device default is restored.
 
 ## Optional user unit
 

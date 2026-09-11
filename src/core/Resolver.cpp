@@ -85,13 +85,22 @@ Assignment resolveAssignment(const ProfileDocument &document,
     return passThroughAssignment();
 }
 
-Lighting resolveLighting(const ProfileDocument &document, const ApplicationIdentity &identity)
+Lighting resolveLighting(const ProfileDocument &document, const ApplicationIdentity &identity,
+                         const std::optional<Lighting> &temporaryOverride)
 {
+    if (temporaryOverride.has_value()) {
+        return *temporaryOverride;
+    }
     const ApplicationProfile *profile = matchApplication(document, identity);
     if (profile != nullptr && profile->lighting.has_value()) {
         return profile->lighting.value();
     }
     return document.globalLighting;
+}
+
+Lighting resolveLighting(const ProfileDocument &document, const ApplicationIdentity &identity)
+{
+    return resolveLighting(document, identity, std::nullopt);
 }
 
 } // namespace contextdeck

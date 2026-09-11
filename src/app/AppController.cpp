@@ -13,10 +13,18 @@ namespace {
 
 Lighting defaultLighting()
 {
-    Lighting lighting;
-    lighting.mode = LightingMode::Automatic;
-    lighting.baseColor = Rgb{0x22, 0x22, 0x22};
-    return lighting;
+    return untouchedLighting();
+}
+
+Rgb displayColor(const Lighting &lighting)
+{
+    if (lighting.baseColor) {
+        return *lighting.baseColor;
+    }
+    if (lighting.zones) {
+        return (*lighting.zones)[0].color;
+    }
+    return Rgb{};
 }
 
 } // namespace
@@ -88,15 +96,10 @@ QString AppController::currentProfile() const
 
 QString AppController::lightingMode() const
 {
-    switch (m_sessionLighting) {
-    case SessionLightingMode::Automatic:
-        return QStringLiteral("automatic");
-    case SessionLightingMode::TemporaryColor:
-        return QStringLiteral("temporary_color");
-    case SessionLightingMode::LightsOff:
-        return QStringLiteral("lights_off");
+    if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
+        return QStringLiteral("temporary:") + lightingModeJsonName(effectiveLighting().mode);
     }
-    return QStringLiteral("automatic");
+    return lightingModeJsonName(effectiveLighting().mode);
 }
 
 QString AppController::lightingConnection() const
@@ -139,7 +142,7 @@ bool AppController::degraded() const
 
 QString AppController::globalColor() const
 {
-    return toHex(m_document.globalLighting.baseColor);
+    return toHex(displayColor(m_document.globalLighting));
 }
 
 QVariantList AppController::inventory() const
@@ -164,7 +167,8 @@ QVariantList AppController::profiles() const
         QVariantMap map;
         map.insert(QStringLiteral("id"), profile.id);
         map.insert(QStringLiteral("displayName"), profile.displayName);
-        map.insert(QStringLiteral("color"), toHex(profile.lighting ? profile.lighting->baseColor : m_document.globalLighting.baseColor));
+        map.insert(QStringLiteral("color"),
+                   toHex(displayColor(profile.lighting.value_or(m_document.globalLighting))));
         list.push_back(map);
     }
     return list;
@@ -227,7 +231,8 @@ void AppController::setGlobalColor(const QString &hex)
         return;
     }
     m_document.globalLighting.baseColor = *color;
-    m_document.globalLighting.mode = LightingMode::Automatic;
+    m_document.globalLighting.mode = LightingMode::Direct;
+    m_document.globalLighting.zones.reset();
     emit documentChanged();
     applyLighting();
 }
@@ -242,7 +247,8 @@ void AppController::setApplicationColor(const QString &id, const QString &hex)
         if (profile.id == id) {
             Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
             lighting.baseColor = *color;
-            lighting.mode = LightingMode::Automatic;
+            lighting.mode = LightingMode::Direct;
+            lighting.zones.reset();
             profile.lighting = lighting;
             emit documentChanged();
             applyLighting();
@@ -278,7 +284,7 @@ void AppController::addProfileFromInventory(int index)
         profile.match.resourceName = entry.resourceName;
     }
     Lighting lighting = m_document.globalLighting;
-    lighting.mode = LightingMode::Automatic;
+    lighting.mode = LightingMode::Direct;
     profile.lighting = lighting;
     m_document.applications.push_back(profile);
     emit documentChanged();
@@ -432,21 +438,16 @@ Lighting AppController::effectiveLighting() const
 {
     if (m_sessionLighting == SessionLightingMode::LightsOff) {
         Lighting lighting;
-        lighting.mode = LightingMode::LightsOff;
-        lighting.baseColor = Rgb{0, 0, 0};
+        lighting.mode = LightingMode::Off;
         return lighting;
     }
     if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
         Lighting lighting;
-        lighting.mode = LightingMode::TemporaryColor;
+        lighting.mode = LightingMode::Direct;
         lighting.baseColor = m_temporaryColor;
         return lighting;
     }
-    Lighting lighting = resolveLighting(m_document, m_context->identity());
-    if (lighting.mode == LightingMode::LightsOff) {
-        lighting.baseColor = Rgb{0, 0, 0};
-    }
-    return lighting;
+    return resolveLighting(m_document, m_context->identity());
 }
 
 void AppController::applyLighting()
@@ -456,13 +457,14 @@ void AppController::applyLighting()
 
 void AppController::sendLighting(const Lighting &lighting)
 {
-    std::array<Rgb, openrgb::kLedCount> colors{};
-    if (lighting.zones) {
-        colors = *lighting.zones;
-    } else {
-        colors.fill(lighting.baseColor);
+    if (lighting.mode == LightingMode::Untouched) {
+        return;
     }
-    if (lighting.mode == LightingMode::LightsOff) {
+    if (lighting.mode != LightingMode::Direct && lighting.mode != LightingMode::Off) {
+        return;
+    }
+    std::array<Rgb, openrgb::kLedCount> colors = zoneColorsFromPreset(lighting);
+    if (lighting.mode == LightingMode::Off) {
         colors.fill(Rgb{0, 0, 0});
     }
     m_rgb->setDesiredColors(colors);

@@ -132,6 +132,77 @@ private slots:
         QVERIFY(!loaded.ok);
         QVERIFY(loaded.error.jsonPath.contains(QStringLiteral("caption")));
     }
+
+    void lightingPresetApplicationOverGlobal()
+    {
+        ProfileDocument document;
+        document.globalLighting.mode = LightingMode::Wave;
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("app");
+        profile.displayName = QStringLiteral("App");
+        profile.match.resourceClass = QStringLiteral("Foo");
+        Lighting appLighting;
+        appLighting.mode = LightingMode::Cycle;
+        profile.lighting = appLighting;
+        document.applications.push_back(profile);
+
+        ApplicationIdentity identity;
+        identity.resourceClass = QStringLiteral("Foo");
+        QCOMPARE(resolveLighting(document, identity).mode, LightingMode::Cycle);
+    }
+
+    void lightingUntouchedWhenNothingSet()
+    {
+        const ProfileDocument document;
+        QCOMPARE(resolveLighting(document, ApplicationIdentity{}).mode, LightingMode::Untouched);
+        QCOMPARE(toDesiredLighting(resolveLighting(document, ApplicationIdentity{})).mode, LightingMode::Untouched);
+    }
+
+    void unidentifiedContextFallsBackToGlobalPreset()
+    {
+        ProfileDocument document;
+        document.globalLighting.mode = LightingMode::Breathing;
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("app");
+        profile.displayName = QStringLiteral("App");
+        profile.match.resourceClass = QStringLiteral("Foo");
+        Lighting appLighting;
+        appLighting.mode = LightingMode::Off;
+        profile.lighting = appLighting;
+        document.applications.push_back(profile);
+
+        const ApplicationIdentity empty;
+        QVERIFY(!empty.isIdentified());
+        QCOMPARE(resolveLighting(document, empty).mode, LightingMode::Breathing);
+
+        ApplicationIdentity unknown;
+        unknown.resourceClass = QStringLiteral("Other");
+        QCOMPARE(resolveLighting(document, unknown).mode, LightingMode::Breathing);
+    }
+
+    void temporaryOverrideOutranksResolvedPreset()
+    {
+        ProfileDocument document;
+        document.globalLighting.mode = LightingMode::Wave;
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("app");
+        profile.displayName = QStringLiteral("App");
+        profile.match.resourceClass = QStringLiteral("Foo");
+        Lighting appLighting;
+        appLighting.mode = LightingMode::Cycle;
+        profile.lighting = appLighting;
+        document.applications.push_back(profile);
+
+        Lighting override;
+        override.mode = LightingMode::Direct;
+        override.baseColor = Rgb{0x10, 0x20, 0x30};
+
+        ApplicationIdentity identity;
+        identity.resourceClass = QStringLiteral("Foo");
+        QCOMPARE(resolveLighting(document, identity).mode, LightingMode::Cycle);
+        QCOMPARE(resolveLighting(document, identity, override).mode, LightingMode::Direct);
+        QCOMPARE(resolveLighting(document, identity, override).baseColor->r, quint8(0x10));
+    }
 };
 
 QTEST_MAIN(TestProfileResolver)

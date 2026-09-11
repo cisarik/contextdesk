@@ -228,9 +228,82 @@ bool parseKeys(const QJsonValue &value, const QString &path, bool allowInherit, 
     return true;
 }
 
-std::optional<Lighting> parseLighting(const QJsonObject &object, const QString &path, PersistenceError &error)
+bool parseZoneArray(const QJsonValue &zonesValue, const QString &path, std::optional<std::array<ZoneValue, kZoneCount>> &out,
+                    PersistenceError &error)
+{
+    if (zonesValue.isNull()) {
+        out.reset();
+        return true;
+    }
+    if (!zonesValue.isArray()) {
+        error = makeError(QStringLiteral("lighting.zones must be null or an array of five colors"), path);
+        return false;
+    }
+    const QJsonArray zones = zonesValue.toArray();
+    if (zones.size() != kZoneCount) {
+        error = makeError(QStringLiteral("lighting.zones must contain exactly five #rrggbb entries"), path);
+        return false;
+    }
+    std::array<ZoneValue, kZoneCount> parsed{};
+    for (int i = 0; i < kZoneCount; ++i) {
+        const auto color = parseColor(zones.at(i), path + QStringLiteral("[%1]").arg(i), error);
+        if (!color) {
+            return false;
+        }
+        parsed[static_cast<size_t>(i)].color = *color;
+    }
+    out = parsed;
+    return true;
+}
+
+std::optional<Lighting> parseLightingV1(const QJsonObject &object, const QString &path, PersistenceError &error)
 {
     static const QStringList allowed{QStringLiteral("mode"), QStringLiteral("base_color"), QStringLiteral("zones")};
+    if (!checkObjectKeys(object, allowed, path, error)) {
+        return std::nullopt;
+    }
+    if (!object.contains(QStringLiteral("mode")) || !object.value(QStringLiteral("mode")).isString()) {
+        error = makeError(QStringLiteral("lighting.mode must be a string"), path + QStringLiteral(".mode"));
+        return std::nullopt;
+    }
+    const QString modeName = object.value(QStringLiteral("mode")).toString();
+    Lighting lighting;
+    lighting.restoreMode = LightingMode::Wave;
+    if (modeName == QLatin1String("automatic")) {
+        lighting.mode = LightingMode::Untouched;
+    } else if (modeName == QLatin1String("temporary_color")) {
+        lighting.mode = LightingMode::Direct;
+    } else if (modeName == QLatin1String("lights_off")) {
+        lighting.mode = LightingMode::Off;
+    } else {
+        error = makeError(QStringLiteral("unknown lighting mode"), path + QStringLiteral(".mode"));
+        return std::nullopt;
+    }
+    if (!object.contains(QStringLiteral("base_color"))) {
+        error = makeError(QStringLiteral("lighting.base_color is required"), path + QStringLiteral(".base_color"));
+        return std::nullopt;
+    }
+    const auto baseColor = parseColor(object.value(QStringLiteral("base_color")), path + QStringLiteral(".base_color"), error);
+    if (!baseColor) {
+        return std::nullopt;
+    }
+    lighting.baseColor = *baseColor;
+    if (object.contains(QStringLiteral("zones"))) {
+        if (!parseZoneArray(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), lighting.zones, error)) {
+            return std::nullopt;
+        }
+    }
+    return lighting;
+}
+
+std::optional<Lighting> parseLighting(const QJsonObject &object, const QString &path, PersistenceError &error)
+{
+    static const QStringList allowed{
+        QStringLiteral("mode"),
+        QStringLiteral("base_color"),
+        QStringLiteral("zones"),
+        QStringLiteral("restore_mode"),
+    };
     if (!checkObjectKeys(object, allowed, path, error)) {
         return std::nullopt;
     }
@@ -243,41 +316,51 @@ std::optional<Lighting> parseLighting(const QJsonObject &object, const QString &
         error = makeError(QStringLiteral("unknown lighting mode"), path + QStringLiteral(".mode"));
         return std::nullopt;
     }
-    if (!object.contains(QStringLiteral("base_color"))) {
-        error = makeError(QStringLiteral("lighting.base_color is required"), path + QStringLiteral(".base_color"));
-        return std::nullopt;
-    }
-    const auto baseColor = parseColor(object.value(QStringLiteral("base_color")), path + QStringLiteral(".base_color"), error);
-    if (!baseColor) {
-        return std::nullopt;
-    }
 
     Lighting lighting;
     lighting.mode = *mode;
-    lighting.baseColor = *baseColor;
+    lighting.restoreMode = LightingMode::Wave;
 
-    if (object.contains(QStringLiteral("zones")) && !object.value(QStringLiteral("zones")).isNull()) {
-        const QJsonValue zonesValue = object.value(QStringLiteral("zones"));
-        if (!zonesValue.isArray()) {
-            error = makeError(QStringLiteral("lighting.zones must be null or an array of five colors"), path + QStringLiteral(".zones"));
+    if (object.contains(QStringLiteral("restore_mode"))) {
+        if (!object.value(QStringLiteral("restore_mode")).isString()) {
+            error = makeError(QStringLiteral("lighting.restore_mode must be a string"), path + QStringLiteral(".restore_mode"));
             return std::nullopt;
         }
-        const QJsonArray zones = zonesValue.toArray();
-        if (zones.size() != kZoneCount) {
-            error = makeError(QStringLiteral("lighting.zones must contain exactly five #rrggbb entries"), path + QStringLiteral(".zones"));
+        const auto restore = restoreLightingModeFromJsonName(object.value(QStringLiteral("restore_mode")).toString());
+        if (!restore) {
+            error = makeError(QStringLiteral("unknown lighting mode"), path + QStringLiteral(".restore_mode"));
             return std::nullopt;
         }
-        std::array<Rgb, kZoneCount> parsed{};
-        for (int i = 0; i < kZoneCount; ++i) {
-            const auto color = parseColor(zones.at(i), path + QStringLiteral(".zones[%1]").arg(i), error);
-            if (!color) {
-                return std::nullopt;
-            }
-            parsed[static_cast<size_t>(i)] = *color;
+        lighting.restoreMode = *restore;
+    }
+
+    if (object.contains(QStringLiteral("base_color")) && !object.value(QStringLiteral("base_color")).isNull()) {
+        const auto baseColor = parseColor(object.value(QStringLiteral("base_color")), path + QStringLiteral(".base_color"), error);
+        if (!baseColor) {
+            return std::nullopt;
         }
-        lighting.zones = parsed;
+        lighting.baseColor = *baseColor;
+    }
+
+    if (object.contains(QStringLiteral("zones"))) {
+        if (!parseZoneArray(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), lighting.zones, error)) {
+            return std::nullopt;
+        }
+    }
+
+    if (lighting.mode == LightingMode::Direct && !lighting.baseColor && !lighting.zones) {
+        error = makeError(QStringLiteral("direct lighting requires base_color or exactly five zones"), path);
+        return std::nullopt;
     }
     return lighting;
+}
+
+bool isSchema1LightingMigrationFailure(const PersistenceError &error)
+{
+    if (error.reason.contains(QStringLiteral("unknown semantic field"))) {
+        return false;
+    }
+    return error.jsonPath.contains(QStringLiteral(".lighting")) || error.jsonPath == QLatin1String("global.lighting");
 }
 
 std::optional<MatchSpec> parseMatch(const QJsonObject &object, const QString &path, PersistenceError &error)
@@ -377,11 +460,14 @@ QJsonObject lightingToJson(const Lighting &lighting)
 {
     QJsonObject object;
     object.insert(QStringLiteral("mode"), lightingModeJsonName(lighting.mode));
-    object.insert(QStringLiteral("base_color"), colorToJson(lighting.baseColor));
+    object.insert(QStringLiteral("restore_mode"), lightingModeJsonName(lighting.restoreMode));
+    if (lighting.baseColor) {
+        object.insert(QStringLiteral("base_color"), colorToJson(*lighting.baseColor));
+    }
     if (lighting.zones) {
         QJsonArray zones;
-        for (const Rgb &color : *lighting.zones) {
-            zones.append(colorToJson(color));
+        for (const ZoneValue &zone : *lighting.zones) {
+            zones.append(colorToJson(zone.color));
         }
         object.insert(QStringLiteral("zones"), zones);
     } else {
@@ -444,11 +530,12 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
         return outcome;
     }
     const int schemaVersion = root.value(QStringLiteral("schema_version")).toInt();
-    if (schemaVersion != kSchemaVersion) {
-        outcome.error = makeError(schemaVersion > kSchemaVersion
-                                      ? QStringLiteral("future schema_version is refused")
-                                      : QStringLiteral("unsupported schema_version"),
-                                  QStringLiteral("schema_version"));
+    if (schemaVersion > kSchemaVersion) {
+        outcome.error = makeError(QStringLiteral("future schema_version is refused"), QStringLiteral("schema_version"));
+        return outcome;
+    }
+    if (schemaVersion != 1 && schemaVersion != kSchemaVersion) {
+        outcome.error = makeError(QStringLiteral("unsupported schema_version"), QStringLiteral("schema_version"));
         return outcome;
     }
 
@@ -463,8 +550,20 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
         return outcome;
     }
 
+    auto lightingMigrationFallback = [&]() {
+        LoadOutcome fallback;
+        fallback.ok = true;
+        fallback.document.schemaVersion = kSchemaVersion;
+        fallback.document.globalLighting = untouchedLighting();
+        fallback.error = outcome.error;
+        fallback.error.reason =
+            QStringLiteral("schema 1 lighting migration failed; using pass-through plus untouched");
+        fallback.error.preserved = true;
+        return fallback;
+    };
+
     ProfileDocument document;
-    document.schemaVersion = schemaVersion;
+    document.schemaVersion = kSchemaVersion;
 
     if (!root.contains(QStringLiteral("device")) || !root.value(QStringLiteral("device")).isObject()) {
         outcome.error = makeError(QStringLiteral("device object is required"), QStringLiteral("device"));
@@ -507,11 +606,20 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
     }
     if (!global.contains(QStringLiteral("lighting")) || !global.value(QStringLiteral("lighting")).isObject()) {
         outcome.error = makeError(QStringLiteral("global.lighting is required"), QStringLiteral("global.lighting"));
+        if (schemaVersion == 1 && isSchema1LightingMigrationFailure(outcome.error)) {
+            return lightingMigrationFallback();
+        }
         return outcome;
     }
-    const auto lighting = parseLighting(global.value(QStringLiteral("lighting")).toObject(),
-                                        QStringLiteral("global.lighting"), outcome.error);
+    const auto lighting = schemaVersion == 1
+        ? parseLightingV1(global.value(QStringLiteral("lighting")).toObject(), QStringLiteral("global.lighting"),
+                          outcome.error)
+        : parseLighting(global.value(QStringLiteral("lighting")).toObject(), QStringLiteral("global.lighting"),
+                        outcome.error);
     if (!lighting) {
+        if (schemaVersion == 1 && isSchema1LightingMigrationFailure(outcome.error)) {
+            return lightingMigrationFallback();
+        }
         return outcome;
     }
     document.globalLighting = *lighting;
@@ -576,11 +684,20 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
             if (object.contains(QStringLiteral("lighting"))) {
                 if (!object.value(QStringLiteral("lighting")).isObject()) {
                     outcome.error = makeError(QStringLiteral("lighting must be an object"), path + QStringLiteral(".lighting"));
+                    if (schemaVersion == 1 && isSchema1LightingMigrationFailure(outcome.error)) {
+                        return lightingMigrationFallback();
+                    }
                     return outcome;
                 }
-                const auto appLighting = parseLighting(object.value(QStringLiteral("lighting")).toObject(),
-                                                       path + QStringLiteral(".lighting"), outcome.error);
+                const auto appLighting = schemaVersion == 1
+                    ? parseLightingV1(object.value(QStringLiteral("lighting")).toObject(),
+                                      path + QStringLiteral(".lighting"), outcome.error)
+                    : parseLighting(object.value(QStringLiteral("lighting")).toObject(),
+                                    path + QStringLiteral(".lighting"), outcome.error);
                 if (!appLighting) {
+                    if (schemaVersion == 1 && isSchema1LightingMigrationFailure(outcome.error)) {
+                        return lightingMigrationFallback();
+                    }
                     return outcome;
                 }
                 profile.lighting = *appLighting;
@@ -635,7 +752,7 @@ PersistenceError ProfileStore::validate(const ProfileDocument &document)
 QJsonObject ProfileStore::toJson(const ProfileDocument &document)
 {
     QJsonObject root;
-    root.insert(QStringLiteral("schema_version"), document.schemaVersion);
+    root.insert(QStringLiteral("schema_version"), kSchemaVersion);
 
     QJsonObject device;
     device.insert(QStringLiteral("vendor_id"), document.device.vendorId);

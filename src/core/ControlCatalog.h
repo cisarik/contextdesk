@@ -31,5 +31,6 @@ struct ControlInfo {
 
 [[nodiscard]] std::optional<LightingMode> lightingModeFromJsonName(QStringView name);
 [[nodiscard]] QString lightingModeJsonName(LightingMode mode);
+[[nodiscard]] std::optional<LightingMode> restoreLightingModeFromJsonName(QStringView name);
 
 } // namespace contextdeck

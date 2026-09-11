@@ -241,14 +241,23 @@ QString systemActionJsonName(SystemActionId id)
 
 std::optional<LightingMode> lightingModeFromJsonName(QStringView name)
 {
-    if (name == QLatin1String("automatic")) {
-        return LightingMode::Automatic;
+    if (name == QLatin1String("untouched")) {
+        return LightingMode::Untouched;
     }
-    if (name == QLatin1String("temporary_color")) {
-        return LightingMode::TemporaryColor;
+    if (name == QLatin1String("direct")) {
+        return LightingMode::Direct;
     }
-    if (name == QLatin1String("lights_off")) {
-        return LightingMode::LightsOff;
+    if (name == QLatin1String("wave")) {
+        return LightingMode::Wave;
+    }
+    if (name == QLatin1String("cycle")) {
+        return LightingMode::Cycle;
+    }
+    if (name == QLatin1String("breathing")) {
+        return LightingMode::Breathing;
+    }
+    if (name == QLatin1String("off")) {
+        return LightingMode::Off;
     }
     return std::nullopt;
 }
@@ -256,14 +265,29 @@ std::optional<LightingMode> lightingModeFromJsonName(QStringView name)
 QString lightingModeJsonName(LightingMode mode)
 {
     switch (mode) {
-    case LightingMode::Automatic:
-        return QStringLiteral("automatic");
-    case LightingMode::TemporaryColor:
-        return QStringLiteral("temporary_color");
-    case LightingMode::LightsOff:
-        return QStringLiteral("lights_off");
+    case LightingMode::Untouched:
+        return QStringLiteral("untouched");
+    case LightingMode::Direct:
+        return QStringLiteral("direct");
+    case LightingMode::Wave:
+        return QStringLiteral("wave");
+    case LightingMode::Cycle:
+        return QStringLiteral("cycle");
+    case LightingMode::Breathing:
+        return QStringLiteral("breathing");
+    case LightingMode::Off:
+        return QStringLiteral("off");
     }
     return {};
+}
+
+std::optional<LightingMode> restoreLightingModeFromJsonName(QStringView name)
+{
+    const auto mode = lightingModeFromJsonName(name);
+    if (!mode || !isDeviceLightingMode(*mode)) {
+        return std::nullopt;
+    }
+    return mode;
 }
 
 } // namespace contextdeck
