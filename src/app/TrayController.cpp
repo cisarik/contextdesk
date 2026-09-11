@@ -27,7 +27,7 @@ void TrayController::start()
     m_item->setStatus(KStatusNotifierItem::Active);
     m_item->setIconByName(QStringLiteral("input-keyboard"));
     m_item->setToolTip(QStringLiteral("input-keyboard"), QStringLiteral("ContextDeck"),
-                       QStringLiteral("G213 context lighting"));
+                       m_controller->lightingLabel() + QStringLiteral(" — ") + m_controller->lightingConnection());
     m_item->setStandardActionsEnabled(false);
 
     m_menu = new QMenu();
@@ -48,17 +48,22 @@ void TrayController::rebuildMenu()
     if (m_menu == nullptr) {
         return;
     }
+    if (m_item != nullptr) {
+        m_item->setToolTip(QStringLiteral("input-keyboard"), QStringLiteral("ContextDeck"),
+                           m_controller->lightingLabel() + QStringLiteral(" — ")
+                               + m_controller->lightingConnection());
+    }
     m_menu->clear();
     m_menu->addAction(QStringLiteral("App: %1").arg(m_controller->currentApplication()))->setEnabled(false);
     m_menu->addAction(QStringLiteral("Profile: %1").arg(m_controller->currentProfile()))->setEnabled(false);
-    const QString mode = m_controller->lightingMode();
-    m_menu->addAction(QStringLiteral("Lighting: %1 (%2)").arg(mode, m_controller->lightingConnection()))->setEnabled(false);
+    m_menu->addAction(QStringLiteral("Lighting: %1 (%2)").arg(m_controller->lightingLabel(), m_controller->lightingConnection()))
+        ->setEnabled(false);
     m_menu->addSeparator();
 
-    auto *automatic = m_menu->addAction(QStringLiteral("Automatic"));
-    automatic->setCheckable(true);
-    automatic->setChecked(mode == QLatin1String("automatic"));
-    connect(automatic, &QAction::triggered, this, [this](bool checked) {
+    auto *follow = m_menu->addAction(QStringLiteral("Follow profile"));
+    follow->setCheckable(true);
+    follow->setChecked(m_controller->sessionLighting() == QLatin1String("automatic"));
+    connect(follow, &QAction::triggered, this, [this](bool checked) {
         if (checked) {
             m_controller->restoreAutomatic();
         }
@@ -66,7 +71,7 @@ void TrayController::rebuildMenu()
 
     auto *lightsOff = m_menu->addAction(QStringLiteral("Lights off"));
     lightsOff->setCheckable(true);
-    lightsOff->setChecked(mode == QLatin1String("lights_off"));
+    lightsOff->setChecked(m_controller->sessionLighting() == QLatin1String("off"));
     connect(lightsOff, &QAction::triggered, this, [this](bool checked) {
         if (checked) {
             m_controller->lightsOff();
@@ -76,6 +81,7 @@ void TrayController::rebuildMenu()
     });
 
     m_menu->addAction(QStringLiteral("Restore automatic"), this, [this]() { m_controller->restoreAutomatic(); });
+    m_menu->addAction(QStringLiteral("Restore device default"), this, [this]() { m_controller->restoreDeviceDefault(); });
     m_menu->addSeparator();
     m_menu->addAction(QStringLiteral("Displays Off"), this, [this]() { m_controller->displaysOff(); });
     m_menu->addAction(QStringLiteral("Suspend…"), this, [this]() { confirmSuspend(); });

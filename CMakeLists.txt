@@ -73,6 +73,7 @@ qt_add_qml_module(contextdeck
         ui/ProfilesPage.qml
         ui/ControlsPage.qml
         ui/DiagnosticsPage.qml
+        ui/LightingPresetEditor.qml
     NO_RESOURCE_TARGET_PATH
 )
 

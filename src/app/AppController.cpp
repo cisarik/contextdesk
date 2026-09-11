@@ -4,6 +4,7 @@
 #include "core/Resolver.h"
 
 #include <QLoggingCategory>
+#include <QStringList>
 
 namespace contextdeck {
 
@@ -25,6 +26,64 @@ Rgb displayColor(const Lighting &lighting)
         return (*lighting.zones)[0].color;
     }
     return Rgb{};
+}
+
+QString hexOf(const Rgb &color)
+{
+    return QStringLiteral("#%1%2%3")
+        .arg(color.r, 2, 16, QLatin1Char('0'))
+        .arg(color.g, 2, 16, QLatin1Char('0'))
+        .arg(color.b, 2, 16, QLatin1Char('0'));
+}
+
+QStringList zoneHexList(const Lighting &lighting)
+{
+    QStringList list;
+    const std::array<Rgb, kZoneCount> colors = zoneColorsFromPreset(lighting);
+    for (const Rgb &color : colors) {
+        list.push_back(hexOf(color));
+    }
+    return list;
+}
+
+void ensureDirectColors(Lighting &lighting, const Rgb &fallback)
+{
+    if (!lighting.baseColor && !lighting.zones) {
+        lighting.baseColor = fallback;
+    }
+}
+
+bool applyMode(Lighting &lighting, LightingMode mode, const Rgb &fallback)
+{
+    lighting.mode = mode;
+    if (mode == LightingMode::Direct) {
+        ensureDirectColors(lighting, fallback);
+    }
+    return true;
+}
+
+bool applyZoneColor(Lighting &lighting, int index, const Rgb &color, const Rgb &fallback)
+{
+    if (index < 0 || index >= kZoneCount) {
+        return false;
+    }
+    std::array<Rgb, kZoneCount> colors = zoneColorsFromPreset(lighting);
+    if (!lighting.zones && !lighting.baseColor) {
+        colors.fill(fallback);
+    }
+    colors[static_cast<size_t>(index)] = color;
+    lighting.zones = zoneValuesFromColors(colors);
+    lighting.baseColor = color;
+    lighting.mode = LightingMode::Direct;
+    return true;
+}
+
+bool applyGradient(Lighting &lighting, const Rgb &start, const Rgb &end)
+{
+    lighting.zones = zoneValuesFromColors(gradientColors(start, end));
+    lighting.baseColor = start;
+    lighting.mode = LightingMode::Direct;
+    return true;
 }
 
 } // namespace
@@ -102,6 +161,41 @@ QString AppController::lightingMode() const
     return lightingModeJsonName(effectiveLighting().mode);
 }
 
+QString AppController::lightingLabel() const
+{
+    if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
+        return QStringLiteral("temporary override — %1").arg(lightingModeJsonName(effectiveLighting().mode));
+    }
+    if (m_sessionLighting == SessionLightingMode::LightsOff) {
+        return QStringLiteral("off");
+    }
+    if (m_sessionLighting == SessionLightingMode::DeviceDefault
+        || effectiveLighting().mode == LightingMode::Untouched) {
+        return QStringLiteral("untouched — device default");
+    }
+    return lightingModeJsonName(effectiveLighting().mode);
+}
+
+bool AppController::temporaryOverrideActive() const
+{
+    return m_sessionLighting == SessionLightingMode::TemporaryColor;
+}
+
+QString AppController::sessionLighting() const
+{
+    switch (m_sessionLighting) {
+    case SessionLightingMode::Automatic:
+        return QStringLiteral("automatic");
+    case SessionLightingMode::TemporaryColor:
+        return QStringLiteral("temporary");
+    case SessionLightingMode::LightsOff:
+        return QStringLiteral("off");
+    case SessionLightingMode::DeviceDefault:
+        return QStringLiteral("device_default");
+    }
+    return QStringLiteral("automatic");
+}
+
 QString AppController::lightingConnection() const
 {
     switch (m_rgb->connectionState()) {
@@ -145,6 +239,37 @@ QString AppController::globalColor() const
     return toHex(displayColor(m_document.globalLighting));
 }
 
+QString AppController::globalMode() const
+{
+    return lightingModeJsonName(m_document.globalLighting.mode);
+}
+
+QStringList AppController::globalZones() const
+{
+    return zoneHexList(m_document.globalLighting);
+}
+
+QStringList AppController::zoneNames() const
+{
+    QStringList names;
+    for (const char *name : kZoneNames) {
+        names.push_back(QString::fromUtf8(name));
+    }
+    return names;
+}
+
+QStringList AppController::lightingPresets() const
+{
+    return {
+        QStringLiteral("untouched"),
+        QStringLiteral("wave"),
+        QStringLiteral("cycle"),
+        QStringLiteral("breathing"),
+        QStringLiteral("off"),
+        QStringLiteral("direct"),
+    };
+}
+
 QVariantList AppController::inventory() const
 {
     QVariantList list;
@@ -169,6 +294,9 @@ QVariantList AppController::profiles() const
         map.insert(QStringLiteral("displayName"), profile.displayName);
         map.insert(QStringLiteral("color"),
                    toHex(displayColor(profile.lighting.value_or(m_document.globalLighting))));
+        const Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+        map.insert(QStringLiteral("mode"), lightingModeJsonName(lighting.mode));
+        map.insert(QStringLiteral("zones"), zoneHexList(lighting));
         list.push_back(map);
     }
     return list;
@@ -200,6 +328,8 @@ QVariantMap AppController::diagnostics() const
     map.insert(QStringLiteral("degraded"), m_context->isDegraded());
     map.insert(QStringLiteral("policyRevision"), m_context->policyRevision());
     map.insert(QStringLiteral("lightingConnection"), lightingConnection());
+    map.insert(QStringLiteral("lightingLabel"), lightingLabel());
+    map.insert(QStringLiteral("sessionLighting"), sessionLighting());
     map.insert(QStringLiteral("lightingEnabled"), m_rgb->lightingEnabled());
     map.insert(QStringLiteral("hasG213"), m_rgb->hasG213());
     map.insert(QStringLiteral("identityUpdates"), QVariant::fromValue(m_identityUpdates));
@@ -233,6 +363,7 @@ void AppController::setGlobalColor(const QString &hex)
     m_document.globalLighting.baseColor = *color;
     m_document.globalLighting.mode = LightingMode::Direct;
     m_document.globalLighting.zones.reset();
+    m_sessionLighting = SessionLightingMode::Automatic;
     emit documentChanged();
     applyLighting();
 }
@@ -328,6 +459,14 @@ void AppController::restoreAutomatic()
     applyLighting();
 }
 
+void AppController::restoreDeviceDefault()
+{
+    m_sessionLighting = SessionLightingMode::DeviceDefault;
+    m_document.preferences.automaticEnabled = true;
+    emit lightingModeChanged();
+    applyLighting();
+}
+
 void AppController::setTemporaryColor(const QString &hex)
 {
     const auto color = parseHex(hex);
@@ -339,6 +478,105 @@ void AppController::setTemporaryColor(const QString &hex)
     m_document.preferences.automaticEnabled = false;
     emit lightingModeChanged();
     applyLighting();
+}
+
+void AppController::setGlobalLightingMode(const QString &modeName)
+{
+    const auto mode = lightingModeFromJsonName(modeName);
+    if (!mode) {
+        return;
+    }
+    applyMode(m_document.globalLighting, *mode, Rgb{0x7c, 0x3a, 0xed});
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    applyLighting();
+}
+
+void AppController::setGlobalZoneColor(int index, const QString &hex)
+{
+    const auto color = parseHex(hex);
+    if (!color) {
+        return;
+    }
+    if (!applyZoneColor(m_document.globalLighting, index, *color, Rgb{0x7c, 0x3a, 0xed})) {
+        return;
+    }
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    applyLighting();
+}
+
+void AppController::applyGlobalGradient(const QString &startHex, const QString &endHex)
+{
+    const auto start = parseHex(startHex);
+    const auto end = parseHex(endHex);
+    if (!start || !end) {
+        return;
+    }
+    applyGradient(m_document.globalLighting, *start, *end);
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    applyLighting();
+}
+
+void AppController::setApplicationLightingMode(const QString &id, const QString &modeName)
+{
+    const auto mode = lightingModeFromJsonName(modeName);
+    if (!mode) {
+        return;
+    }
+    for (ApplicationProfile &profile : m_document.applications) {
+        if (profile.id == id) {
+            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            applyMode(lighting, *mode, Rgb{0x7c, 0x3a, 0xed});
+            profile.lighting = lighting;
+            emit documentChanged();
+            applyLighting();
+            return;
+        }
+    }
+}
+
+void AppController::setApplicationZoneColor(const QString &id, int index, const QString &hex)
+{
+    const auto color = parseHex(hex);
+    if (!color) {
+        return;
+    }
+    for (ApplicationProfile &profile : m_document.applications) {
+        if (profile.id == id) {
+            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            if (!applyZoneColor(lighting, index, *color, Rgb{0x7c, 0x3a, 0xed})) {
+                return;
+            }
+            profile.lighting = lighting;
+            emit documentChanged();
+            applyLighting();
+            return;
+        }
+    }
+}
+
+void AppController::applyApplicationGradient(const QString &id, const QString &startHex, const QString &endHex)
+{
+    const auto start = parseHex(startHex);
+    const auto end = parseHex(endHex);
+    if (!start || !end) {
+        return;
+    }
+    for (ApplicationProfile &profile : m_document.applications) {
+        if (profile.id == id) {
+            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            applyGradient(lighting, *start, *end);
+            profile.lighting = lighting;
+            emit documentChanged();
+            applyLighting();
+            return;
+        }
+    }
 }
 
 void AppController::displaysOff()
@@ -440,6 +678,9 @@ Lighting AppController::effectiveLighting() const
         Lighting lighting;
         lighting.mode = LightingMode::Off;
         return lighting;
+    }
+    if (m_sessionLighting == SessionLightingMode::DeviceDefault) {
+        return untouchedLighting();
     }
     if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
         Lighting lighting;

@@ -8,6 +8,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -17,6 +18,7 @@ enum class SessionLightingMode {
     Automatic,
     TemporaryColor,
     LightsOff,
+    DeviceDefault,
 };
 
 class AppController : public QObject
@@ -26,11 +28,18 @@ class AppController : public QObject
     Q_PROPERTY(QString currentProfile READ currentProfile NOTIFY contextChanged)
     Q_PROPERTY(QString remappingState READ remappingState CONSTANT)
     Q_PROPERTY(QString lightingMode READ lightingMode NOTIFY lightingModeChanged)
+    Q_PROPERTY(QString lightingLabel READ lightingLabel NOTIFY lightingModeChanged)
+    Q_PROPERTY(QString sessionLighting READ sessionLighting NOTIFY lightingModeChanged)
+    Q_PROPERTY(bool temporaryOverrideActive READ temporaryOverrideActive NOTIFY lightingModeChanged)
     Q_PROPERTY(QString lightingConnection READ lightingConnection NOTIFY diagnosticsChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY diagnosticsChanged)
     Q_PROPERTY(bool bridgeConnected READ bridgeConnected NOTIFY contextChanged)
     Q_PROPERTY(bool degraded READ degraded NOTIFY contextChanged)
     Q_PROPERTY(QString globalColor READ globalColor NOTIFY documentChanged)
+    Q_PROPERTY(QString globalMode READ globalMode NOTIFY documentChanged)
+    Q_PROPERTY(QStringList globalZones READ globalZones NOTIFY documentChanged)
+    Q_PROPERTY(QStringList zoneNames READ zoneNames CONSTANT)
+    Q_PROPERTY(QStringList lightingPresets READ lightingPresets CONSTANT)
     Q_PROPERTY(QVariantList inventory READ inventory NOTIFY inventoryChanged)
     Q_PROPERTY(QVariantList profiles READ profiles NOTIFY documentChanged)
     Q_PROPERTY(QVariantList controls READ controls NOTIFY documentChanged)
@@ -46,11 +55,18 @@ public:
     [[nodiscard]] QString currentProfile() const;
     [[nodiscard]] QString remappingState() const { return QStringLiteral("inactive-until-M2"); }
     [[nodiscard]] QString lightingMode() const;
+    [[nodiscard]] QString lightingLabel() const;
+    [[nodiscard]] QString sessionLighting() const;
+    [[nodiscard]] bool temporaryOverrideActive() const;
     [[nodiscard]] QString lightingConnection() const;
     [[nodiscard]] QString lastError() const;
     [[nodiscard]] bool bridgeConnected() const;
     [[nodiscard]] bool degraded() const;
     [[nodiscard]] QString globalColor() const;
+    [[nodiscard]] QString globalMode() const;
+    [[nodiscard]] QStringList globalZones() const;
+    [[nodiscard]] QStringList zoneNames() const;
+    [[nodiscard]] QStringList lightingPresets() const;
     [[nodiscard]] QVariantList inventory() const;
     [[nodiscard]] QVariantList profiles() const;
     [[nodiscard]] QVariantList controls() const;
@@ -67,7 +83,14 @@ public:
     Q_INVOKABLE void setAutomatic(bool enabled);
     Q_INVOKABLE void lightsOff();
     Q_INVOKABLE void restoreAutomatic();
+    Q_INVOKABLE void restoreDeviceDefault();
     Q_INVOKABLE void setTemporaryColor(const QString &hex);
+    Q_INVOKABLE void setGlobalLightingMode(const QString &modeName);
+    Q_INVOKABLE void setGlobalZoneColor(int index, const QString &hex);
+    Q_INVOKABLE void applyGlobalGradient(const QString &startHex, const QString &endHex);
+    Q_INVOKABLE void setApplicationLightingMode(const QString &id, const QString &modeName);
+    Q_INVOKABLE void setApplicationZoneColor(const QString &id, int index, const QString &hex);
+    Q_INVOKABLE void applyApplicationGradient(const QString &id, const QString &startHex, const QString &endHex);
     Q_INVOKABLE void displaysOff();
     Q_INVOKABLE bool canSuspend() const;
     Q_INVOKABLE bool suspend();

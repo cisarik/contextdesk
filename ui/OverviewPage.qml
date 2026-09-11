@@ -9,6 +9,13 @@ Kirigami.ScrollablePage {
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
 
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: app.temporaryOverrideActive
+            type: Kirigami.MessageType.Warning
+            text: "Temporary override is active (" + app.lightingLabel + "). It is not Automatic and expires on the next external application-identity change."
+        }
+
         Kirigami.FormLayout {
             wideMode: true
             Controls.Label {
@@ -25,8 +32,14 @@ Kirigami.ScrollablePage {
                 wrapMode: Text.WordWrap
             }
             Controls.Label {
-                Kirigami.FormData.label: "Lighting mode"
-                text: app.lightingMode
+                Kirigami.FormData.label: "Lighting"
+                text: app.lightingLabel
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "Session"
+                text: app.sessionLighting === "automatic" ? "follow profile"
+                    : (app.sessionLighting === "temporary" ? "temporary override"
+                    : (app.sessionLighting === "device_default" ? "restore device default" : app.sessionLighting))
             }
             Controls.Label {
                 Kirigami.FormData.label: "Lighting connection"
@@ -40,14 +53,19 @@ Kirigami.ScrollablePage {
 
         RowLayout {
             Controls.Button {
-                text: "Automatic"
-                highlighted: app.lightingMode === "automatic"
+                text: "Follow profile"
+                highlighted: app.sessionLighting === "automatic"
                 onClicked: app.restoreAutomatic()
             }
             Controls.Button {
                 text: "Lights off"
-                highlighted: app.lightingMode === "lights_off"
+                highlighted: app.sessionLighting === "off"
                 onClicked: app.lightsOff()
+            }
+            Controls.Button {
+                text: "Restore device default"
+                highlighted: app.sessionLighting === "device_default"
+                onClicked: app.restoreDeviceDefault()
             }
         }
 
@@ -55,7 +73,7 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
             visible: true
             type: Kirigami.MessageType.Information
-            text: "The G213 has five RGB zones, not per-key color. v1 lighting applies one base color to all five zones."
+            text: "The G213 has five RGB zones, not per-key color. Until you pick a preset, lighting stays untouched — device default. There is no optical readback."
         }
     }
 }

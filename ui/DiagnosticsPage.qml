@@ -16,6 +16,8 @@ Kirigami.ScrollablePage {
                 "policyRevision",
                 "lightingConnection",
                 "lightingEnabled",
+                "lightingLabel",
+                "sessionLighting",
                 "hasG213",
                 "identityUpdates",
                 "lightingUpdates",

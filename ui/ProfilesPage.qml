@@ -9,21 +9,19 @@ Kirigami.ScrollablePage {
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
 
-        Kirigami.FormLayout {
-            Controls.TextField {
-                id: globalColorField
-                Kirigami.FormData.label: "Global base color"
-                text: app.globalColor
-                placeholderText: "#rrggbb"
-            }
-            Controls.Button {
-                text: "Apply global color"
-                onClicked: app.setGlobalColor(globalColorField.text)
-            }
+        Kirigami.Heading {
+            text: "Global lighting preset"
+            level: 2
+        }
+        LightingPresetEditor {
+            Layout.fillWidth: true
+            currentMode: app.globalMode
+            zones: app.globalZones
+            applicationLevel: false
         }
 
         Controls.Label {
-            text: "Per-application profiles (picker lists identities from the KWin bridge; selecting a profile never launches or closes an app)."
+            text: "Per-application profiles (picker lists identities from the KWin bridge; selecting a profile never launches or closes an app). Each profile can have its own lighting preset."
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }
@@ -42,24 +40,27 @@ Kirigami.ScrollablePage {
 
         Repeater {
             model: app.profiles
-            delegate: RowLayout {
+            delegate: ColumnLayout {
                 Layout.fillWidth: true
-                Controls.Label {
-                    text: modelData.displayName
+                spacing: Kirigami.Units.smallSpacing
+                RowLayout {
                     Layout.fillWidth: true
+                    Controls.Label {
+                        text: modelData.displayName
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+                    Controls.Button {
+                        text: "Remove"
+                        onClicked: app.removeProfile(modelData.id)
+                    }
                 }
-                Controls.TextField {
-                    id: colorField
-                    text: modelData.color
-                    Layout.preferredWidth: 110
-                }
-                Controls.Button {
-                    text: "Set color"
-                    onClicked: app.setApplicationColor(modelData.id, colorField.text)
-                }
-                Controls.Button {
-                    text: "Remove"
-                    onClicked: app.removeProfile(modelData.id)
+                LightingPresetEditor {
+                    Layout.fillWidth: true
+                    profileId: modelData.id
+                    currentMode: modelData.mode
+                    zones: modelData.zones
+                    applicationLevel: true
                 }
             }
         }

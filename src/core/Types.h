@@ -158,6 +158,30 @@ struct DesiredLighting {
     return colors;
 }
 
+[[nodiscard]] inline std::array<Rgb, kZoneCount> gradientColors(const Rgb &start, const Rgb &end)
+{
+    std::array<Rgb, kZoneCount> colors{};
+    constexpr int denom = kZoneCount - 1;
+    for (int i = 0; i < kZoneCount; ++i) {
+        colors[static_cast<size_t>(i)].r =
+            static_cast<quint8>((static_cast<int>(start.r) * (denom - i) + static_cast<int>(end.r) * i) / denom);
+        colors[static_cast<size_t>(i)].g =
+            static_cast<quint8>((static_cast<int>(start.g) * (denom - i) + static_cast<int>(end.g) * i) / denom);
+        colors[static_cast<size_t>(i)].b =
+            static_cast<quint8>((static_cast<int>(start.b) * (denom - i) + static_cast<int>(end.b) * i) / denom);
+    }
+    return colors;
+}
+
+[[nodiscard]] inline std::array<ZoneValue, kZoneCount> zoneValuesFromColors(const std::array<Rgb, kZoneCount> &colors)
+{
+    std::array<ZoneValue, kZoneCount> zones{};
+    for (int i = 0; i < kZoneCount; ++i) {
+        zones[static_cast<size_t>(i)].color = colors[static_cast<size_t>(i)];
+    }
+    return zones;
+}
+
 [[nodiscard]] inline DesiredLighting toDesiredLighting(const Lighting &preset)
 {
     DesiredLighting desired;
