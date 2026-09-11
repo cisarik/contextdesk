@@ -104,6 +104,11 @@ bool KeyLedger::syntheticDown(uint16_t code) const
     return synthetic_.count(code) != 0;
 }
 
+void KeyLedger::clearPhysical(SourceTag source)
+{
+    physical_[static_cast<size_t>(sourceIndex(source))].clear();
+}
+
 BrokerCounters KeyLedger::counters() const
 {
     BrokerCounters values;

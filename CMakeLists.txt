@@ -100,6 +100,7 @@ add_library(contextdeck_broker_core STATIC
     src/broker/FakeSource.cpp
     src/broker/RealSink.cpp
     src/broker/ForwardingEngine.cpp
+    src/broker/Selftest.cpp
 )
 target_include_directories(contextdeck_broker_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_broker_core PUBLIC PkgConfig::LIBEVDEV PkgConfig::LIBUDEV)

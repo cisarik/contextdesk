@@ -1,3 +1,5 @@
+#include "broker/Selftest.h"
+
 #include <cstdio>
 #include <string_view>
 
@@ -7,8 +9,9 @@
 
 int main(int argc, char **argv)
 {
-    (void)argc;
-    (void)argv;
+    if (argc > 1 && std::string_view(argv[1]) == "selftest") {
+        return contextdeck::broker::runSelftest();
+    }
     std::fprintf(stdout, "contextdeck-broker %s\n", CONTEXTDECK_VERSION);
     return 0;
 }

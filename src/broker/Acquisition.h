@@ -1,5 +1,6 @@
 #pragma once
 
+#include "broker/ISink.h"
 #include "broker/KeyLedger.h"
 #include "broker/Logger.h"
 #include "broker/Types.h"
@@ -29,7 +30,8 @@ public:
 
 class Acquisition {
 public:
-    Acquisition(ILifecycleSink &sink, ILifecycleSource &if00, ILifecycleSource &if01, KeyLedger &ledger, Logger &logger);
+    Acquisition(ILifecycleSink &sink, ILifecycleSource &if00, ILifecycleSource &if01, KeyLedger &ledger, Logger &logger,
+                ISink *events = nullptr);
 
     bool arm();
     void disarm();
@@ -39,6 +41,7 @@ public:
 private:
     void rollbackFrom(int openedSources, bool if00Claimed, bool if01Opened, bool if01Claimed);
     void releaseSourcesUngrabFirst();
+    void emitSyntheticDisarm();
     void record(const char *step);
 
     ILifecycleSink &sink_;
@@ -46,6 +49,7 @@ private:
     ILifecycleSource &if01_;
     KeyLedger &ledger_;
     Logger &logger_;
+    ISink *events_ = nullptr;
     bool armed_ = false;
     std::vector<std::string> history_;
 };

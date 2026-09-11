@@ -22,6 +22,7 @@ public:
 
     bool physicalDown(SourceTag source, uint16_t code) const;
     bool syntheticDown(uint16_t code) const;
+    void clearPhysical(SourceTag source);
     BrokerCounters counters() const;
 
 private:

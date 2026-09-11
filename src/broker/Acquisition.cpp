@@ -1,14 +1,17 @@
 #include "broker/Acquisition.h"
 
+#include <linux/input.h>
+
 namespace contextdeck::broker {
 
 Acquisition::Acquisition(ILifecycleSink &sink, ILifecycleSource &if00, ILifecycleSource &if01, KeyLedger &ledger,
-                         Logger &logger)
+                         Logger &logger, ISink *events)
     : sink_(sink)
     , if00_(if00)
     , if01_(if01)
     , ledger_(ledger)
     , logger_(logger)
+    , events_(events)
 {
 }
 
@@ -23,10 +26,27 @@ void Acquisition::releaseSourcesUngrabFirst()
     if01_.unclaimSource();
     record("close-if01");
     if01_.closeSource();
+    ledger_.clearPhysical(SourceTag::If01);
     record("unclaim-if00");
     if00_.unclaimSource();
     record("close-if00");
     if00_.closeSource();
+    ledger_.clearPhysical(SourceTag::If00);
+}
+
+void Acquisition::emitSyntheticDisarm()
+{
+    record("synthetic-disarm");
+    const std::vector<LedgerEmit> emitted = ledger_.disarmSynthetic();
+    if (events_ == nullptr) {
+        return;
+    }
+    for (const LedgerEmit &item : emitted) {
+        events_->writeEvent(EV_KEY, item.code, item.value);
+    }
+    if (!emitted.empty()) {
+        events_->flushSyn();
+    }
 }
 
 void Acquisition::rollbackFrom(int openedSources, bool if00Claimed, bool if01Opened, bool if01Claimed)
@@ -38,6 +58,7 @@ void Acquisition::rollbackFrom(int openedSources, bool if00Claimed, bool if01Ope
     if (if01Opened) {
         record("close-if01");
         if01_.closeSource();
+        ledger_.clearPhysical(SourceTag::If01);
     }
     if (if00Claimed) {
         record("unclaim-if00");
@@ -46,9 +67,9 @@ void Acquisition::rollbackFrom(int openedSources, bool if00Claimed, bool if01Ope
     if (openedSources >= 1) {
         record("close-if00");
         if00_.closeSource();
+        ledger_.clearPhysical(SourceTag::If00);
     }
-    record("synthetic-disarm");
-    (void)ledger_.disarmSynthetic();
+    emitSyntheticDisarm();
     record("destroy-virtual");
     sink_.destroyVirtual();
     armed_ = false;
@@ -106,8 +127,7 @@ void Acquisition::disarm()
     logger_.state("disarming");
     // Plan contract: ungrab physical first, then balanced synthetic releases, then destroy uinput.
     releaseSourcesUngrabFirst();
-    record("synthetic-disarm");
-    (void)ledger_.disarmSynthetic();
+    emitSyntheticDisarm();
     record("destroy-virtual");
     sink_.destroyVirtual();
     armed_ = false;

@@ -85,6 +85,28 @@ int main()
     engine.ingest(source);
     EXPECT(ledger.counters().keysDownSynthetic == 0);
 
+    source.enqueue(InputEvent{InputEvent::Kind::Key, kCodeA, 1});
+    source.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
+    engine.ingest(source);
+    sink.clear();
+    source.setPhysicalKeys({});
+    source.enqueue(InputEvent{InputEvent::Kind::SynDropped, 0, 0});
+    engine.ingest(source);
+    EXPECT(sink.events().size() == 2);
+    EXPECT(sink.events()[0].type == EV_KEY && sink.events()[0].code == kCodeA && sink.events()[0].value == 0);
+    EXPECT(sink.events()[1].type == EV_SYN && sink.events()[1].code == SYN_REPORT);
+    EXPECT(ledger.counters().droppedSync >= 1);
+    EXPECT(!ledger.syntheticDown(kCodeA));
+
+    sink.clear();
+    source.setPhysicalKeys({kCodeA});
+    source.enqueue(InputEvent{InputEvent::Kind::SynDropped, 0, 0});
+    engine.ingest(source);
+    EXPECT(sink.events().size() == 2);
+    EXPECT(sink.events()[0].type == EV_KEY && sink.events()[0].value == 1);
+    EXPECT(sink.events()[1].type == EV_SYN);
+    EXPECT(ledger.syntheticDown(kCodeA));
+
     static_assert(std::is_same_v<decltype(engine.ingest(source)), void>,
                   "forwarding is a void ingest; there is no remap/command catalog");
 

@@ -1,14 +1,17 @@
 #include "broker/Acquisition.h"
+#include "broker/FakeSink.h"
 #include "broker/KeyLedger.h"
 #include "broker/Logger.h"
 
 #include <algorithm>
 #include <cstdio>
+#include <linux/input.h>
 #include <set>
 #include <string>
 #include <vector>
 
 using contextdeck::broker::Acquisition;
+using contextdeck::broker::FakeSink;
 using contextdeck::broker::ILifecycleSink;
 using contextdeck::broker::ILifecycleSource;
 using contextdeck::broker::KeyLedger;
@@ -200,6 +203,28 @@ int main()
         const auto destroy = indexOf(acq.history(), "destroy-virtual");
         EXPECT(unclaimIf00 >= 0 && destroy >= 0);
         EXPECT(unclaimIf00 < destroy);
+    }
+
+    {
+        Logger logger;
+        KeyLedger ledger;
+        ledger.onKey(SourceTag::If00, kCodeA, 1);
+        ledger.onKey(SourceTag::If00, kCodeB, 1);
+        RecordingSink lifecycle;
+        FakeSink events;
+        RecordingSource if00(SourceTag::If00, nullptr);
+        RecordingSource if01(SourceTag::If01, nullptr);
+        Acquisition acq(lifecycle, if00, if01, ledger, logger, &events);
+        EXPECT(acq.arm());
+        acq.disarm();
+        EXPECT(events.events().size() == 3);
+        EXPECT(events.events()[0].type == EV_KEY && events.events()[0].code == kCodeB && events.events()[0].value == 0);
+        EXPECT(events.events()[1].type == EV_KEY && events.events()[1].code == kCodeA && events.events()[1].value == 0);
+        EXPECT(events.events()[2].type == EV_SYN && events.events()[2].code == SYN_REPORT);
+        const auto unclaim = indexOf(acq.history(), "unclaim-if01");
+        const auto synthetic = indexOf(acq.history(), "synthetic-disarm");
+        const auto destroy = indexOf(acq.history(), "destroy-virtual");
+        EXPECT(unclaim < synthetic && synthetic < destroy);
     }
 
     if (g_failures != 0) {
