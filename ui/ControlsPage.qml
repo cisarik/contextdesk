@@ -5,15 +5,27 @@ import org.kde.kirigami as Kirigami
 import io.github.cisarik.ContextDeck
 
 Kirigami.ScrollablePage {
-    title: "Controls"
+    title: ""
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
+
+        Kirigami.Heading {
+            text: "Pokročilé"
+            level: 2
+        }
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             visible: true
             type: Kirigami.MessageType.Warning
+            text: "Remapovanie klávesov bude aktívne v M2. V M1 svieti a deteguje kontext."
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: true
+            type: Kirigami.MessageType.Information
             text: "emit_shortcut assignments are stored but not active until the input broker exists (M2). GameMode and Backlight are conditional on hardware evidence (G1) and are not bound in M1. PrintScreen and Pause are never silent substitutes."
         }
 

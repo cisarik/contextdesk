@@ -4,39 +4,121 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 Kirigami.ScrollablePage {
-    title: "Diagnostics"
+    title: ""
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
 
-        Repeater {
-            model: [
-                "bridgeConnected",
-                "degraded",
-                "policyRevision",
-                "lightingConnection",
-                "lightingEnabled",
-                "lightingLabel",
-                "sessionLighting",
-                "hasG213",
-                "identityUpdates",
-                "lightingUpdates",
-                "inventoryCount",
-                "lastError"
-            ]
-            delegate: Kirigami.FormLayout {
-                Controls.Label {
-                    Kirigami.FormData.label: modelData
-                    text: String(app.diagnostics[modelData])
-                }
+        Kirigami.Heading {
+            text: "Diagnostika"
+            level: 2
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.85
+            text: "Technický stav. Bežné stlačenia, titulky okien, USB sériové čísla a surový HID sa nelogujú."
+        }
+
+        Kirigami.FormLayout {
+            wideMode: true
+
+            Controls.Label {
+                Kirigami.FormData.label: "OpenRGB"
+                text: String(app.diagnostics.lightingConnection)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "socket"
+                text: String(app.diagnostics.socketState)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "SDK endpoint"
+                text: String(app.diagnostics.sdkEndpoint)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "hasG213"
+                text: String(app.diagnostics.hasG213)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "lightingEnabled"
+                text: String(app.diagnostics.lightingEnabled)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "lightingLabel"
+                text: String(app.diagnostics.lightingLabel)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "sessionLighting"
+                text: String(app.diagnostics.sessionLighting)
             }
         }
 
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            visible: true
-            type: Kirigami.MessageType.Information
-            text: "Diagnostics are state transitions, error classes, and counters. Ordinary keystrokes, window captions, device serials, and raw HID are never logged."
+        Kirigami.FormLayout {
+            wideMode: true
+
+            Controls.Label {
+                Kirigami.FormData.label: "D-Bus service"
+                text: String(app.diagnostics.dbusService)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "object path"
+                text: String(app.diagnostics.dbusObjectPath)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "interface"
+                text: String(app.diagnostics.dbusInterface)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "bridgeId"
+                text: String(app.diagnostics.bridgeId)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "bridgeConnected"
+                text: String(app.diagnostics.bridgeConnected)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "degraded"
+                text: String(app.diagnostics.degraded)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "policyRevision"
+                text: String(app.diagnostics.policyRevision)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "CurrentIdentity"
+                text: String(app.diagnostics.currentIdentity)
+                wrapMode: Text.WrapAnywhere
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "isSelfWindow"
+                text: String(app.diagnostics.isSelfWindow)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "lastExternalApplication"
+                text: String(app.diagnostics.lastExternalApplication)
+            }
+        }
+
+        Kirigami.FormLayout {
+            wideMode: true
+
+            Controls.Label {
+                Kirigami.FormData.label: "identityUpdates"
+                text: String(app.diagnostics.identityUpdates)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "lightingUpdates"
+                text: String(app.diagnostics.lightingUpdates)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "inventoryCount"
+                text: String(app.diagnostics.inventoryCount)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "lastError"
+                text: String(app.diagnostics.lastError)
+                wrapMode: Text.WordWrap
+            }
         }
 
         RowLayout {
@@ -47,9 +129,7 @@ Kirigami.ScrollablePage {
             Controls.Button {
                 text: "Suspend…"
                 enabled: app.canSuspend()
-                onClicked: {
-                    suspendPrompt.open()
-                }
+                onClicked: suspendPrompt.open()
             }
         }
 
