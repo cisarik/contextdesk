@@ -37,7 +37,7 @@ this project.
   PARTIAL, archived in META. The accepted plan is summarized in `ROADMAP.md` and
   `docs/architecture.md` — read them before proposing new components.
 - M1 `g213-contextdeck-mvp-context-lighting` is **implemented, corrected, and redesigned**
-  (nineteen local commits `1b024e4`..`2bff1c1` on `main`, 3/3 CTest units green,
+  (twenty-one local commits `1b024e4`..`4276f5b` on `main`, 3/3 CTest units green,
   independently rebuilt by the ORCHESTRATOR) and **awaiting COOPERATOR IRL acceptance**
   via `docs/operations.md` + `docs/testing.md` (including the 5-step zone-map probe).
   G2 (five-zone lighting) and G7 (power actions) are decided by that IRL run,

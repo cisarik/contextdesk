@@ -17,8 +17,8 @@ reconciliation.
   PARTIAL is the correct outcome — the architecture is routable, but hardware
   evidence gates remain open.
 - Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented,
-  corrected, and redesigned across four Worker sessions (nineteen commits
-  `1b024e4`..`2bff1c1`), 3/3 CTest units green, independently rebuilt by the
+  corrected, and redesigned across five Worker sessions (twenty-one commits
+  `1b024e4`..`4276f5b`), 3/3 CTest units green, independently rebuilt by the
   ORCHESTRATOR. **Awaiting COOPERATOR IRL acceptance** with `docs/operations.md`
   and `docs/testing.md` (which includes the five-step zone-map probe for
   `docs/hardware/g213-zone-map.md`). M1 merges profiles, KWin context,
