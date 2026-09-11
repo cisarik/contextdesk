@@ -17,12 +17,13 @@ reconciliation.
   PARTIAL is the correct outcome — the architecture is routable, but hardware
   evidence gates remain open.
 - Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented,
-  corrected, and redesigned across three Worker sessions (fifteen commits
-  `1b024e4`..`1781a40`), 3/3 CTest units green, independently rebuilt by the
+  corrected, and redesigned across four Worker sessions (nineteen commits
+  `1b024e4`..`2bff1c1`), 3/3 CTest units green, independently rebuilt by the
   ORCHESTRATOR. **Awaiting COOPERATOR IRL acceptance** with `docs/operations.md`
   and `docs/testing.md` (which includes the five-step zone-map probe for
   `docs/hardware/g213-zone-map.md`). M1 merges profiles, KWin context,
-  non-destructive OpenRGB lighting with device modes, typed power actions,
+  non-destructive OpenRGB lighting with device modes (Wave/Cycle/Breathing/Off/Direct),
+  animation speed control, visual 5-zone gradient generator, typed power actions,
   and a polished task-oriented desktop UI. **It contains no input interception.**
 
 ## Routing decisions taken by the COOPERATOR (this revision)
@@ -173,6 +174,13 @@ One slice, five stages, one commit per stage (all five green):
     clean `Uložiť` actions.
   - **M2 Demotion:** Controls moved behind Pokročilé with inactive M2 banner.
   - **Self-Context Filtering:** Shows `ContextDeck (toto okno)` or last app.
+- **Breathing color/speed & gradient fix (session 04, commits `b3739fc`..`2bff1c1`):**
+  - **Breathing Mode:** Now encodes 1 mode-specific color (`colors[0]`) and clamped
+    speed value into `UpdateMode` payload; no longer breathes invisible black.
+  - **Animation Speed Slider:** Exposes 0-100% speed mapping in UI and schema 2
+    for Wave, Cycle, and Breathing.
+  - **Gradient Apply:** Fixed `ColorDialog` start/end bindings and immediate 5-zone
+    swatch reactive refresh on "Použiť gradient".
 - **Zone map:** `docs/hardware/g213-zone-map.md` established with initial
   hypotheses; empty results table ready for COOPERATOR's 5-step IRL probe.
 - Worker environment note: this coding client needed a clean `PATH` for CMake
