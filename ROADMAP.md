@@ -174,6 +174,61 @@ work and were proven by a throwaway configure+compile+link probe:
 - G213 present: `046d:c336`, `event7` (if00) + `event8` (if01), `hidraw2`/`hidraw3`,
   hidraw `root:root 0600`, event nodes `root:input 0660`
 
+## Backlog — classified COOPERATOR brainstorms
+
+Recorded by the ORCHESTRATOR. Classification only — none of this is
+implementation authority, and none of it may appear in a Worker prompt until it
+is routed as its own logical whole.
+
+### Workspace-aware lighting — future whole `g213-contextdeck-workspace-aware-lighting`
+
+**Need (COOPERATOR):** read from the keyboard which virtual desktop is active
+and which application is focused — for example four zones tracking the desktop
+and one zone tracking the app, with the global preset itself configurable.
+
+**Classification:** future-logical-whole. Not a blocker, not a risk.
+
+**Verified evidence (ORCHESTRATOR, read-only, this host):**
+
+- KWin scripting exposes `currentDesktop`, `desktops`, `desktopChanged`,
+  `currentActivity`, and `activityChanged` (symbols present in the installed
+  `libkwin.so.6` next to `windowActivated` and `callDBus`).
+- `org.kde.KWin` `/VirtualDesktopManager`, interface
+  `org.kde.KWin.VirtualDesktopManager`: properties `count` (u — **3 here**),
+  `rows` (u — 1), `current` (s — a desktop **UUID**, not an index), `desktops`
+  (a(iss) — position, id, name); signals `currentChanged`, `countChanged`,
+  `desktopCreated`, `desktopRemoved`, `desktopDataChanged`.
+- Recommended source: subscribe to that interface **directly** from the session
+  application rather than routing desktop state through the KWin bridge, so
+  desktop context survives bridge loss and yields a stable position plus name.
+
+**Design sketch (unconfirmed, hardware-truthful):**
+
+- Zones become *slots* with roles: `profile_color`, `desktop_indicator`,
+  `app_color`, `static`, `off`, later `mapped_key_accent`. One **global** zone
+  layout; per-application profiles fill the app slot. That keeps per-app presets
+  from fighting over the same five zones.
+- Desktop encoding: position lighting (zone N = desktop N, active bright, others
+  dim) is readable up to four desktops; color-per-desktop scales past that and
+  must degrade honestly when `count` exceeds the available slots.
+- Schema impact: zone entries become objects, so this needs schema version 3
+  with a migration from 2 — the migration mechanism M1/02 builds is what makes
+  that cheap.
+
+**Hard dependencies:** M1/02 (zone model, non-destructive device behavior) and
+the verified control-to-zone map its IRL probe produces, because "zone 1 =
+desktop 1" is only intuitive once we know which physical keys sit in which zone.
+It does **not** depend on the input broker, so it can be sequenced before or
+after M2 — a COOPERATOR choice when the time comes.
+
+**Stated limits:** five zones is a hard ceiling, so desktop, application, and
+accent roles compete for the same slots; there is no per-key anything; there is
+no readback, so only the COOPERATOR's eyes close a claim.
+
+**Same brainstorm, lower priority:** activities awareness, extra native-effect
+parameters, software animation by streaming five colors (explicitly declined for
+now).
+
 ## Explicitly out of scope for v1
 
 Other keyboards and OSes, per-key RGB fiction, macros, scripting languages,
