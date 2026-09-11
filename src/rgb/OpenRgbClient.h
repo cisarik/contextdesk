@@ -3,12 +3,12 @@
 #include "core/Types.h"
 #include "rgb/OpenRgbProtocol.h"
 
-#include <array>
 #include <optional>
 
 #include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QVector>
 
 class QTcpSocket;
 class QTimer;
@@ -35,20 +35,22 @@ public:
 
     void start();
     void stop();
-    void setDesiredColors(const std::array<Rgb, openrgb::kLedCount> &colors);
-    void setDesiredColor(const Rgb &color);
+    void setDesiredState(const DesiredLighting &state);
 
     [[nodiscard]] LightingConnectionState connectionState() const { return m_state; }
     [[nodiscard]] QString lastError() const { return m_lastError; }
     [[nodiscard]] bool lightingEnabled() const { return m_lightingEnabled; }
-    [[nodiscard]] std::array<Rgb, openrgb::kLedCount> desiredColors() const { return m_desired; }
+    [[nodiscard]] DesiredLighting desiredState() const { return m_desired; }
+    [[nodiscard]] LightingMode recordedRestoreMode() const { return m_recordedRestoreMode; }
     [[nodiscard]] bool hasG213() const { return m_deviceIndex.has_value(); }
+    [[nodiscard]] bool hasTakenOver() const { return m_tookOver; }
 
 signals:
     void connectionStateChanged();
     void lastErrorChanged();
     void lightingEnabledChanged();
     void deviceSelectionChanged();
+    void restoreModeChanged();
 
 private:
     void connectToServer();
@@ -65,7 +67,9 @@ private:
     void sendBytes(const QByteArray &bytes);
     void handlePacket(const openrgb::PacketHeader &header, const QByteArray &payload);
     void beginEnumeration();
-    void applyPendingColors();
+    void applyDesiredState();
+    void recordRestoreMode(const openrgb::ControllerSnapshot &snapshot);
+    void sendRestoreThenRelease();
 
     QTcpSocket *m_socket = nullptr;
     QTimer *m_connectTimer = nullptr;
@@ -77,11 +81,16 @@ private:
     QString m_lastError;
     bool m_lightingEnabled = true;
     bool m_pendingSend = false;
+    bool m_tookOver = false;
+    bool m_restoreThenUntouched = false;
     quint32 m_controllerCount = 0;
     quint32 m_nextController = 0;
     quint32 m_serverProtocol = 0;
     std::optional<quint32> m_deviceIndex;
-    std::array<Rgb, openrgb::kLedCount> m_desired{};
+    DesiredLighting m_desired{};
+    std::optional<DesiredLighting> m_lastSent;
+    LightingMode m_recordedRestoreMode = LightingMode::Wave;
+    QVector<openrgb::ControllerMode> m_modes;
     int m_backoffMs = 1000;
 };
 

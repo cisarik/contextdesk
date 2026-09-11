@@ -457,17 +457,7 @@ void AppController::applyLighting()
 
 void AppController::sendLighting(const Lighting &lighting)
 {
-    if (lighting.mode == LightingMode::Untouched) {
-        return;
-    }
-    if (lighting.mode != LightingMode::Direct && lighting.mode != LightingMode::Off) {
-        return;
-    }
-    std::array<Rgb, openrgb::kLedCount> colors = zoneColorsFromPreset(lighting);
-    if (lighting.mode == LightingMode::Off) {
-        colors.fill(Rgb{0, 0, 0});
-    }
-    m_rgb->setDesiredColors(colors);
+    m_rgb->setDesiredState(toDesiredLighting(lighting));
     ++m_lightingUpdates;
     emit diagnosticsChanged();
 }

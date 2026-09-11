@@ -208,6 +208,176 @@ QByteArray encodeSetCustomMode(quint32 deviceIndex)
     return encodeHeader(header);
 }
 
+void appendCountedString(QByteArray &out, const QString &value)
+{
+    const QByteArray utf8 = value.toUtf8();
+    const quint16 length = static_cast<quint16>(utf8.size() + 1);
+    appendU16(out, length);
+    out.append(utf8);
+    out.append('\0');
+}
+
+QByteArray encodeModeData(const ControllerMode &mode, quint32 protocolVersion)
+{
+    QByteArray out;
+    appendCountedString(out, mode.name);
+    appendU32(out, static_cast<quint32>(mode.value));
+    appendU32(out, mode.flags);
+    appendU32(out, mode.speedMin);
+    appendU32(out, mode.speedMax);
+    if (protocolVersion >= 3) {
+        appendU32(out, mode.brightnessMin);
+        appendU32(out, mode.brightnessMax);
+    }
+    appendU32(out, mode.colorsMin);
+    appendU32(out, mode.colorsMax);
+    appendU32(out, mode.speed);
+    if (protocolVersion >= 3) {
+        appendU32(out, mode.brightness);
+    }
+    appendU32(out, mode.direction);
+    appendU32(out, mode.colorMode);
+    const quint16 numColors = static_cast<quint16>(mode.colors.size());
+    appendU16(out, numColors);
+    for (const Rgb &color : mode.colors) {
+        appendU32(out, rgbToOpenRgb(color));
+    }
+    return out;
+}
+
+std::optional<ControllerMode> decodeModeData(QByteArrayView bytes, int &offset, quint32 protocolVersion,
+                                             DecodeError *error)
+{
+    ControllerMode mode;
+    if (!readCountedString(bytes, offset, mode.name, true, error)) {
+        return std::nullopt;
+    }
+    quint32 value = 0;
+    if (!readU32(bytes, offset, value, error) || !readU32(bytes, offset, mode.flags, error)
+        || !readU32(bytes, offset, mode.speedMin, error) || !readU32(bytes, offset, mode.speedMax, error)) {
+        return std::nullopt;
+    }
+    mode.value = static_cast<qint32>(value);
+    if (protocolVersion >= 3
+        && (!readU32(bytes, offset, mode.brightnessMin, error) || !readU32(bytes, offset, mode.brightnessMax, error))) {
+        return std::nullopt;
+    }
+    if (!readU32(bytes, offset, mode.colorsMin, error) || !readU32(bytes, offset, mode.colorsMax, error)
+        || !readU32(bytes, offset, mode.speed, error)) {
+        return std::nullopt;
+    }
+    if (protocolVersion >= 3 && !readU32(bytes, offset, mode.brightness, error)) {
+        return std::nullopt;
+    }
+    if (!readU32(bytes, offset, mode.direction, error) || !readU32(bytes, offset, mode.colorMode, error)) {
+        return std::nullopt;
+    }
+    quint16 numColors = 0;
+    if (!readU16(bytes, offset, numColors, error)) {
+        return std::nullopt;
+    }
+    if (numColors > 32) {
+        setError(error, QStringLiteral("mode color count exceeds bound"));
+        return std::nullopt;
+    }
+    mode.colors.reserve(numColors);
+    for (quint16 i = 0; i < numColors; ++i) {
+        quint32 raw = 0;
+        if (!readU32(bytes, offset, raw, error)) {
+            return std::nullopt;
+        }
+        mode.colors.push_back(openRgbToRgb(raw));
+    }
+    return mode;
+}
+
+QByteArray encodeUpdateMode(quint32 deviceIndex, int modeIndex, const ControllerMode &mode, quint32 protocolVersion)
+{
+    const QByteArray modeData = encodeModeData(mode, protocolVersion);
+    const quint32 dataSize = static_cast<quint32>(sizeof(quint32) + sizeof(qint32) + modeData.size());
+    QByteArray payload;
+    appendU32(payload, dataSize);
+    appendU32(payload, static_cast<quint32>(modeIndex));
+    payload.append(modeData);
+    PacketHeader header;
+    header.deviceIndex = deviceIndex;
+    header.packetId = PacketId::UpdateMode;
+    return encodePacket(header, payload);
+}
+
+QString openRgbModeName(LightingMode mode)
+{
+    switch (mode) {
+    case LightingMode::Direct:
+        return QStringLiteral("Direct");
+    case LightingMode::Wave:
+        return QStringLiteral("Wave");
+    case LightingMode::Cycle:
+        return QStringLiteral("Cycle");
+    case LightingMode::Breathing:
+        return QStringLiteral("Breathing");
+    case LightingMode::Off:
+        return QStringLiteral("Off");
+    case LightingMode::Untouched:
+        return {};
+    }
+    return {};
+}
+
+std::optional<LightingMode> lightingModeFromOpenRgbName(QStringView name)
+{
+    if (name.compare(QLatin1String("Direct"), Qt::CaseInsensitive) == 0) {
+        return LightingMode::Direct;
+    }
+    if (name.compare(QLatin1String("Wave"), Qt::CaseInsensitive) == 0) {
+        return LightingMode::Wave;
+    }
+    if (name.compare(QLatin1String("Cycle"), Qt::CaseInsensitive) == 0) {
+        return LightingMode::Cycle;
+    }
+    if (name.compare(QLatin1String("Breathing"), Qt::CaseInsensitive) == 0) {
+        return LightingMode::Breathing;
+    }
+    if (name.compare(QLatin1String("Off"), Qt::CaseInsensitive) == 0) {
+        return LightingMode::Off;
+    }
+    return std::nullopt;
+}
+
+std::optional<int> findModeIndex(const QVector<ControllerMode> &modes, LightingMode mode)
+{
+    const QString name = openRgbModeName(mode);
+    if (name.isEmpty()) {
+        return std::nullopt;
+    }
+    for (int i = 0; i < modes.size(); ++i) {
+        if (modes.at(i).name.compare(name, Qt::CaseInsensitive) == 0) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<QVector<QByteArray>> encodeDesiredStateFrames(quint32 deviceIndex, const DesiredLighting &desired,
+                                                            const QVector<ControllerMode> &modes,
+                                                            quint32 protocolVersion, DecodeError *error)
+{
+    if (desired.mode == LightingMode::Untouched) {
+        return QVector<QByteArray>{};
+    }
+    const auto index = findModeIndex(modes, desired.mode);
+    if (!index) {
+        setError(error, QStringLiteral("requested lighting mode is not on the controller"));
+        return std::nullopt;
+    }
+    QVector<QByteArray> frames;
+    frames.push_back(encodeUpdateMode(deviceIndex, *index, modes.at(*index), protocolVersion));
+    if (desired.mode == LightingMode::Direct) {
+        frames.push_back(encodeUpdateLeds(deviceIndex, desired.colors));
+    }
+    return frames;
+}
+
 quint32 rgbToOpenRgb(const Rgb &color)
 {
     return static_cast<quint32>(color.b) << 16 | static_cast<quint32>(color.g) << 8 | static_cast<quint32>(color.r);
@@ -266,7 +436,7 @@ std::optional<std::array<Rgb, kLedCount>> decodeUpdateLedsPayload(QByteArrayView
     return colors;
 }
 
-std::optional<ControllerIdentity> parseControllerIdentity(QByteArrayView payload, quint32 protocolVersion,
+std::optional<ControllerSnapshot> parseControllerSnapshot(QByteArrayView payload, quint32 protocolVersion,
                                                           DecodeError *error)
 {
     int offset = 0;
@@ -278,17 +448,17 @@ std::optional<ControllerIdentity> parseControllerIdentity(QByteArrayView payload
         setError(error, QStringLiteral("controller data size out of bounds"));
         return std::nullopt;
     }
-    ControllerIdentity identity;
-    if (!readI32(payload, offset, identity.deviceType, error)) {
+    ControllerSnapshot snapshot;
+    if (!readI32(payload, offset, snapshot.identity.deviceType, error)) {
         return std::nullopt;
     }
-    if (!readCountedString(payload, offset, identity.name, true, error)) {
+    if (!readCountedString(payload, offset, snapshot.identity.name, true, error)) {
         return std::nullopt;
     }
-    if (protocolVersion >= 1 && !readCountedString(payload, offset, identity.vendor, true, error)) {
+    if (protocolVersion >= 1 && !readCountedString(payload, offset, snapshot.identity.vendor, true, error)) {
         return std::nullopt;
     }
-    if (!readCountedString(payload, offset, identity.description, true, error)) {
+    if (!readCountedString(payload, offset, snapshot.identity.description, true, error)) {
         return std::nullopt;
     }
     QString ignored;
@@ -298,10 +468,39 @@ std::optional<ControllerIdentity> parseControllerIdentity(QByteArrayView payload
     if (!readCountedString(payload, offset, ignored, false, error)) {
         return std::nullopt;
     }
-    if (!readCountedString(payload, offset, identity.location, true, error)) {
+    if (!readCountedString(payload, offset, snapshot.identity.location, true, error)) {
         return std::nullopt;
     }
-    return identity;
+
+    quint16 numModes = 0;
+    quint32 activeModeRaw = 0;
+    if (!readU16(payload, offset, numModes, error) || !readU32(payload, offset, activeModeRaw, error)) {
+        return std::nullopt;
+    }
+    if (numModes > 64) {
+        setError(error, QStringLiteral("mode count exceeds bound"));
+        return std::nullopt;
+    }
+    snapshot.activeMode = static_cast<qint32>(activeModeRaw);
+    snapshot.modes.reserve(numModes);
+    for (quint16 i = 0; i < numModes; ++i) {
+        const auto mode = decodeModeData(payload, offset, protocolVersion, error);
+        if (!mode) {
+            return std::nullopt;
+        }
+        snapshot.modes.push_back(*mode);
+    }
+    return snapshot;
+}
+
+std::optional<ControllerIdentity> parseControllerIdentity(QByteArrayView payload, quint32 protocolVersion,
+                                                          DecodeError *error)
+{
+    const auto snapshot = parseControllerSnapshot(payload, protocolVersion, error);
+    if (!snapshot) {
+        return std::nullopt;
+    }
+    return snapshot->identity;
 }
 
 bool isLogitechG213(const ControllerIdentity &identity)

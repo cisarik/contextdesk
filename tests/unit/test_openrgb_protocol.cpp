@@ -1,5 +1,8 @@
 #include "rgb/OpenRgbProtocol.h"
 
+#include <QtEndian>
+#include <cstring>
+
 #include <QTest>
 
 using namespace contextdeck;
@@ -95,6 +98,109 @@ private slots:
         QCOMPARE(decoded->at(4).r, quint8(0xde));
         QCOMPARE(decoded->at(4).b, quint8(0xbe));
         QCOMPARE(rgbToOpenRgb(colors[0]), quint32(0x00332211));
+    }
+
+    void updateModeSerializesWaveAndDirect()
+    {
+        ControllerMode wave;
+        wave.name = QStringLiteral("Wave");
+        wave.value = 3;
+        wave.flags = 0x0b;
+        wave.speedMin = 1000;
+        wave.speedMax = 20000;
+        wave.speed = 8000;
+        wave.direction = 0;
+        wave.colorMode = 0;
+
+        ControllerMode direct;
+        direct.name = QStringLiteral("Direct");
+        direct.value = static_cast<qint32>(0xffff);
+        direct.flags = 1u << 5;
+        direct.colorMode = 1;
+
+        const QByteArray wavePacket = encodeUpdateMode(2, 3, wave, kProtocolVersion);
+        DecodeError error;
+        const auto header = decodeHeader(wavePacket, &error);
+        QVERIFY2(header.has_value(), qPrintable(error.reason));
+        QCOMPARE(header->deviceIndex, quint32(2));
+        QCOMPARE(header->packetId, PacketId::UpdateMode);
+
+        int offset = 0;
+        const QByteArrayView payload(wavePacket.constData() + kHeaderSize, wavePacket.size() - kHeaderSize);
+        quint32 dataSize = 0;
+        quint32 modeIndex = 0;
+        QVERIFY(payload.size() >= 8);
+        std::memcpy(&dataSize, payload.constData(), 4);
+        dataSize = qFromLittleEndian(dataSize);
+        std::memcpy(&modeIndex, payload.constData() + 4, 4);
+        modeIndex = qFromLittleEndian(modeIndex);
+        QCOMPARE(modeIndex, quint32(3));
+        QCOMPARE(dataSize, quint32(payload.size()));
+        offset = 8;
+        const auto decodedWave = decodeModeData(payload, offset, kProtocolVersion, &error);
+        QVERIFY2(decodedWave.has_value(), qPrintable(error.reason));
+        QCOMPARE(decodedWave->name, QStringLiteral("Wave"));
+        QCOMPARE(decodedWave->value, qint32(3));
+
+        const QByteArray directPacket = encodeUpdateMode(2, 0, direct, kProtocolVersion);
+        const auto directHeader = decodeHeader(directPacket, &error);
+        QVERIFY(directHeader.has_value());
+        QCOMPARE(directHeader->packetId, PacketId::UpdateMode);
+        offset = 8;
+        const QByteArrayView directPayload(directPacket.constData() + kHeaderSize, directPacket.size() - kHeaderSize);
+        const auto decodedDirect = decodeModeData(directPayload, offset, kProtocolVersion, &error);
+        QVERIFY2(decodedDirect.has_value(), qPrintable(error.reason));
+        QCOMPARE(decodedDirect->name, QStringLiteral("Direct"));
+    }
+
+    void modeNameMapping()
+    {
+        QCOMPARE(openRgbModeName(LightingMode::Wave), QStringLiteral("Wave"));
+        QCOMPARE(openRgbModeName(LightingMode::Direct), QStringLiteral("Direct"));
+        QVERIFY(openRgbModeName(LightingMode::Untouched).isEmpty());
+        QCOMPARE(lightingModeFromOpenRgbName(QStringLiteral("wave")), LightingMode::Wave);
+        QCOMPARE(lightingModeFromOpenRgbName(QStringLiteral("Off")), LightingMode::Off);
+        QVERIFY(!lightingModeFromOpenRgbName(QStringLiteral("Rainbow")).has_value());
+    }
+
+    void untouchedDesiredStateProducesNoFrame()
+    {
+        QVector<ControllerMode> modes;
+        ControllerMode wave;
+        wave.name = QStringLiteral("Wave");
+        modes.push_back(wave);
+
+        DesiredLighting untouched;
+        DecodeError error;
+        const auto frames = encodeDesiredStateFrames(0, untouched, modes, kProtocolVersion, &error);
+        QVERIFY(frames.has_value());
+        QVERIFY(frames->isEmpty());
+        QVERIFY(error.reason.isEmpty());
+    }
+
+    void desiredDirectEmitsUpdateModeThenUpdateLeds()
+    {
+        QVector<ControllerMode> modes(5);
+        modes[0].name = QStringLiteral("Direct");
+        modes[1].name = QStringLiteral("Off");
+        modes[2].name = QStringLiteral("Cycle");
+        modes[3].name = QStringLiteral("Wave");
+        modes[4].name = QStringLiteral("Breathing");
+
+        DesiredLighting desired;
+        desired.mode = LightingMode::Direct;
+        desired.colors.fill(Rgb{0x10, 0x20, 0x30});
+        DecodeError error;
+        const auto frames = encodeDesiredStateFrames(1, desired, modes, kProtocolVersion, &error);
+        QVERIFY2(frames.has_value(), qPrintable(error.reason));
+        QCOMPARE(frames->size(), 2);
+        const auto modeHeader = decodeHeader(frames->at(0), &error);
+        QVERIFY(modeHeader.has_value());
+        QCOMPARE(modeHeader->packetId, PacketId::UpdateMode);
+        const auto ledHeader = decodeHeader(frames->at(1), &error);
+        QVERIFY(ledHeader.has_value());
+        QCOMPARE(ledHeader->packetId, PacketId::UpdateLeds);
+        QCOMPARE(ledHeader->deviceIndex, quint32(1));
     }
 };
 

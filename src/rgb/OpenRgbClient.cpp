@@ -56,29 +56,35 @@ void OpenRgbClient::start()
 
 void OpenRgbClient::stop()
 {
+    if (m_tookOver && m_state == LightingConnectionState::Ready && m_deviceIndex) {
+        sendRestoreThenRelease();
+    }
     m_reconnectTimer->stop();
     m_connectTimer->stop();
     m_requestTimer->stop();
     m_socket->abort();
     m_buffer.clear();
     m_deviceIndex.reset();
+    m_modes.clear();
+    m_lastSent.reset();
+    m_tookOver = false;
     setState(LightingConnectionState::Disconnected);
 }
 
-void OpenRgbClient::setDesiredColors(const std::array<Rgb, openrgb::kLedCount> &colors)
+void OpenRgbClient::setDesiredState(const DesiredLighting &state)
 {
-    m_desired = colors;
+    if (state.mode == LightingMode::Untouched && m_tookOver) {
+        m_restoreThenUntouched = true;
+        m_desired.mode = m_recordedRestoreMode;
+        m_desired.colors = {};
+    } else {
+        m_restoreThenUntouched = false;
+        m_desired = state;
+    }
     m_pendingSend = true;
     if (!m_coalesceTimer->isActive()) {
         m_coalesceTimer->start(kCoalesceMs);
     }
-}
-
-void OpenRgbClient::setDesiredColor(const Rgb &color)
-{
-    std::array<Rgb, openrgb::kLedCount> colors{};
-    colors.fill(color);
-    setDesiredColors(colors);
 }
 
 void OpenRgbClient::connectToServer()
@@ -89,6 +95,8 @@ void OpenRgbClient::connectToServer()
     }
     m_buffer.clear();
     m_deviceIndex.reset();
+    m_modes.clear();
+    m_lastSent.reset();
     m_controllerCount = 0;
     m_nextController = 0;
     m_serverProtocol = 0;
@@ -178,22 +186,29 @@ void OpenRgbClient::handlePacket(const openrgb::PacketHeader &header, const QByt
             disableLighting(QStringLiteral("no OpenRGB controllers"));
             return;
         }
-        sendBytes(openrgb::encodeControllerDataRequest(0, openrgb::kProtocolVersion));
+        sendBytes(openrgb::encodeControllerDataRequest(0, m_serverProtocol != 0 ? m_serverProtocol
+                                                                                : openrgb::kProtocolVersion));
         m_requestTimer->start(kRequestTimeoutMs);
         break;
     }
     case openrgb::PacketId::RequestControllerData: {
         openrgb::DecodeError error;
-        const auto identity = openrgb::parseControllerIdentity(payload, openrgb::kProtocolVersion, &error);
-        if (!identity) {
+        const auto snapshot = openrgb::parseControllerSnapshot(payload, m_serverProtocol != 0 ? m_serverProtocol
+                                                                                              : openrgb::kProtocolVersion,
+                                                               &error);
+        if (!snapshot) {
             qCWarning(lcRgb) << "skipped controller: bounded parse failed";
-        } else if (openrgb::isLogitechG213(*identity) && !m_deviceIndex.has_value()) {
+        } else if (openrgb::isLogitechG213(snapshot->identity) && !m_deviceIndex.has_value()) {
             m_deviceIndex = header.deviceIndex;
+            m_modes = snapshot->modes;
+            recordRestoreMode(*snapshot);
             qCInfo(lcRgb) << "selected G213 controller index (ephemeral)";
         }
         ++m_nextController;
         if (m_nextController < m_controllerCount) {
-            sendBytes(openrgb::encodeControllerDataRequest(m_nextController, openrgb::kProtocolVersion));
+            sendBytes(openrgb::encodeControllerDataRequest(m_nextController,
+                                                           m_serverProtocol != 0 ? m_serverProtocol
+                                                                                : openrgb::kProtocolVersion));
             m_requestTimer->start(kRequestTimeoutMs);
         } else {
             m_requestTimer->stop();
@@ -201,12 +216,11 @@ void OpenRgbClient::handlePacket(const openrgb::PacketHeader &header, const QByt
                 disableLighting(QStringLiteral("G213 not present in OpenRGB controller list"));
                 return;
             }
-            sendBytes(openrgb::encodeSetCustomMode(*m_deviceIndex));
             setState(LightingConnectionState::Ready);
             m_lightingEnabled = true;
             emit lightingEnabledChanged();
             emit deviceSelectionChanged();
-            applyPendingColors();
+            applyDesiredState();
         }
         break;
     }
@@ -225,6 +239,8 @@ void OpenRgbClient::beginEnumeration()
     m_controllerCount = 0;
     m_nextController = 0;
     m_deviceIndex.reset();
+    m_modes.clear();
+    m_lastSent.reset();
     openrgb::PacketHeader header;
     header.packetId = openrgb::PacketId::RequestControllerCount;
     header.payloadSize = 0;
@@ -232,19 +248,92 @@ void OpenRgbClient::beginEnumeration()
     m_requestTimer->start(kRequestTimeoutMs);
 }
 
-void OpenRgbClient::applyPendingColors()
+void OpenRgbClient::recordRestoreMode(const openrgb::ControllerSnapshot &snapshot)
+{
+    LightingMode recorded = LightingMode::Wave;
+    if (snapshot.activeMode >= 0 && snapshot.activeMode < snapshot.modes.size()) {
+        const auto named = openrgb::lightingModeFromOpenRgbName(snapshot.modes.at(snapshot.activeMode).name);
+        if (named && isDeviceLightingMode(*named) && *named != LightingMode::Direct) {
+            recorded = *named;
+        }
+    }
+    if (m_recordedRestoreMode != recorded) {
+        m_recordedRestoreMode = recorded;
+        emit restoreModeChanged();
+    }
+}
+
+void OpenRgbClient::sendRestoreThenRelease()
+{
+    DesiredLighting restore;
+    restore.mode = m_recordedRestoreMode;
+    openrgb::DecodeError error;
+    const auto frames = openrgb::encodeDesiredStateFrames(*m_deviceIndex, restore, m_modes,
+                                                          m_serverProtocol != 0 ? m_serverProtocol
+                                                                                : openrgb::kProtocolVersion,
+                                                          &error);
+    if (frames) {
+        for (const QByteArray &frame : *frames) {
+            sendBytes(frame);
+        }
+    }
+    m_tookOver = false;
+    m_lastSent.reset();
+}
+
+void OpenRgbClient::applyDesiredState()
 {
     if (m_state != LightingConnectionState::Ready || !m_deviceIndex || !m_lightingEnabled) {
         return;
     }
-    sendBytes(openrgb::encodeUpdateLeds(*m_deviceIndex, m_desired));
+    if (m_desired.mode == LightingMode::Untouched) {
+        m_pendingSend = false;
+        return;
+    }
+    if (m_lastSent && *m_lastSent == m_desired && !m_restoreThenUntouched) {
+        m_pendingSend = false;
+        return;
+    }
+    openrgb::DecodeError error;
+    const auto frames = openrgb::encodeDesiredStateFrames(*m_deviceIndex, m_desired, m_modes,
+                                                          m_serverProtocol != 0 ? m_serverProtocol
+                                                                                : openrgb::kProtocolVersion,
+                                                          &error);
+    if (!frames) {
+        qCWarning(lcRgb) << "lighting encode refused:" << error.reason;
+        m_pendingSend = false;
+        return;
+    }
+    if (frames->isEmpty()) {
+        m_pendingSend = false;
+        return;
+    }
+    const bool allZeroDirect = m_desired.mode == LightingMode::Direct
+        && m_desired.colors[0] == Rgb{} && m_desired.colors[1] == Rgb{} && m_desired.colors[2] == Rgb{}
+        && m_desired.colors[3] == Rgb{} && m_desired.colors[4] == Rgb{};
+    if (allZeroDirect) {
+        qCWarning(lcRgb) << "refusing Direct with all-zero colors";
+        m_pendingSend = false;
+        return;
+    }
+    for (const QByteArray &frame : *frames) {
+        sendBytes(frame);
+    }
+    m_lastSent = m_desired;
+    m_tookOver = true;
     m_pendingSend = false;
+    if (m_restoreThenUntouched) {
+        m_desired = DesiredLighting{};
+        m_tookOver = false;
+        m_restoreThenUntouched = false;
+        m_lastSent.reset();
+    }
 }
 
 void OpenRgbClient::onCoalesceTimeout()
 {
     if (m_pendingSend) {
-        applyPendingColors();
+        applyDesiredState();
     }
 }
 

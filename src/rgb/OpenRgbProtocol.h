@@ -7,6 +7,7 @@
 
 #include <QByteArray>
 #include <QString>
+#include <QVector>
 
 namespace contextdeck::openrgb {
 
@@ -25,6 +26,7 @@ enum class PacketId : quint32 {
     DeviceListUpdated = 100,
     UpdateLeds = 1050,
     SetCustomMode = 1100,
+    UpdateMode = 1101,
 };
 
 struct PacketHeader {
@@ -45,6 +47,33 @@ struct ControllerIdentity {
     int deviceType = -1;
 };
 
+struct ControllerMode {
+    QString name;
+    qint32 value = 0;
+    quint32 flags = 0;
+    quint32 speedMin = 0;
+    quint32 speedMax = 0;
+    quint32 brightnessMin = 0;
+    quint32 brightnessMax = 0;
+    quint32 colorsMin = 0;
+    quint32 colorsMax = 0;
+    quint32 speed = 0;
+    quint32 brightness = 0;
+    quint32 direction = 0;
+    quint32 colorMode = 0;
+    QVector<Rgb> colors;
+};
+
+struct ControllerSnapshot {
+    ControllerIdentity identity;
+    qint32 activeMode = 0;
+    QVector<ControllerMode> modes;
+};
+
+[[nodiscard]] QString openRgbModeName(LightingMode mode);
+[[nodiscard]] std::optional<LightingMode> lightingModeFromOpenRgbName(QStringView name);
+[[nodiscard]] std::optional<int> findModeIndex(const QVector<ControllerMode> &modes, LightingMode mode);
+
 [[nodiscard]] QByteArray encodeHeader(const PacketHeader &header);
 [[nodiscard]] std::optional<PacketHeader> decodeHeader(QByteArrayView bytes, DecodeError *error = nullptr);
 [[nodiscard]] QByteArray encodePacket(const PacketHeader &header, QByteArrayView payload);
@@ -60,11 +89,24 @@ struct ControllerIdentity {
 [[nodiscard]] QByteArray encodeUpdateLeds(quint32 deviceIndex, const std::array<Rgb, kLedCount> &colors);
 [[nodiscard]] std::optional<std::array<Rgb, kLedCount>> decodeUpdateLedsPayload(QByteArrayView payload,
                                                                                DecodeError *error = nullptr);
+[[nodiscard]] QByteArray encodeModeData(const ControllerMode &mode, quint32 protocolVersion);
+[[nodiscard]] std::optional<ControllerMode> decodeModeData(QByteArrayView bytes, int &offset, quint32 protocolVersion,
+                                                           DecodeError *error = nullptr);
+[[nodiscard]] QByteArray encodeUpdateMode(quint32 deviceIndex, int modeIndex, const ControllerMode &mode,
+                                          quint32 protocolVersion);
+[[nodiscard]] std::optional<QVector<QByteArray>> encodeDesiredStateFrames(quint32 deviceIndex,
+                                                                         const DesiredLighting &desired,
+                                                                         const QVector<ControllerMode> &modes,
+                                                                         quint32 protocolVersion,
+                                                                         DecodeError *error = nullptr);
 
 [[nodiscard]] quint32 rgbToOpenRgb(const Rgb &color);
 [[nodiscard]] Rgb openRgbToRgb(quint32 value);
 
 [[nodiscard]] std::optional<ControllerIdentity> parseControllerIdentity(QByteArrayView payload,
+                                                                        quint32 protocolVersion,
+                                                                        DecodeError *error = nullptr);
+[[nodiscard]] std::optional<ControllerSnapshot> parseControllerSnapshot(QByteArrayView payload,
                                                                         quint32 protocolVersion,
                                                                         DecodeError *error = nullptr);
 [[nodiscard]] bool isLogitechG213(const ControllerIdentity &identity);
