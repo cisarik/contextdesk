@@ -96,6 +96,10 @@ add_library(contextdeck_broker_core STATIC
     src/broker/IdentityMatcher.cpp
     src/broker/KeyLedger.cpp
     src/broker/Acquisition.cpp
+    src/broker/FakeSink.cpp
+    src/broker/FakeSource.cpp
+    src/broker/RealSink.cpp
+    src/broker/ForwardingEngine.cpp
 )
 target_include_directories(contextdeck_broker_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_broker_core PUBLIC PkgConfig::LIBEVDEV PkgConfig::LIBUDEV)
@@ -128,3 +132,8 @@ add_executable(test_broker_ledger tests/unit/test_broker_ledger.cpp)
 target_link_libraries(test_broker_ledger PRIVATE contextdeck_broker_core)
 set_target_properties(test_broker_ledger PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 add_test(NAME test_broker_ledger COMMAND test_broker_ledger)
+
+add_executable(test_broker_forwarding tests/unit/test_broker_forwarding.cpp)
+target_link_libraries(test_broker_forwarding PRIVATE contextdeck_broker_core)
+set_target_properties(test_broker_forwarding PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_broker_forwarding COMMAND test_broker_forwarding)

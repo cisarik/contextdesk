@@ -56,4 +56,16 @@ struct BrokerCounters {
     uint64_t keysDownSynthetic = 0;
 };
 
+struct InputEvent {
+    enum class Kind { Key, Led, Msc, SynReport, SynDropped } kind = Kind::Key;
+    uint16_t code = 0;
+    int32_t value = 0;
+};
+
+struct RecordedEvent {
+    uint16_t type = 0;
+    uint16_t code = 0;
+    int32_t value = 0;
+};
+
 } // namespace contextdeck::broker
