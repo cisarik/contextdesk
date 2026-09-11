@@ -296,7 +296,9 @@ Hero presentation:
 | `wave` / `cycle` / `breathing` | Effect badge; strips are not claimed as measured per-zone colors |
 | `off` | Solid black strips + `Off` (black means off) |
 
-Zone swatches open a system `ColorDialog`. Hex text fields are an advanced
+Zone swatches, Breathing color, and gradient start/end open a system
+`ColorDialog`. The accepted color is stored as `#rrggbb` (an 8-digit
+`#aarrggbb` alpha prefix is discarded). Hex text fields are an advanced
 option on Farby, not on Overview. The gradient helper stores start and end as
 `#rrggbb` on the editor (not on the dialog), shows a live five-band preview as
 those colors change, and **Použiť gradient** immediately paints the five zone

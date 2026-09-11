@@ -48,9 +48,10 @@ Reload the KWin script after this tree's bridge change so heartbeat
 
 3. **Restore device default**  
    In Settings → **Farby**, set the global preset to Direct with a saturated
-   color (click a zone swatch, or enable **Pokročilé: hex** and enter
-   `#ff0000` on all five zones) and **Uložiť**. Confirm the board shows that
-   color. Tray, or Overview overflow → **Restore device default**.  
+   color (click a zone swatch — a system ColorDialog must open; pick a color
+   and accept — or enable **Pokročilé: hex** and enter `#ff0000` on all five
+   zones) and **Uložiť**. Confirm the board shows that color. Tray, or Overview
+   overflow → **Restore device default**.  
    **Expect:** the previously recorded device mode returns (Wave unless you
    saw a different non-Direct effect at connect). The Hero returns to hollow
    strips / `Device default (Wave)` and stops touching the device.  
@@ -70,7 +71,9 @@ Reload the KWin script after this tree's bridge change so heartbeat
    black — that means Off); Direct is a static five-zone color. The status
    sentence names that preset, never Automatic.  
    **Fail:** a named preset does nothing, Breathing stays black/invisible, speed
-   does not change the animation, or Direct leaves all zones black.
+   does not change the animation, Direct leaves all zones black, or clicking
+   **Farba dýchania** does not open a ColorDialog (stderr
+   `Cannot assign to non-existent property` is this defect).
 
 5. **Per-zone gradient**  
    Global preset Direct on **Farby**. Pick Start Color and End Color (the live
@@ -81,8 +84,9 @@ Reload the KWin script after this tree's bridge change so heartbeat
    **Expect:** five distinct bands, left → numpad, matching the labelled
    swatches: Left Area, Middle Area, Right Area, Arrow and Homekeys, Numpad.
    Not per-key RGB.  
-   **Fail:** swatches do not change on **Použiť gradient**, only one color, or
-   more than five independently colored keys.
+   **Fail:** Start/End clicks do not open a ColorDialog, swatches do not change
+   on **Použiť gradient**, only one color, or more than five independently
+   colored keys.
 
 6. **Per-application preset on focus change**  
    On **Aplikácie**, add a profile from the inventory picker. Give it a
