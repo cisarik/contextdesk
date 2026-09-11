@@ -16,12 +16,14 @@ reconciliation.
   Planner report 01/01 reconciled and accepted as **PARTIAL**, archived in META.
   PARTIAL is the correct outcome — the architecture is routable, but hardware
   evidence gates remain open.
-- Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented in
-  five local commits (`1b024e4`..`d04b126`), 3/3 CTest units green, independently
-  rebuilt by the ORCHESTRATOR. **Awaiting COOPERATOR IRL acceptance** with
-  `docs/operations.md` (host enablement) and `docs/testing.md` (9-step script).
-  M1 merges the former V1+V2+V3 plus the typed power-action IDs from V7 into one
-  physically testable product. **It contains no input interception.**
+- Current whole: **M1 `g213-contextdeck-mvp-context-lighting`** — implemented
+  and corrected across two Worker sessions (ten commits `1b024e4`..`042fa15`),
+  3/3 CTest units green, independently rebuilt by the ORCHESTRATOR. **Awaiting
+  COOPERATOR IRL acceptance** with `docs/operations.md` (host enablement) and
+  `docs/testing.md` (which includes the five-step zone-map probe for
+  `docs/hardware/g213-zone-map.md`). M1 merges profiles, KWin context,
+  non-destructive OpenRGB lighting with device modes, and typed power actions.
+  **It contains no input interception.**
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -147,11 +149,21 @@ One slice, five stages, one commit per stage (all five green):
 - Not wired in M1 (accepted, deferred): KService/desktop-file friendly names in
   the app picker (labels use `desktop_file_name`, then `resource_class`), and
   KConfig window-geometry persistence.
-- **Known IRL suspect:** `KScreen::Dpms` is constructed on the stack inside
-  `PowerActions::displaysOff()` and destroyed immediately after `switchMode()`.
-  DPMS is asynchronous (`hasPendingChanges`), so if step 7 of the IRL script
-  does nothing, this lifetime is the first thing to fix — make the helper a
-  long-lived member.
+- **Defect closeouts (Worker session 02 / exchange 01, commits `4416f4b`..`042fa15`):**
+  - **D1 (destructive lighting on connect):** `OpenRgbClient` no longer sends
+    `SETCUSTOMMODE` on connect. `untouched` emits no frames. Connect is
+    completely non-destructive; device keeps its firmware effect.
+  - **D2 (stack `KScreen::Dpms`):** `PowerActions` now owns a long-lived
+    `KScreen::Dpms` member.
+  - **D3 (empty context after app restart):** KWin bridge now sends a full
+    `ContextReport` on every 5 s heartbeat. Receiver refreshes context without
+    policy churn.
+- **Expressive lighting added (session 02):** Schema 2 with in-memory v1 migration,
+  device modes (`wave`, `cycle`, `breathing`, `off`, `direct`), `UpdateMode`
+  packet 1101, five named zone swatches, gradient helper, per-app presets,
+  tray **Restore device default**, and unverified zone-accent mechanism.
+- **Zone map:** `docs/hardware/g213-zone-map.md` established with initial
+  hypotheses; empty results table ready for COOPERATOR's 5-step IRL probe.
 - Worker environment note: this coding client needed a clean `PATH` for CMake
   (`CMAKE_ROOT`). The ORCHESTRATOR's independent rebuild in a normal shell
   configured, built, and passed 3/3 without that workaround.

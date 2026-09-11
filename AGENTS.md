@@ -36,12 +36,13 @@ this project.
   `g213-contextdeck-foundation-architecture`) was reconciled and accepted as
   PARTIAL, archived in META. The accepted plan is summarized in `ROADMAP.md` and
   `docs/architecture.md` — read them before proposing new components.
-- M1 `g213-contextdeck-mvp-context-lighting` is **implemented** (five local
-  commits `1b024e4`..`d04b126` on `main`, 3/3 CTest units green, independently
-  rebuilt by the ORCHESTRATOR) and **awaiting COOPERATOR IRL acceptance** via
-  `docs/operations.md` + `docs/testing.md`. G2 (five-zone lighting) and G7
-  (power actions) are decided by that IRL run, not by code review.
-- The next route is chosen after IRL results: an M1 bounded correction exchange,
+- M1 `g213-contextdeck-mvp-context-lighting` is **implemented and corrected**
+  (ten local commits `1b024e4`..`042fa15` on `main`, 3/3 CTest units green,
+  independently rebuilt by the ORCHESTRATOR) and **awaiting COOPERATOR IRL acceptance**
+  via `docs/operations.md` + `docs/testing.md` (including the 5-step zone-map probe).
+  G2 (five-zone lighting) and G7 (power actions) are decided by that IRL run,
+  not by code review.
+- The next route is chosen after IRL results: an M1 final acceptance reconciliation,
   or **M2 `g213-contextdeck-input-passthrough-safety`**, which still requires the
   G1 physical-control probe and the reserved event-node access grant. **No input
   interception exists in the tree today, and none may be added outside M2.**
