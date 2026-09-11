@@ -163,9 +163,11 @@ Durable rules for this project:
   acknowledges its revision; a stale GUI cannot keep the broker armed;
   restarts start disarmed; hardware reconnect never replays actions; a crash
   never triggers an automatic re-grab loop.
-- The systemd watchdog is fed by the real input event loop (a blocked loop
-  must not look healthy via a separate thread). 2 s is a proposed target, not
-  a measured value.
+- The systemd watchdog (`WatchdogSec=2`) is fed from the broker event-loop
+  thread with `sd_notify("WATCHDOG=1")` after each wait return (including idle
+  timeout) and after that iteration's ingest work. A hung wait or hung ingest
+  stops feeding. There is no helper thread or detached timer. 2 s is
+  configured, not a measured recovery time on this kernel (G4).
 - Recovery order: disarm → release synthetic state → destroy the virtual
   device → release real-device ownership → real keyboard stays usable.
   Kernel close behavior (grab release on evdev close, uinput teardown on

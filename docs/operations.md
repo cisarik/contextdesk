@@ -233,8 +233,10 @@ sudo systemctl daemon-reload
 
 Do **not** `systemctl enable contextdeck-broker`. Do **not**
 `systemctl start contextdeck-broker`. The unit has no `[Install]` section.
-The binary does not yet send `sd_notify` or feed the 2 s watchdog (S3);
-starting it now fails closed.
+The binary now sends `READY=1` and feeds `WATCHDOG=1` from its idle event
+loop (S3). It still does not grab devices or accept a session lease (S4).
+Starting it would idle-run under notify/watchdog without grabbing; that
+remains forbidden until S4/S5 and G4.
 
 `ExecStart` is `/usr/bin/contextdeck-broker`. Until there is an install
 prefix, leave that path as documentation; do not start the unit from a
@@ -283,6 +285,81 @@ sudo groupdel contextdeck-broker
 
 `userdel` may already remove the matching group; ignore `groupdel` if the
 group is gone. Unplug/replug the G213 if event-node ownership stays stale.
+
+## 7. Crash, hang, watchdog, and TTY recovery
+
+This is the documented recovery path for the input broker. It does **not**
+require running the unit or grabbing the G213. Do **not** start or enable
+`contextdeck-broker.service` from this section. Real-keyboard proof of
+FD-close ungrab on this kernel is G4 / S5, not S3.
+
+### What the broker does
+
+- `Type=notify` plus `WatchdogSec=2`. `Restart=no` (a crash must not re-grab).
+- `READY=1` is sent once the single-thread event loop is running.
+- `WATCHDOG=1` is sent from **that same thread** after `epoll_wait` (or the
+  test wait) returns, including idle timeout, and after that iteration's
+  ingest work returns. Half of 2 s is a 1 s wait.
+- There is no helper thread and no detached timer. If wait or ingest blocks,
+  watchdog notifications stop and systemd can detect the hang.
+- Orderly stop (SIGTERM/SIGINT via signalfd) leaves the loop and sends
+  `STOPPING=1`. Crash / watchdog abort / SIGKILL do not run userspace
+  cleanup; recovery relies on kernel close of any held descriptors.
+
+### Hang (watchdog)
+
+A hung event loop stops feeding `WATCHDOG=1`. systemd then aborts the
+process (default watchdog signal is `SIGABRT`) after `WatchdogSec=2`.
+Because `Restart=no`, the unit stays dead. If the broker had been armed
+(later S4/S5), descriptor close is what must return the physical keyboard;
+that close-on-death behavior is kernel-side and still needs G4 on this
+host.
+
+S3 proves the feed/hang coupling in CTest (`test_broker_watchdog`) and
+`contextdeck-broker watchdog-selftest`. It does **not** start the system
+unit.
+
+### Crash
+
+`SIGTERM` is the orderly stop. `SIGKILL` and `SIGABRT` (watchdog) skip
+userspace teardown. The planned armed teardown order remains ungrab
+physical first, then balanced synthetic releases, then destroy the virtual
+device. A dead process cannot run that sequence; G4 must show that closing
+the evdev and uinput descriptors is enough.
+
+Do not enable autostart until that G4 evidence exists (handout §29).
+
+### TTY / second-seat recovery
+
+Do not assume Ctrl+Alt+Fn or SysRq still work **from the G213** while it is
+grabbed. If the broker is hung and the G213 is silent, recover from a
+path that does not need that keyboard:
+
+1. Another physical keyboard on the same seat, or
+2. SSH / another machine, or
+3. A TTY already reachable without the G213.
+
+Then, only when recovering a **running** broker (not during S3):
+
+```sh
+# Recovery — COOPERATOR-run, and only if the unit was started later.
+# Do not run this to "try S3".
+systemctl stop contextdeck-broker.service
+# if stop cannot complete because the unit was never started, that is success
+```
+
+If systemd already watchdog-aborted the process, `systemctl status` should
+show inactive/failed and the keyboard should type again after descriptor
+close. Do not `systemctl enable`. Do not `systemctl start` to "test
+recovery". Do not change input-remapper.
+
+If stop is not enough, `kill -TERM` then `kill -KILL` the `contextdeck-broker`
+PID from the recovery path. Unplug/replug the G213 only as a last resort.
+
+After recovery, confirm typing on a text field. Do not paste key names,
+scan codes, or raw event dumps into notes.
+
+More procedure detail: `docs/testing-m2.md`.
 
 ## Logs to keep private
 

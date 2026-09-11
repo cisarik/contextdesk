@@ -17,6 +17,7 @@ find_package(KF6Screen REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVDEV REQUIRED IMPORTED_TARGET libevdev)
 pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
+pkg_check_modules(LIBSYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
 
 add_library(contextdeck_core STATIC
     src/core/ControlCatalog.cpp
@@ -103,10 +104,14 @@ add_library(contextdeck_broker_core STATIC
     src/broker/FakeSource.cpp
     src/broker/RealSink.cpp
     src/broker/ForwardingEngine.cpp
+    src/broker/Watchdog.cpp
+    src/broker/EventLoop.cpp
+    src/broker/IdleWait.cpp
     src/broker/Selftest.cpp
+    src/broker/WatchdogSelftest.cpp
 )
 target_include_directories(contextdeck_broker_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(contextdeck_broker_core PUBLIC PkgConfig::LIBEVDEV PkgConfig::LIBUDEV)
+target_link_libraries(contextdeck_broker_core PUBLIC PkgConfig::LIBEVDEV PkgConfig::LIBUDEV PkgConfig::LIBSYSTEMD)
 
 add_executable(contextdeck-broker src/broker/main.cpp)
 target_compile_definitions(contextdeck-broker PRIVATE CONTEXTDECK_VERSION="${PROJECT_VERSION}")
@@ -146,3 +151,8 @@ add_executable(test_broker_acquisition tests/unit/test_broker_acquisition.cpp)
 target_link_libraries(test_broker_acquisition PRIVATE contextdeck_broker_core)
 set_target_properties(test_broker_acquisition PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 add_test(NAME test_broker_acquisition COMMAND test_broker_acquisition)
+
+add_executable(test_broker_watchdog tests/unit/test_broker_watchdog.cpp)
+target_link_libraries(test_broker_watchdog PRIVATE contextdeck_broker_core)
+set_target_properties(test_broker_watchdog PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_broker_watchdog COMMAND test_broker_watchdog)

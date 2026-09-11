@@ -7,6 +7,11 @@ Documentation=https://github.com/cisarik/contextdesk
 Type=notify
 User=contextdeck-broker
 Group=contextdeck-broker
+# Fed from the broker event-loop thread only: READY=1 once the loop is
+# running, WATCHDOG=1 after each wait return (including idle timeout) and
+# after that iteration's work. A hung wait or hung ingest stops feeding.
+# There is no notify helper thread. Do not raise this without changing the
+# loop timeout (half of WatchdogSec).
 WatchdogSec=2
 Restart=no
 LimitCORE=0
