@@ -2,6 +2,7 @@
 
 #include "actions/PowerActions.h"
 #include "app/AppController.h"
+#include "app/BrokerIpcClient.h"
 #include "app/SettingsHost.h"
 #include "app/TrayController.h"
 #include "context/ContextReceiver.h"
@@ -31,6 +32,7 @@ private:
     AppController m_controller;
     TrayController m_tray;
     SettingsHost m_settings;
+    BrokerIpcClient m_brokerIpc;
 };
 
 } // namespace contextdeck

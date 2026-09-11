@@ -53,13 +53,16 @@ add_executable(contextdeck
     src/app/AppController.cpp
     src/app/TrayController.cpp
     src/app/SettingsHost.cpp
+    src/app/BrokerIpcClient.cpp
 )
 target_link_libraries(contextdeck PRIVATE
     contextdeck_context
     contextdeck_rgb
     contextdeck_actions
+    contextdeck_ipc
     Qt6::Widgets
     Qt6::Gui
+    Qt6::Network
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
@@ -92,6 +95,12 @@ qt_add_qml_module(contextdeck
     NO_RESOURCE_TARGET_PATH
 )
 
+add_library(contextdeck_ipc STATIC
+    src/broker/IpcProtocol.cpp
+)
+target_include_directories(contextdeck_ipc PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set_target_properties(contextdeck_ipc PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+
 add_library(contextdeck_broker_core STATIC
     src/broker/Logger.cpp
     src/broker/IdentityMatcher.cpp
@@ -109,9 +118,10 @@ add_library(contextdeck_broker_core STATIC
     src/broker/IdleWait.cpp
     src/broker/Selftest.cpp
     src/broker/WatchdogSelftest.cpp
+    src/broker/SessionIpc.cpp
 )
 target_include_directories(contextdeck_broker_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(contextdeck_broker_core PUBLIC PkgConfig::LIBEVDEV PkgConfig::LIBUDEV PkgConfig::LIBSYSTEMD)
+target_link_libraries(contextdeck_broker_core PUBLIC contextdeck_ipc PkgConfig::LIBEVDEV PkgConfig::LIBUDEV PkgConfig::LIBSYSTEMD)
 
 add_executable(contextdeck-broker src/broker/main.cpp)
 target_compile_definitions(contextdeck-broker PRIVATE CONTEXTDECK_VERSION="${PROJECT_VERSION}")
@@ -156,3 +166,8 @@ add_executable(test_broker_watchdog tests/unit/test_broker_watchdog.cpp)
 target_link_libraries(test_broker_watchdog PRIVATE contextdeck_broker_core)
 set_target_properties(test_broker_watchdog PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 add_test(NAME test_broker_watchdog COMMAND test_broker_watchdog)
+
+add_executable(test_broker_ipc tests/unit/test_broker_ipc.cpp)
+target_link_libraries(test_broker_ipc PRIVATE contextdeck_broker_core)
+set_target_properties(test_broker_ipc PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+add_test(NAME test_broker_ipc COMMAND test_broker_ipc)

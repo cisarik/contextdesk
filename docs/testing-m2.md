@@ -32,6 +32,18 @@ ctest --test-dir build --output-on-failure
 - Fake-source ingest on the loop still does 1:1 forwarding with SYN pairing
   and leaves the ledger idle.
 
+`test_broker_ipc` checks (no G213, no `/dev/uinput`):
+
+- Frame codec bounds and rejection of client-supplied UID tokens.
+- `SO_PEERCRED` acceptance of the same-UID peer and rejection of a wrong UID,
+  failed creds, and uid 0.
+- Lease acquire, duplicate-lease rejection, explicit `ARM`/`DISARM`.
+- Unauthorized `ARM`/`DISARM` without a lease or from a second peer.
+- Disconnect, malformed length, lease expiry, and `shutdown` all disarm with
+  ungrab-first teardown on `FakeGrabber`.
+- Listen/accept on a temporary Unix socket with mode `0666` does not arm
+  before authentication.
+
 `contextdeck-broker watchdog-selftest` is the same coupling in the broker
 binary. It does not open devices and does not use `NOTIFY_SOCKET`.
 
@@ -86,9 +98,10 @@ death; recovery requires rebooting as the first step.
 
 ## What this file does not cover
 
-Session IPC and leases (S4). Real grab, pass-through fidelity,
-input-remapper vs the virtual device, and kernel ungrab-on-close on this
-host (S5 / G4). Autostart (G8) stays forbidden until those pass.
+Real grab, pass-through fidelity, input-remapper vs the virtual device, and
+kernel ungrab-on-close on this host (S5 / G4). Autostart (G8) stays
+forbidden until those pass. Session IPC (S4) is covered by `test_broker_ipc`
+and `docs/operations.md` §8; do not start the broker unit to exercise it.
 
 Never paste ordinary typed text, key names, scan codes, raw event
 payloads, USB serials, or per-event timing into reports.

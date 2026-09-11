@@ -28,8 +28,10 @@ process live elsewhere; operations and IRL tests have their own owners.
 4. Lighting client applies the resolved **desired state** (a device mode plus,
    for `direct`, five zone colors) through OpenRGB SDK protocol 5 on loopback.
    `untouched` produces no device traffic.
-5. The input broker (later whole) will consume the same assignments. Until it
-   exists, `emit_shortcut` values are stored and shown, not executed.
+5. The input broker consumes the same assignments in a later whole. Until
+   remapping is armed, `emit_shortcut` values are stored and shown, not
+   executed. S4 session IPC can lease/arm the broker; M2 still has no mapped
+   actions (pass-through only once S5 grabs).
 
 ## Assignment states
 

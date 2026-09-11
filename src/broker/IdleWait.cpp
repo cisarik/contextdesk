@@ -55,14 +55,34 @@ SignalEpollWait::~SignalEpollWait()
   }
 }
 
+bool SignalEpollWait::addFd(int fd)
+{
+  if (!valid() || fd < 0) {
+    return false;
+  }
+  epoll_event ev{};
+  ev.events = EPOLLIN | EPOLLRDHUP;
+  ev.data.fd = fd;
+  return epoll_ctl(epfd_, EPOLL_CTL_ADD, fd, &ev) == 0;
+}
+
+void SignalEpollWait::removeFd(int fd)
+{
+  if (!valid() || fd < 0) {
+    return;
+  }
+  epoll_ctl(epfd_, EPOLL_CTL_DEL, fd, nullptr);
+}
+
 WaitOutcome SignalEpollWait::wait(int timeoutMs)
 {
+  readyFds_.clear();
   if (!valid()) {
     return WaitOutcome::Stop;
   }
 
-  epoll_event ev{};
-  const int rc = epoll_wait(epfd_, &ev, 1, timeoutMs);
+  epoll_event evs[16];
+  const int rc = epoll_wait(epfd_, evs, 16, timeoutMs);
   if (rc < 0) {
     if (errno == EINTR) {
       return WaitOutcome::Progress;
@@ -72,10 +92,20 @@ WaitOutcome SignalEpollWait::wait(int timeoutMs)
   if (rc == 0) {
     return WaitOutcome::Progress;
   }
-  if ((ev.events & EPOLLIN) != 0 && ev.data.fd == sigfd_) {
-    signalfd_siginfo info{};
-    const ssize_t n = ::read(sigfd_, &info, sizeof(info));
-    (void)n;
+
+  bool stop = false;
+  for (int i = 0; i < rc; ++i) {
+    const int fd = evs[i].data.fd;
+    if (fd == sigfd_) {
+      signalfd_siginfo info{};
+      const ssize_t n = ::read(sigfd_, &info, sizeof(info));
+      (void)n;
+      stop = true;
+      continue;
+    }
+    readyFds_.push_back(fd);
+  }
+  if (stop) {
     return WaitOutcome::Stop;
   }
   return WaitOutcome::Progress;

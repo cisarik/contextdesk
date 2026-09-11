@@ -1,7 +1,7 @@
 [Unit]
 Description=ContextDeck input broker (G213 passthrough)
 Documentation=https://github.com/cisarik/contextdesk
-# Starts disarmed and idle; later S4 leases arm it. Never enabled, never autostart.
+# Starts disarmed. An authenticated session lease may arm it. Never enabled, never autostart.
 
 [Service]
 Type=notify
@@ -25,7 +25,10 @@ DevicePolicy=closed
 DeviceAllow=/dev/uinput rw
 DeviceAllow=char-input rw
 RuntimeDirectory=contextdeck
-RuntimeDirectoryMode=0750
+# Traversable by the seat user without adding that user to group
+# contextdeck-broker (that group owns G213 event nodes). The socket inode
+# is chmod 0666; authorization is SO_PEERCRED + logind, not file mode.
+RuntimeDirectoryMode=0755
 # COOPERATOR adjusts the path until an install prefix exists.
 ExecStart=/usr/bin/contextdeck-broker
 # No [Install] section: do not enable this unit.

@@ -117,9 +117,16 @@ this document grants none.
 - **Important:** the G213's RGB HID interface also carries keyboard reports —
   granting hidraw access to the session account "for lighting" would expand
   input visibility. The external RGB service gets its own restricted identity.
-- Broker IPC: authenticated system-bus credentials, bound to one eligible
-  active session/seat, bounded policy objects only, no "inject arbitrary keys"
-  operation. Session lock and lifecycle are observed independently.
+- Broker IPC: Unix-domain socket `/run/contextdeck/broker.sock` (systemd
+  `RuntimeDirectory=contextdeck`). The peer is authenticated with kernel
+  `SO_PEERCRED` (never client-supplied UID/GID). The UID must belong to an
+  active local seated graphical session (`wayland`/`x11` via logind). Root
+  and remote sessions are rejected. Group membership is not authorization.
+  Bounded messages only (`STATUS`, `LEASE`, `HEARTBEAT`, `ARM`, `DISARM`,
+  `RELEASE`); no "inject arbitrary keys" operation. One lease may arm the
+  broker; disconnect, expiry, malformed framing, or broker shutdown disarms
+  first (ungrab-first teardown). Session lock and lifecycle are observed
+  independently of the lighting D-Bus path.
 - Diagnostics are bounded to state transitions, error classes, and counters.
   No ordinary keystrokes, window captions, device serials, or raw HID reports
   in logs; disable core dumps in the input process.
@@ -161,8 +168,13 @@ Durable rules for this project:
 
 - Leases and acknowledgements: a policy is effective only after the broker
   acknowledges its revision; a stale GUI cannot keep the broker armed;
-  restarts start disarmed; hardware reconnect never replays actions; a crash
-  never triggers an automatic re-grab loop.
+  restarts start disarmed; the listening socket never arms by itself;
+  hardware reconnect never replays actions; a crash never triggers an
+  automatic re-grab loop. The session-app Unix-socket lease (S4) is the only
+  arming authority: `LEASE` then `ARM`, renewed by `HEARTBEAT`. Default lease
+  is 6000 ms. Losing the peer, a malformed frame, failed `SO_PEERCRED`, lease
+  expiry, or orderly broker stop calls `Acquisition::disarm()` before
+  teardown.
 - The systemd watchdog (`WatchdogSec=2`) is fed from the broker event-loop
   thread with `sd_notify("WATCHDOG=1")` after each wait return (including idle
   timeout) and after that iteration's ingest work. A hung wait or hung ingest

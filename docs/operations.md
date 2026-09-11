@@ -201,8 +201,8 @@ Do not `systemctl` mask/unmask sleep targets. Do not write `/sys/power/state`.
 
 Authors the system identity, udev guard/grant, and the **system** unit
 `contextdeck-broker.service`. **Do not enable. Do not start.** The broker
-stays disarmed and idle until later session IPC (S4). Real pass-through IRL
-is S5. This install also closes the measured OpenRGB `uaccess` keylogging
+stays disarmed until an authenticated session lease arms it (S4). Real
+pass-through IRL is S5. This install also closes the measured OpenRGB `uaccess` keylogging
 hole on G213 **input** nodes, `/dev/port`, and `/dev/i2c-*`. HID RGB
 (`hidraw`) must keep working.
 
@@ -234,9 +234,10 @@ sudo systemctl daemon-reload
 Do **not** `systemctl enable contextdeck-broker`. Do **not**
 `systemctl start contextdeck-broker`. The unit has no `[Install]` section.
 The binary now sends `READY=1` and feeds `WATCHDOG=1` from its idle event
-loop (S3). It still does not grab devices or accept a session lease (S4).
-Starting it would idle-run under notify/watchdog without grabbing; that
-remains forbidden until S4/S5 and G4.
+loop (S3) and accepts an authenticated session lease on
+`/run/contextdeck/broker.sock` (S4). It still does not open G213 event nodes
+or `/dev/uinput` in this slice (ARM fail-closes without a device enumerator).
+Starting the unit remains forbidden until S5 and G4.
 
 `ExecStart` is `/usr/bin/contextdeck-broker`. Until there is an install
 prefix, leave that path as documentation; do not start the unit from a
@@ -356,10 +357,70 @@ recovery". Do not change input-remapper.
 If stop is not enough, `kill -TERM` then `kill -KILL` the `contextdeck-broker`
 PID from the recovery path. Unplug/replug the G213 only as a last resort.
 
+Quitting the session app, closing the broker socket, or letting the 6 s
+lease expire also disarms (ungrab-first) without needing `systemctl stop`.
+That is the S4 recovery path when the seat is still usable. If the G213 is
+silent, still use a second keyboard/SSH/TTY as above — do not assume the
+grabbed keyboard can send the quit chord.
+
 After recovery, confirm typing on a text field. Do not paste key names,
 scan codes, or raw event dumps into notes.
 
 More procedure detail: `docs/testing-m2.md`.
+
+## 8. Session IPC (S4)
+
+The broker listens on `/run/contextdeck/broker.sock`. Override with
+`CONTEXTDECK_BROKER_SOCKET` only in tests. The session app probes `STATUS` at
+startup and does **not** auto-arm. Do **not** start the system unit to try
+this.
+
+### Protocol
+
+Length-prefixed frames: 16-bit little-endian payload size, then 1–256 bytes of
+ASCII. No NULs. Client-supplied UID/GID fields do not exist and extra tokens
+are malformed.
+
+| Command | Who | Effect |
+|---------|-----|--------|
+| `STATUS` | any authenticated peer | `OK STATUS lease=none\|self\|other armed=0\|1 ttl=<ms>` |
+| `LEASE` `[ms]` | one peer | acquire or renew the single lease (does not arm) |
+| `HEARTBEAT` `[ms]` | lease holder | renew TTL (default 6000, clamp 1000–30000) |
+| `ARM` `[ms]` | lease holder | `Acquisition::arm()` |
+| `DISARM` | lease holder | `Acquisition::disarm()`, lease kept |
+| `RELEASE` | lease holder | disarm and drop the lease |
+
+Replies: `OK …` or `ERR MALFORMED|UNAUTH|LEASE_HELD|NO_LEASE|UNAUTHORIZED|UNKNOWN|ARM_FAILED`.
+
+### Permissions
+
+- Directory `/run/contextdeck` is `0755` so the seat user can traverse it
+  **without** joining group `contextdeck-broker` (that group owns G213 event
+  nodes; adding the session user would be a keylogging hole).
+- Socket inode is `0666`. Connectability is not authorization.
+- On `accept`, the broker reads `SO_PEERCRED` from the kernel. Failed creds
+  close the fd before any command is parsed. Root, other UIDs, remote
+  sessions, and sessions without a local seat are rejected via logind
+  (`sd_pid_get_session`, active, `wayland`/`x11`, `sd_session_get_uid`
+  matching the kernel UID, `sd_session_is_remote==0`).
+
+### Lifecycle
+
+Broker starts **disarmed**. Creating the socket does not arm. One lease only.
+Disconnect, malformed framing, lease expiry, failed authentication, or
+`shutdown`/`SIGTERM` disarms first (ungrab physical, then balanced synthetic
+releases, then destroy virtual), then drops the lease.
+
+S4 production `ARM` still fail-closes: there is no device enumerator and
+`RealSink` is not constructed. Tests drive the same `Acquisition` path with
+`FakeGrabber`. Real grab remains S5/G4.
+
+### TTY recovery
+
+Same as section 7. Prefer stopping the session app (drops the lease) when the
+seat still types. If the G213 is grabbed and silent, recover from another
+keyboard, SSH, or an already-open TTY, then `systemctl stop
+contextdeck-broker.service` only if that unit was actually started.
 
 ## Logs to keep private
 
