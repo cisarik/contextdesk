@@ -77,7 +77,7 @@ ship:
 | Gate | Needed evidence | Blocks | Status |
 |------|-----------------|--------|--------|
 | G0 | Baseline ownership confirmed | Any repository mutation | Confirmed; ORCHESTRATOR-owned docs commits moved `main` past `6b4e4b3` — M1's exact baseline is the re-route commit |
-| G1 | Routing matrix for all 20 requested controls | Special-button remapping | **Next** — P1 probe procedure defined in the M2 plan; COOPERATOR-run |
+| G1 | Routing matrix for all 20 requested controls | Special-button remapping | **Closed** — probe measured 2026-09-11: F1–F12 on if00 (59–68/87/88), media+volume on if01 (165/164/163, 113/114/115) all host-remappable; Game Mode and Backlight emit **zero** host events — firmware-only, permanently out of the remap catalog (`docs/hardware/g213-control-matrix.md`) |
 | G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **Closed — proven IRL** during M1 (five zones, modes, speed, gradient all verified physically) |
 | G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Pending COOPERATOR acceptance** — M2 plan recommends: system user `contextdeck-broker`, guard udev revoking `uaccess` from G213 event nodes + `/dev/port` + `i2c`, narrow event-node grant, uinput ACL; never autostart an unproven broker |
 | G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | Planned (M2 stage S5) |
