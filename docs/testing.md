@@ -1,11 +1,16 @@
-# ContextDeck IRL acceptance (M1)
+# ContextDeck IRL acceptance (M1 lighting correction)
 
 Numbered script for the COOPERATOR. Run it on the machine with the G213
 attached after following `docs/operations.md`. This is not an automated suite.
+The keyboard has no readback: **your eyes** close every lighting claim.
 
 When a step fails, **stop**, note the step number, and paste the log lines
-listed at the end. Do not "fix forward" by installing extra packages or
-grabbing `/dev/input`.
+listed at the end. Do not "fix forward" by installing extra packages, running
+`openrgb --list-devices`, grabbing `/dev/input`, or opening the OpenRGB GUI
+while ContextDeck owns the device.
+
+Reload the KWin script after this tree's bridge change so heartbeat
+`ContextReport` is actually loaded.
 
 ## Preconditions
 
@@ -14,83 +19,116 @@ grabbing `/dev/input`.
    session user.
 3. OpenRGB SDK is listening on `127.0.0.1:6742`.
 4. The KWin script `contextdeck-bridge` is loaded (`isScriptLoaded` is true).
+5. `~/.config/contextdeck/profiles.json` is **absent** or moved aside for
+   step 1 (cold start). Restore it after that step if you had one.
 
 ## Steps
 
-1. **Start ContextDeck**  
+1. **Cold start is non-destructive**  
+   Confirm the keyboard is showing its own firmware effect (Wave family).  
    `./build/contextdeck`  
-   **Expect:** tray icon appears; stderr contains `bus name registered` and
-   `status notifier started`. Lighting connection becomes `ready` (or a
-   lighting-disabled warning if OpenRGB cannot see the G213 — then stop and
-   fix OpenRGB, not ContextDeck).  
-   **Fail:** process exits, or the bus name is reported taken (another copy is
-   running).
+   **Expect:** tray icon; stderr contains `bus name registered`,
+   `status notifier started`, and `cold start: no profile document,
+   pass-through, writing nothing`. Lighting connection may become `ready`.
+   The keyboard **keeps the same firmware effect**. Overview lighting label
+   is `untouched — device default`, never Automatic.  
+   **Fail:** the board goes dark, snaps to a flat color, or the process exits.
 
 2. **Keyboard still types normally everywhere**  
    Type in a terminal, in a browser, and in the ContextDeck settings window.  
-   **Expect:** every key works as before M1. No stuck modifiers, no missing
-   keys, no duplicate characters. M1 does not intercept input.  
-   **Fail:** any change in typing behavior — unload the KWin script, quit
-   ContextDeck, and report immediately. Do not continue.
+   **Expect:** every key works as before. No stuck modifiers, no missing
+   keys, no duplicate characters. This tree does not intercept input.  
+   **Fail:** any change in typing — unload the KWin script, quit ContextDeck,
+   report immediately.
 
-3. **G2 five-zone check**  
-   In Settings → Profiles, set the global base color to a saturated color
-   (for example `#ff0000`) and Save.  
-   **Expect:** all five physical zones (left, middle, right, arrows/home,
-   numpad) show that one color. No per-key pattern.  
-   **Fail:** only some zones change, or OpenRGB GUI shows a different device.
-   Capture OpenRGB stderr and ContextDeck `contextdeck.rgb` lines.
+3. **Restore device default**  
+   In Settings → Profiles, set the global preset to Direct with a saturated
+   color (for example all five zones `#ff0000`) and Save. Confirm the board
+   shows that color. Tray or Overview → **Restore device default**.  
+   **Expect:** the previously recorded device mode returns (Wave unless you
+   saw a different non-Direct effect at connect). The UI returns to
+   `untouched — device default` and stops touching the device.  
+   **Fail:** it stays red, goes dark, or the label says Automatic.
 
-4. **Focus-change color check**  
-   Add a profile from the inventory picker for a second application. Give it a
-   different color (for example `#0000ff`). Save. Alt-Tab between that
-   application and another window.  
-   **Expect:** the keyboard color follows the focused application's profile
-   when one exists, otherwise the global color. The tray Overview line shows
-   the current application and resolved profile.  
-   **Fail:** color never changes, or it changes on title text rather than app
-   identity. Check `BridgeConnected` on Diagnostics and whether
-   `isScriptLoaded` is still true.
+4. **Each device preset**  
+   With Follow profile active, set the global preset in turn to `wave`,
+   `cycle`, `breathing`, `off`, then `direct` (use a non-black color). Save
+   each time and look at the keyboard before changing the next.  
+   **Expect:** Wave/Cycle/Breathing animate in firmware; Off is dark; Direct
+   is a static five-zone color. The lighting label names that preset, never
+   Automatic.  
+   **Fail:** a named preset does nothing, or Direct leaves all zones black.
 
-5. **Bridge-loss fallback**  
+5. **Per-zone gradient**  
+   Global preset Direct. Use **Fill five-zone gradient** from a start color
+   (for example `#ff0000`) to an end color (`#0000ff`).  
+   **Expect:** five distinct bands, left → numpad, matching the labelled
+   swatches: Left Area, Middle Area, Right Area, Arrow and Homekeys, Numpad.
+   Not per-key RGB.  
+   **Fail:** only one color, or more than five independently colored keys.
+
+6. **Per-application preset on focus change**  
+   Add a profile from the inventory picker. Give it a different preset (for
+   example Direct `#0000ff` while global is Direct `#ff0000`, or Wave vs
+   Direct). Save. Alt-Tab between that application and another window.  
+   **Expect:** lighting follows the focused application's preset when one
+   exists, otherwise the global preset. Tray shows the current application
+   and resolved profile.  
+   **Fail:** it never changes, or it changes on window title rather than
+   identity.
+
+7. **Temporary override and expiry**  
+   Set a temporary color from the existing override path (or a Direct
+   temporary). Open Settings.  
+   **Expect:** the override stays; the banner says it is a temporary
+   override, not Automatic. Focus a *different* application.  
+   **Expect:** the override expires and the resolved profile returns.
+   Opening our own UI must not expire it.
+
+8. **Bridge-loss fallback**  
    Unload the KWin script (`unloadScript "contextdeck-bridge"`). Wait ~15
    seconds (three missed 5 s heartbeats).  
-   **Expect:** one warning `bridge lost`; context becomes unidentified;
-   lighting falls back to the **global** profile color, **not** lights-off;
-   typing is still normal. Reload the script and confirm the bridge returns.  
-   **Fail:** lights turn off, the app crashes, or identity sticks to the last
-   application forever.
+   **Expect:** one warning `bridge lost`; context unidentified; lighting
+   falls back to the **global** preset, not forced off; typing still
+   normal. Reload the script; the bridge returns.  
+   **Fail:** lights turn off, the app crashes, or identity sticks forever.
 
-6. **Lights off and Automatic**  
-   Tray or Overview: Lights off.  
-   **Expect:** all five zones go dark; the UI still says `lights_off`, never
-   "Automatic". Restore automatic.  
-   **Expect:** profile colors return. Opening Settings must **not** by itself
-   flip a `temporary_color` override (if you set a temporary color first,
-   opening our window must keep it until you focus a *different*
-   application).
+9. **Restart recovers context (D3)**  
+   With the bridge loaded and some application focused, quit ContextDeck
+   (tray Quit) and start it again **without** changing focus. Wait up to
+   one heartbeat interval (5 s).  
+   **Expect:** Overview shows that application's identity without an
+   extra Alt-Tab. Diagnostics `BridgeConnected` is true and
+   `CurrentIdentity` is not empty. Repeating heartbeats do not spam
+   lighting changes or bump `PolicyRevision` for the same identity.  
+   **Fail:** identity stays empty until you click another window.
 
-7. **Displays Off**  
-   Tray → Displays Off.  
-   **Expect:** displays blank via DPMS; keyboard lighting unchanged; KScreen
-   display layout unchanged when you wake the screens (move mouse / press a
-   key). Debounced: a second click within 2 s is ignored.  
-   **Fail:** outputs rearranged, or the machine suspends. Do not repeat.
+10. **Displays Off (D2)**  
+    Tray → Displays Off.  
+    **Expect:** displays blank via DPMS; keyboard lighting unchanged;
+    KScreen layout unchanged when you wake the screens. Debounced: a
+    second click within 2 s is ignored.  
+    **Fail:** outputs rearranged, the machine suspends, or nothing
+    happens (the old stack-temporary DPMS bug). Do not repeat.
 
-8. **Suspend**  
-   Tray → Suspend… → confirm Yes in the dialog.  
-   **Expect:** the machine sleeps through logind (`CanSuspend` was `yes` on
-   this host). After resume, ContextDeck is still running or has exited
-   cleanly; the keyboard types; lighting reconnects or reports a lighting
-   error without crashing. Debounced: 5 s.  
-   **Fail:** no confirmation dialog, or suspend is triggered twice. Do not
-   write `/sys/power/state`.
+11. **Suspend**  
+    Tray → Suspend… → confirm Yes.  
+    **Expect:** sleep through logind. After resume, ContextDeck is still
+    running or has exited cleanly; the keyboard types; lighting reconnects
+    or reports a lighting error without crashing. Debounced: 5 s.  
+    **Fail:** no confirmation dialog, or suspend is triggered twice. Do
+    not write `/sys/power/state`.
 
-9. **Quit**  
-   Tray → Quit.  
-   **Expect:** process exits; bus name
-   `io.github.cisarik.ContextDeck` disappears; keyboard still types;
-   OpenRGB (if left running) still owns lighting.
+12. **Five-step zone-map probe**  
+    Follow `docs/hardware/g213-zone-map.md` exactly. Fill the **Results**
+    table there (not this file). Restore device default when finished.
+
+13. **Quit**  
+    Tray → Quit.  
+    **Expect:** process exits; bus name
+    `io.github.cisarik.ContextDeck` disappears; keyboard still types;
+    if lighting intent had been applied, quit restores the recorded
+    device mode. OpenRGB (if left running) still owns the SDK port.
 
 ## Logs to paste back (redact serials and captions)
 
@@ -116,4 +154,5 @@ Do not paste window titles, typed text, `lsusb -v` serials, or hidraw dumps.
 
 Automated CTest (resolver, persistence, protocol frames) is a developer gate,
 already run at build time. GUI tests, QML tests, and input grabbing are out of
-scope for M1. Game Mode and Backlight remain conditional on G1.
+scope. Game Mode and Backlight remain conditional on G1. Zone-accent writes
+stay inert until the probe below marks map entries verified.

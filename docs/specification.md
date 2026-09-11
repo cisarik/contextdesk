@@ -157,8 +157,9 @@ is claimed without measurement.
 
 ## Power actions
 
-`displays_off` uses `KScreen::Dpms` after `isSupported()`, without changing
-KScreen topology, debounced 2 s.
+`displays_off` uses a **long-lived** `KScreen::Dpms` member (not a stack
+temporary) after `isSupported()`, without changing KScreen topology,
+debounced 2 s. The object must outlive the asynchronous `switchMode()` call.
 
 `suspend` uses `org.freedesktop.login1.Manager.Suspend(false)` on the system
 bus after `CanSuspend`, with confirmation, debounced 5 s.
@@ -198,6 +199,11 @@ Object `/io/github/cisarik/ContextDeck/Context1`, interface
 Every argument is untrusted and bounded. Stale or out-of-order sequence numbers
 are rejected. There is no method that injects input or executes anything.
 Heartbeat interval is 5 s; three missed heartbeats mark the bridge lost.
+The KWin script sends a full `ContextReport` on every heartbeat interval as
+well as on window events, so an application restart recovers identity without
+a focus change. The receiver treats a repeated identical identity as a refresh:
+it does not bump `PolicyRevision`, does not emit a context-change, and does
+not rewrite lighting.
 
 The KWin script lives at `kwin/contextdeck-bridge/` as a `KWin/Script` package.
 It uses `workspace.windowActivated`, `windowAdded`, and `windowRemoved`
@@ -224,7 +230,10 @@ Mode changes go through `UPDATEMODE` (packet 1101) using the Mode Data block
 from the server's controller description (protocol 5 includes `mode_value`,
 which the client echoes). Per-zone colors in `direct` go through whole-device
 `UPDATELEDS` for five little-endian `0x00BBGGRR` colors. `untouched` sends
-no frame. `SETCUSTOMMODE` is not used as a connect-time default.
+no frame. `SETCUSTOMMODE` is not used as a connect-time default. If OpenRGB
+reports the active mode as Direct at first enumeration, ContextDeck treats
+that as unknown and records `wave` for restore (OpenRGB's own init must not be
+confused with the keyboard firmware effect).
 
 Frames: magic `ORGB`, 16-byte little-endian header (device index, packet id,
 payload size). Wrong magic, truncated frames, and payloads above 1 MiB are

@@ -98,6 +98,18 @@ well if you want the GUI). Confirm it listens only on loopback
 (`ss -ltnp | grep 6742`). ContextDeck connects to `127.0.0.1:6742` as client
 name `ContextDeck` and will **reject** SDK protocol versions newer than 5.
 
+**Do not use OpenRGB's GUI or CLI to "fix" a dark keyboard while ContextDeck
+owns the device.** In particular do **not** run `openrgb --list-devices`:
+controller initialization selects Direct and can leave all five zones dark.
+That is the defect this product exists to avoid. Quit ContextDeck first if
+you need to talk to OpenRGB yourself.
+
+If ContextDeck is **not** running and the keyboard is stuck in Direct/dark,
+restore Wave from the OpenRGB GUI by selecting the G213 and the **Wave** mode
+(not Direct), then close that GUI. Last resort: unplug and replug the
+keyboard so firmware can show its own effect, then start the SDK server
+again without listing devices.
+
 Stop: Ctrl+C in that terminal, or close the OpenRGB process. Do not kill
 unrelated RGB software.
 
@@ -121,7 +133,10 @@ qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded \
 ```
 
 `loadScript` returns a script id (integer). `isScriptLoaded` must print
-`true`. Persistent install (optional):
+`true`. After pulling a ContextDeck change that edits
+`kwin/contextdeck-bridge/contents/code/main.js`, **unload and load again**
+so heartbeat `ContextReport` is actually running. Persistent install
+(optional):
 
 ```sh
 # COOPERATOR-run
@@ -149,8 +164,10 @@ Expect a tray icon (`input-keyboard`), a session-bus name
 
 - `session bus name registered: "io.github.cisarik.ContextDeck"`
 - `status notifier started`
-- lighting `ready` once OpenRGB is up and a G213 is enumerated; otherwise
-  `lighting disabled: …` while the rest of the app stays alive
+- lighting `ready` once OpenRGB is up and a G213 is enumerated **without**
+  changing the keyboard if no profile has lighting intent; otherwise
+  `lighting disabled: …` while the rest of the app stays alive. A cold start
+  with no `profiles.json` must leave the firmware effect running.
 
 Closing the settings window must not quit the process. Quit from the tray.
 
