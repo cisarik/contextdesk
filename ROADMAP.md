@@ -59,7 +59,7 @@ done-as-planned.
 | M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, 3 CTest units, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
-| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — Planner PASS; S1 engine without grab done (6/6 CTest); S2 needs G3 host install |
+| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — S1 engine + S2 host files done (7/7 CTest); G3 install + S3/S4/S5 remaining |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
 | M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
@@ -308,21 +308,22 @@ restoring the full automated context ecosystem without manual steps.
 ### M2 input passthrough safety — in progress
 
 Planner report 01/01 PASS (native Plan Mode, archived in META). Implementation
-session 02/01 delivered the broker core **without grab** (commits
-`1d9d6f1`..`553e75b`, 6/6 CTest green):
+sessions so far:
 
-- Fail-closed identity matcher (`046d:c336` if00/if01 only; rejects virtual
-  devices and anything named `ContextDeck*`; udev properties are identity).
-- Balanced synthetic key ledger with LIFO disarm; repeat is a ledger no-op.
-- 1:1 forwarding engine with strict `SYN_REPORT` pairing on FakeSource/FakeSink;
-  `RealSink` (virtual device) is compiled but has never been constructed.
-- `SYN_DROPPED` reconciliation without replaying reconstructed presses.
-- All-or-nothing acquisition and **ungrab-first** teardown ordering, testable
-  on fakes. `contextdeck-broker selftest` runs with zero device access.
+- **S1 engine without grab** (02/01, `1d9d6f1`..`553e75b`, 6/6 CTest): fail-closed
+  identity matcher, balanced synthetic ledger, 1:1 forwarding with SYN pairing,
+  SYN_DROPPED reconciliation, all-or-nothing acquisition with ungrab-first
+  teardown on fakes.
+- **S2 host files + grab seam** (03/01, `1bfdefe`..`deb67ac`, 7/7 CTest): guard
+  udev rules (close the measured OpenRGB `uaccess` keystroke hole; hidraw kept),
+  narrow G213 event grant to `contextdeck-broker`, additive uinput ACL, sysusers
+  identity, systemd system unit (`DevicePolicy=closed`, no `[Install]`), real
+  exclusive grab wired behind `IGrabber` (`FakeGrabber` in tests), and the
+  COOPERATOR install/verify/rollback block in `docs/operations.md` §6.
 
-Remaining stages: S2 (udev guard + sysusers + system unit + real grab — needs
-the G3 host install), S3 (watchdog + crash harness), S4 (session IPC + lease),
-S5 (IRL G4 acceptance pack). Grabbing stays forbidden until G3 is installed.
+**Nothing is installed yet.** Next: COOPERATOR runs the G3 install block, then
+S3 (watchdog / sd_notify / crash harness), S4 (session IPC + lease), S5 (IRL G4
+pack). Grabbing stays unexercised until G4.
 
 ### Deck layer — COOPERATOR brainstorm, classified future whole
 
