@@ -3,28 +3,32 @@
 Human-friendly plan of record. Authority lives elsewhere: the repository is the
 source of truth for code, the pinned AP protocol governs process, and META
 stores the exact Worker prompt/report history. This file summarizes "where we
-are and where we are going" and is maintained by the ORCHESTRATOR after each
-reconciliation.
+are and where we are going" and is maintained after each reconciliation. Access
+profile: ChatOrchestrator; delivery remains manual. META Git archival is a
+COOPERATOR action, separate from any authorized report-file preparation.
 
 ## Where we are now
 
-- Product repo: `cisarik/contextdesk`, branch `main`, clean; ahead of
-  `origin/main` (`ca3ac07`) by the AP-adoption and documentation commits.
-  Nothing is pushed — publication stays a separate COOPERATOR decision.
-- AP pinned: `.ap/` gitlink `7ef45da`.
+- Product repo: `cisarik/contextdesk`, branch `main`. Git identity belongs to
+  `git` / GitHub, not to this file.
+- AP is pinned at the `.ap/` gitlink (exact SHA in Git). Protocol updates are
+  explicit tasks; a newer public AP `main` is not an adopted pin.
 - Foundation planning (whole `g213-contextdeck-foundation-architecture`):
   Planner report 01/01 reconciled and accepted as **PARTIAL**, archived in META.
   PARTIAL is the correct outcome — the architecture is routable, but hardware
   evidence gates remain open.
-- Completed whole: **M1 `g213-contextdeck-mvp-context-lighting`** — **Accepted IRL
-  by the COOPERATOR.** Five-zone lighting, native device modes (Wave/Cycle/Breathing/Off/Direct),
-  animation speed control, visual 5-zone gradient generator, KWin event-driven context,
-  non-destructive startup, typed power actions, and desktop UI are fully verified on hardware
-  across twenty-one local commits.
-- Next whole: **M2 `g213-contextdeck-input-passthrough-safety`** — The safety-critical
-  input broker: hardware routing matrix (G1), privilege boundary (G3), pass-through-only
-  fail-safe broker, crash/hang recovery, and zero-lockout guarantee. Begins with a
-  mandatory Planner Worker in native Plan Mode.
+- Completed whole: **M1 `g213-contextdeck-mvp-context-lighting`** — recorded as
+  **accepted IRL by the COOPERATOR** (historical; not a later-session retest).
+  Five-zone lighting, native device modes (Wave/Cycle/Breathing/Off/Direct),
+  animation speed, 5-zone gradient helper, KWin event-driven context,
+  non-destructive startup, and desktop UI. Unrelated gates such as G7 are not
+  closed by restating that acceptance.
+- Current whole: **M2 `g213-contextdeck-input-passthrough-safety`** — pass-through
+  input broker. Planning is done; the repository contains the production path.
+  **G4 real-hardware acceptance remains uncompleted.** Restoring this whole does
+  not restart its first Planner or its acceptance budgets. Next unresolved work
+  is a bounded recovery-design decision and production safety gaps, then
+  separately authorized validation — not a live grab.
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -33,14 +37,14 @@ reconciliation.
 - **Division of labour.** Workers write code; the COOPERATOR runs the host
   enablement and the IRL hardware acceptance and reports what actually works;
   the ORCHESTRATOR reads logs and reports and routes the next slice.
-- **Minimal safety-only tests.** Three CTest units covering the dangerous
-  semantics (resolver, config rejection, protocol frame bounds). No GUI,
-  integration, or coverage-driven test work.
-- **Input interception stays out of M1.** Verified host state: `event7`/`event8`
-  are `root:input 0660` and the session user is not in `input`, so a broker
-  needs a privileged identity or a udev rule. That authority is granted in
-  principle but **reserved for M2** and requires the G1 physical probe first.
-  Nothing in M1 may grab, read, or inject keyboard input.
+- **Minimal safety-only tests (M1 routing).** Three CTest units covering the
+  dangerous profile/OpenRGB semantics. M2 later added further `add_test` names;
+  the live suite is owned by `CMakeLists.txt`, not by a count in this file.
+- **Input interception stays out of M1.** At M1 routing time, G213 event nodes
+  were `root:input 0660` and the session user was not in `input`, so a broker
+  needs a privileged identity or a udev rule. That authority was granted in
+  principle but **reserved for M2**. Nothing in M1 may grab, read, or inject
+  keyboard input. Event-node numbers are not identity.
 
 ## Guiding principles
 
@@ -56,10 +60,10 @@ done-as-planned.
 | # | Identity | What it delivers | Depends on | Status |
 |---|----------|------------------|------------|--------|
 | V0 | baseline reconciliation | Confirmed baseline, trace continuation | — | Done (G0) |
-| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, 3 CTest units, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
+| M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
-| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — S1 engine + S2 host files done (7/7 CTest); G3 install + S3/S4/S5 remaining |
+| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — production path in repo (ARM, IPC, watchdog, install, late uinput ACL); **G4 uncompleted** |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
 | M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
@@ -79,8 +83,8 @@ ship:
 | G0 | Baseline ownership confirmed | Any repository mutation | Confirmed; ORCHESTRATOR-owned docs commits moved `main` past `6b4e4b3` — M1's exact baseline is the re-route commit |
 | G1 | Routing matrix for all 20 requested controls | Special-button remapping | **Closed** — probe measured 2026-09-11: F1–F12 on if00 (59–68/87/88), media+volume on if01 (165/164/163, 113/114/115) all host-remappable; Game Mode and Backlight emit **zero** host events — firmware-only, permanently out of the remap catalog (`docs/hardware/g213-control-matrix.md`) |
 | G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **Closed — proven IRL** during M1 (five zones, modes, speed, gradient all verified physically) |
-| G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Accepted by COOPERATOR, not yet installed** — model: system user `contextdeck-broker`, guard udev revoking `uaccess` from G213 event nodes + `/dev/port` + `i2c`, narrow event-node grant, uinput ACL; never autostart an unproven broker |
-| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | Planned (M2 stage S5) |
+| G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Model accepted.** Repo packaging: system user `contextdeck-broker`, guard udev (G213 event + `/dev/port` + `i2c`, hidraw kept), narrow event grant, late uinput ACL after seat `uaccess`. Whether a host has those files installed is operations evidence, not implied by the tree. Never autostart an unproven broker |
+| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | **Uncompleted.** Implementation/test reports are not physical pass-through or recovery proof |
 | G5 | KWin lifecycle, identity, focus-race measurements | Contextual behavior claims | Partially exercised in M1 (bridge, heartbeat, self-context) |
 | G6 | License decision + dependency provenance | Release | Planned |
 | G7 | Authorized display-off and suspend acceptance | Enabling power actions | **IRL pending** — M1 test steps 7–8 (`CanSuspend=yes` verified; `KScreen::Dpms` linked; see the known suspect note) |
@@ -115,7 +119,7 @@ ship:
   GCC 16.2.1 / Clang 22.1.8, libevdev 1.13.7. `extra-cmake-modules` is absent
   — early slices must not require it.
 
-### M1 context + lighting — implemented, awaiting IRL acceptance
+### M1 context + lighting — implemented, recorded as accepted IRL
 
 One slice, five stages, one commit per stage (all five green):
 
@@ -202,8 +206,10 @@ work and were proven by a throwaway configure+compile+link probe:
 - Suspend: `login1.Manager.CanSuspend` returns `"yes"`; use logind, never `/sys/power/state`
 - KWin 6.7.5 exposes `org.kde.KWin /Scripting` with `loadScript(path, pluginName)`,
   `start()`, `isScriptLoaded`, `unloadScript` — the fast dev loop for the bridge
-- G213 present: `046d:c336`, `event7` (if00) + `event8` (if01), `hidraw2`/`hidraw3`,
-  hidraw `root:root 0600`, event nodes `root:input 0660`
+- G213 present as USB `046d:c336` with two input interfaces (`00`, `01`) and
+  matching hidraw nodes. Event-node numbers are not identity. hidraw was
+  `root:root` with session ACL after OpenRGB; event nodes started as
+  `root:input` until G3 policy.
 
 ## Backlog — classified COOPERATOR brainstorms
 
@@ -308,22 +314,41 @@ restoring the full automated context ecosystem without manual steps.
 ### M2 input passthrough safety — in progress
 
 Planner report 01/01 PASS (native Plan Mode, archived in META). Implementation
-sessions so far:
+in the repository (not G4 proof):
 
-- **S1 engine without grab** (02/01, `1d9d6f1`..`553e75b`, 6/6 CTest): fail-closed
-  identity matcher, balanced synthetic ledger, 1:1 forwarding with SYN pairing,
-  SYN_DROPPED reconciliation, all-or-nothing acquisition with ungrab-first
-  teardown on fakes.
-- **S2 host files + grab seam** (03/01, `1bfdefe`..`deb67ac`, 7/7 CTest): guard
-  udev rules (close the measured OpenRGB `uaccess` keystroke hole; hidraw kept),
-  narrow G213 event grant to `contextdeck-broker`, additive uinput ACL, sysusers
-  identity, systemd system unit (`DevicePolicy=closed`, no `[Install]`), real
-  exclusive grab wired behind `IGrabber` (`FakeGrabber` in tests), and the
-  COOPERATOR install/verify/rollback block in `docs/operations.md` §6.
+- **S1 engine** — fail-closed identity matcher, balanced synthetic ledger, 1:1
+  forwarding with SYN pairing, SYN_DROPPED reconciliation, all-or-nothing
+  acquisition with ungrab-first teardown on fakes.
+- **S2 host files + grab seam** — guard udev, narrow G213 event grant to
+  `contextdeck-broker`, systemd system unit (`DevicePolicy=closed`, no
+  `[Install]`), exclusive grab behind `IGrabber`.
+- **S3 watchdog** — `Type=notify`, `WatchdogSec=2`, feed from the event-loop
+  thread, `watchdog-selftest`.
+- **S4 session IPC** — authenticated Unix socket, single lease, explicit
+  `LEASE`/`ARM`/`DISARM`/`RELEASE`.
+- **S5 production path** — USB-ancestry enumerator, `RealSink`/`EvdevGrabber`
+  constructed only on ARM, CMake install of `contextdeck-broker`, session-app
+  ARM UI.
+- **uinput ACL ordering** — additive `setfacl` for `contextdeck-broker` from
+  `99-contextdeck-broker-uinput.rules` after seat `uaccess` (not from `62-*`).
 
-**Nothing is installed yet.** Next: COOPERATOR runs the G3 install block, then
-S3 (watchdog / sd_notify / crash harness), S4 (session IPC + lease), S5 (IRL G4
-pack). Grabbing stays unexercised until G4.
+**G4 remains uncompleted.** No implementation report proves physical
+pass-through, crash/hang recovery, or input-remapper coexistence under grab.
+A host may or may not have installed the packaging files; that is operations
+evidence. The broker must stay static/inactive until a separately authorized
+G4 run. Missing a second keyboard or tested off-box SSH blocks the old live-grab
+procedure; it does not waive it.
+
+**Next unresolved M2 work:** a bounded recovery-design decision for development
+with one physical keyboard, plus production safety gaps already visible in
+source (silent uinput write errors; virtual-device capabilities from
+`passthroughCapabilities()` rather than measured source bits / LED return path;
+logind `sd_pid_get_session` vs user-manager-launched session apps). Then
+separately authorized validation. Documentation here does not grant grab, ARM,
+or host mutation.
+
+Registered tests live in `CMakeLists.txt`. Historical “N/N CTest” lines in META
+are not current suite truth.
 
 ### Deck layer — COOPERATOR brainstorm, classified future whole
 

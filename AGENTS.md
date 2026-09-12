@@ -7,21 +7,36 @@ this project.
 
 ## Current repository state
 
-- **M1 is implemented and accepted IRL.** ContextDeck is a Linux/KDE/Wayland
-  control utility for the Logitech G213 Prodigy keyboard only. Canonical repo:
-  `https://github.com/cisarik/contextdesk`.
+- ContextDeck is a Linux/KDE/Wayland control utility for the Logitech G213
+  Prodigy keyboard only. Canonical repo: `https://github.com/cisarik/contextdesk`.
+- **M1 `g213-contextdeck-mvp-context-lighting` is implemented and recorded as
+  COOPERATOR-accepted IRL.** That acceptance is historical evidence (META notes
+  for that whole). It is not a fresh hardware run from later sessions and does
+  not close unrelated remaining gates such as G4 or G7.
+- **M2 `g213-contextdeck-input-passthrough-safety` is in progress in this
+  repository.** The tree contains the production broker path, explicit
+  session-app ARM action, Unix-socket IPC lease, watchdog integration, broker
+  install rule, and the late uinput ACL rule. **G4 real-hardware acceptance is
+  not completed.** Implementation and unit tests do not prove physical
+  pass-through or crash recovery. Restoring this planned whole does not restart
+  its initial planning or acceptance budgets.
 - Tree: `handout.md`, `AGENTS.md`, `README.md`, `ROADMAP.md`, `LICENSE`, `docs/`,
-  `CMakeLists.txt`, `cmake/`, `src/`, `ui/`, `kwin/`, `tests/unit/`,
-  `packaging/systemd/`, and the pinned `.ap/` protocol submodule.
-- Real build/test commands (verified by the ORCHESTRATOR, not invented):
-  `cmake -S . -B build -G Ninja` ; `cmake --build build` ;
-  `ctest --test-dir build --output-on-failure` (3 units). There is still no lint
-  config and no CI. Implementation happens only under an explicit
-  Orchestrator-issued Worker prompt; nothing in this file grants it.
-- `handout.md` is the COOPERATOR-to-ORCHESTRATOR bootstrap contract (47 sections,
-  ~2300 lines). Read it before planning or routing; treat it as immutable history.
-  Fast path: §1–6 (roles, manual dispatch, AP/META/trace), §33–34 (mandatory first
-  Planner), §46–47 (required first response).
+  `CMakeLists.txt`, `cmake/`, `src/` (session app + `src/broker/`), `ui/`,
+  `kwin/`, `tests/unit/`, `packaging/` (systemd, udev, sysusers), and the pinned
+  `.ap/` protocol submodule.
+- Build: `cmake -S . -B build -G Ninja` then `cmake --build build`. The
+  registered CTest suite is owned by `CMakeLists.txt` (`add_test` names). There
+  is still no lint config and no CI. Commands in this file are not a grant to
+  run them. Implementation happens only under an explicit Orchestrator-issued
+  Worker prompt.
+- Repository artifacts are not installed host state. Presence of packaging
+  files, a local `build/` binary, or `/usr` copies on one machine does not mean
+  every host is installed or verified. Host enablement and G4 remain
+  COOPERATOR-owned operations evidence.
+- `handout.md` is the original COOPERATOR-to-ORCHESTRATOR bootstrap contract
+  (historical). Read it for intent and safety constraints; it is not a renewed
+  bootstrap task. Fast path: §1–6 (roles, delivery, AP/META/trace), §29 (grab
+  safety), §33–34 (first Planner), §46–47 (first response).
 
 ## Roles, language, authority
 
@@ -30,27 +45,27 @@ this project.
 - An agent here is the **ORCHESTRATOR** unless a Worker prompt says otherwise.
   Workers act only inside one complete bounded prompt and lose authority at
   terminal report.
-- COOPERATOR-facing chat is **Slovak**. Worker prompts and Worker reports are
-  **English**.
+- Access profile: **ChatOrchestrator** (mediated through the COOPERATOR; an
+  inspection clone is not the COOPERATOR’s uncommitted worktree). Selected
+  delivery for this project remains **manual** across subsequent exchanges.
+  Dispatch availability in a client does not change that selection.
+- COOPERATOR-facing chat is **Slovak**. Worker prompts, Worker reports, and
+  repository documentation are **English**.
 - Foundation planning is done: Planner report 01/01 (logical whole
   `g213-contextdeck-foundation-architecture`) was reconciled and accepted as
   PARTIAL, archived in META. The accepted plan is summarized in `ROADMAP.md` and
   `docs/architecture.md` — read them before proposing new components.
-- M1 `g213-contextdeck-mvp-context-lighting` is **implemented, corrected, and redesigned**
-  (twenty-one local commits `1b024e4`..`4276f5b` on `main`, 3/3 CTest units green,
-  independently rebuilt by the ORCHESTRATOR) and **awaiting COOPERATOR IRL acceptance**
-  via `docs/operations.md` + `docs/testing.md` (including the 5-step zone-map probe).
-  G2 (five-zone lighting) and G7 (power actions) are decided by that IRL run,
-  not by code review.
-- The next route is **M2 `g213-contextdeck-input-passthrough-safety`, in
-  progress**: the Planner report passed (native Plan Mode) and the broker core
-  engine exists without grab (`src/broker/`, 6/6 CTest, `RealSink` never
-  constructed). Remaining: S2 host files + real grab (needs the accepted-but-
-  uninstalled G3), S3 watchdog/crash harness, S4 session IPC, S5 IRL G4 pack.
-  The COOPERATOR also brainstormed a Super-key **deck layer** (hold to switch
-  lighting + temporary key functions) — classified as a future whole after M3,
-  recorded in ROADMAP. **No input interception is wired yet**, and nothing may
-  grab before G3 is installed. Only the ORCHESTRATOR routes further.
+- M1 is implemented and recorded as COOPERATOR-accepted IRL (five-zone lighting
+  and context). G2 is closed. G7 remains the power-action evidence gate and is
+  not closed by later documentation work.
+- M2 Planner report 01/01 passed (native Plan Mode). The repository now has
+  production wiring: enumerator + `RealSink`/`EvdevGrabber` behind explicit
+  `LEASE`/`ARM`, session IPC, watchdog, G3 packaging, and the late uinput ACL
+  rule. **Nothing in documentation grants live grab.** The next unresolved M2
+  work is a bounded recovery-design decision (safe development with one physical
+  keyboard, without waiving the independent-recovery rule) and production safety
+  gaps, then separately authorized validation. The Super-key **deck layer**
+  brainstorm remains a future whole after M3, recorded in ROADMAP.
 - COOPERATOR-granted mutation classes for M1 host enablement (named, bounded):
   install `openrgb` from the repo including its udev rules; run the OpenRGB SDK
   server on loopback; install/load the KWin script via `kpackagetool6` or
@@ -67,11 +82,10 @@ this project.
   (`CanSuspend=yes` verified). `org.kde.KWin /Scripting` exposes
   `loadScript/start/unloadScript/isScriptLoaded` for the bridge dev loop.
 
-## Hard rule: no automated Worker dispatch
+## Hard rule: manual delivery, no automated Worker dispatch
 
-- This project requires the **Read-Only Orchestrator** profile: the COOPERATOR
-  manually carries every prompt and report (explicit opt-out from AP default agent
-  dispatch).
+- This project’s access profile is **ChatOrchestrator** with **manual**
+  delivery preserved: the COOPERATOR carries every prompt and report.
 - Never use the Task/subagent tool or any agent-spawning mechanism to dispatch,
   substitute, or simulate a Worker. Never claim a Worker ran unless the COOPERATOR
   returned its actual terminal report.
@@ -82,23 +96,24 @@ this project.
 ## Protocol and trace sources
 
 - AP: `https://github.com/cisarik/ap` — `AP.md` is the sole live normative owner.
-  Local checkout (verify identity/status before trusting): `/home/agile/Projects/ap`.
-  Never resurrect old AP generations from Git history.
+  Never resurrect old AP generations from Git history. Verify the pinned `.ap/`
+  checkout before trusting local protocol files.
 - META: `https://github.com/cisarik/meta` — historical evidence only, never current
-  truth, task authority, or a roadmap. Local checkout: `/home/agile/meta`. Follow the
-  storage contract in its `README.md`; do not assume an old layout or hardcode dates.
-  This project's trace lives under `projects/contextdesk/` (foundation exchange
-  archived locally as `f420ec6`); always verify actual META Git state before treating
-  anything as archived or complete.
+  truth, task authority, or a roadmap. Follow the storage contract in its
+  `README.md`; do not assume an old layout or hardcode dates. This project's
+  trace lives under `projects/contextdesk/`. Always verify actual META Git state
+  before treating anything as archived or complete.
 - Trace policy (handout §5): handout proposed the provisional key
   `g213-contextdeck`; the operative META project key is `contextdesk` (matches the
-  repo name and the actual trace directory). Trace is public,
-  `historical-evidence-only`, archival owner ORCHESTRATOR. Archive the exact issued
-  prompt and exact actual terminal report together, only after the report exists, in
-  the same first-add commit. Workers never self-archive; reports are never rewritten
-  or prettified. Archives must be public-safe: no secrets, tokens, private URLs,
-  personal data, hidden reasoning, or raw tool logs. Local add/commit only; remote
-  push is publication and needs separate authority.
+  repo name and the actual trace directory). Trace is public and
+  `historical-evidence-only`. **Exact report-file preparation** and **META Git
+  archival are separate.** A Worker prepares a report file only under an explicit
+  persistence grant; the COOPERATOR owns META add/commit/push in this
+  ChatOrchestrator workflow. Archive the exact issued prompt and exact actual
+  terminal report together, only after the report exists, in the same first-add
+  commit. Reports are never rewritten or prettified. Archives must be public-safe:
+  no secrets, tokens, private URLs, personal data, hidden reasoning, or raw tool
+  logs. Remote push is publication and needs separate authority.
 - AP is pinned as the `.ap/` submodule (the gitlink is the exact AP version); the
   managed block at the bottom of this file is owned by `./.ap/ap init`. Check health
   with `./.ap/ap doctor`; never hand-edit inside the managed markers. Treat `.ap/` as
@@ -158,8 +173,8 @@ this project.
   disabled. One persistent OpenRGB SDK connection on loopback, never a CLI process
   per focus change; one RGB backend at a time.
 - G213 controls in scope: F1–F12, Previous, Play/Pause, Next, Mute, Volume Down,
-  Volume Up, Game Mode, Backlight. The last two are conditional on hardware evidence
-  (gate G1) — never silently substitute PrintScreen or Pause for them.
+  Volume Up, Game Mode, Backlight. G1 measured Game Mode and Backlight as
+  firmware-only (no host event) — never silently substitute PrintScreen or Pause.
 - Licensing is unresolved: root `LICENSE` is MIT, but handout §25 says the
   COOPERATOR has not selected the license. Never copy external code (G213Tray is
   GPL-3.0-or-later) before an explicit compatible decision.
