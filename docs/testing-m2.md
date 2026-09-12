@@ -1,9 +1,16 @@
-# ContextDeck M2 input safety — crash/hang/watchdog (not G4)
+# ContextDeck M2 input safety — crash/hang/watchdog (full G4 open)
 
-Procedure and S3/S5 device-free evidence for the input broker. This is **not**
-real-keyboard acceptance. Do **not** start or enable
-`contextdeck-broker.service`. Do **not** grab the G213. G4 still owns
-pass-through fidelity and kernel close-on-death on this host.
+Procedure and S3 device-free evidence for the input broker. Device-free S3
+tests do **not** require a second keyboard or SSH. Do **not** start or enable
+`contextdeck-broker.service` from this file's S3 commands. Do **not** grab
+the G213 except under a separately authorized live G4 prompt.
+
+One named physical slice is recorded as accepted on candidate `cb72ae0`
+(explicit ARM, sampled G213 pass-through, matching-invocation cutoff,
+post-death typing; META Worker 16). **Full G4 remains open:** watchdog/hang
+recovery, held-modifier-at-death, LED-return behavior, all-control fidelity,
+input-remapper coexistence beyond that sampled trial, and production/autostart
+readiness.
 
 ## What S3 proves without a keyboard
 
@@ -127,19 +134,25 @@ loop is stuck is forbidden and is not present.
 
 The trial cutoff is a separate PID1 timer (`OnActiveSec=30s`,
 `AccuracySec=1us`). It is armed per invocation after the broker is running
-and before `ARM`. Cancel it after a normal disarm. A second keyboard or SSH
-is an optional recovery path, not a prerequisite.
+and before `ARM`. Cancel it after a normal disarm. Device-free cutoff
+rehearsal does not require a second keyboard or SSH. Any live G4 or
+physical-grab procedure does: a second physical keyboard or SSH from another
+device must be independently verified before the broker is started or ARM is
+attempted and must remain available through the trial. Either route is
+sufficient. The cutoff helper is never a substitute for that path.
 
 ## Production hang harness (G4 only)
 
 Do **not** run this during implementation or against an unarmed/unstarted
 broker. There is no hidden hang command in `contextdeck-broker`. Use an
-external signal from a recovery path that does **not** need the G213
-(second physical keyboard, SSH, or a TTY already open).
+external signal from a recovery path that does **not** need the G213.
 
-Preconditions: the broker unit is actually running because a later G4
-session started it; an authenticated lease has armed it if the test is
-about grabbed-keyboard recovery; `Restart=no` remains set.
+Preconditions: an independently verified second physical keyboard or SSH
+from another device is available (either is sufficient; the cutoff helper
+is not a substitute) and remains available through the trial; the broker
+unit is actually running because a later G4 session started it; an
+authenticated lease has armed it if the test is about grabbed-keyboard
+recovery; `Restart=no` remains set.
 
 1. From the recovery path, read the broker PID (`systemctl show -p MainPID
    --value contextdeck-broker.service`). Do not copy key names or event
@@ -160,12 +173,16 @@ recovery requires rebooting as the first step.
 
 ## Crash / hang recovery (later, when the unit actually runs)
 
-Do **not** execute these against a live seat for S3. They are the G4
-script once S4 exists and grabbing is authorized.
+Do **not** execute these against a live seat for S3. They are remaining G4
+scripts once grabbing is authorized.
 
-Preconditions for that later run: a recovery path that does **not** need
-the G213 (second keyboard, SSH, or a TTY already open). Grabbed G213 keys,
-including Ctrl+Alt+Fn and SysRq, must not be assumed to work.
+Preconditions for that later run: an independently verified second physical
+keyboard or SSH from another device, available before start or ARM and
+through the trial. Either route is sufficient. An already-open TTY is extra
+recovery only if it does not depend on the G213; it is not a third
+substitute for that precondition. The cutoff helper is not a substitute.
+Grabbed G213 keys, including Ctrl+Alt+Fn and SysRq, must not be assumed to
+work.
 
 1. **Orderly stop** — `systemctl stop contextdeck-broker.service`. Expect
    the process to leave, no autostart, typing restored if it had been
@@ -186,11 +203,13 @@ death; recovery requires rebooting as the first step.
 
 ## What this file does not cover
 
-Real grab, pass-through fidelity, input-remapper vs the virtual device, and
-kernel ungrab-on-close on this host remain G4. Autostart (G8) stays
-forbidden until those pass. Session IPC (S4) is covered by `test_broker_ipc`
-and `docs/operations.md` §8; production install is `docs/operations.md` §9.
-Do not start the broker unit to exercise either.
+The named physical slice covered sampled grab, pass-through, matching-invocation
+cutoff death, and typing after descriptor close. Remaining G4 claims:
+watchdog/hang recovery, held-modifier-at-death, LED return, all-control
+fidelity, and input-remapper coexistence beyond that sample. Autostart (G8)
+stays forbidden until those pass. Session IPC (S4) is covered by
+`test_broker_ipc` and `docs/operations.md` §8; production install is
+`docs/operations.md` §9. Do not start the broker unit to exercise either.
 
 Never paste ordinary typed text, key names, scan codes, raw event
 payloads, USB serials, or per-event timing into reports.

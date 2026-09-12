@@ -5,9 +5,10 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 
 > **Status: early development.** Five-zone lighting and application context
 > (M1) are implemented and recorded as accepted on hardware. The input broker
-> (M2) exists in this repository and can be installed **inactive**; live
-> pass-through has **not** passed G4 hardware acceptance. The plan lives in
-> [ROADMAP.md](ROADMAP.md) and the design in
+> (M2) exists in this repository and can be installed **inactive**. One named
+> physical slice (explicit ARM, sampled G213 pass-through, invocation-bound
+> cutoff recovery) is recorded as accepted on the reference host; **full G4**
+> remains open. The plan lives in [ROADMAP.md](ROADMAP.md) and the design in
 > [docs/architecture.md](docs/architecture.md).
 
 ## The idea
@@ -29,9 +30,11 @@ does — automatically, quietly, and only where you configured it:
   both as **firmware-only** (no host event), so they stay out of the remap
   catalog.
 
-Safety is a first-class feature: any code that intercepts keyboard input ships
-only after crash recovery is proven on real hardware. A crash must never leave
-you unable to type. Missing a second keyboard does not waive that rule.
+Safety is a first-class feature: a crash must never leave you unable to type.
+Any live G4 grab needs an independently verified second physical keyboard or
+SSH from another device **before** the broker is started or armed. A cutoff
+timer is extra evidence, never a substitute. Either recovery route is
+enough; device-free tests do not need that path.
 
 ## Deliberately narrow
 
@@ -46,8 +49,8 @@ you unable to type. Missing a second keyboard does not waive that rule.
 |------|-------|
 | Plan | Foundation planning accepted; M2 in progress — [ROADMAP.md](ROADMAP.md) |
 | Lighting (M1) | Implemented; recorded as COOPERATOR-accepted IRL (five zones, not per-key) |
-| Input broker (M2) | Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL). **G4 IRL acceptance uncompleted** |
-| Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 pass-through/recovery open |
+| Input broker (M2) | Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL). Inactive install recorded; one named physical slice accepted; **full G4 remains open** |
+| Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named ARM/pass-through/cutoff slice accepted; watchdog/hang, held-modifier, LED, all-control, and production autostart still open |
 | Build / tests | CMake + Ninja; registered CTest suite owned by [CMakeLists.txt](CMakeLists.txt) |
 | Host install | Packaging files are in the repo. Installed vs not-installed is host evidence — see [docs/operations.md](docs/operations.md). The broker unit has no `[Install]` section and must not autostart |
 
@@ -58,7 +61,7 @@ you unable to type. Missing a second keyboard does not waive that rule.
 | [ROADMAP.md](ROADMAP.md) | The plan: milestones, evidence gates, current state |
 | [docs/architecture.md](docs/architecture.md) | Accepted architecture and boundaries |
 | [docs/operations.md](docs/operations.md) | Host enablement, G3/S5 install, recovery notes |
-| [docs/testing-m2.md](docs/testing-m2.md) | M2 / G4 test pack (not a passed acceptance) |
+| [docs/testing-m2.md](docs/testing-m2.md) | M2 / G4 test pack (named slice accepted; full G4 not passed) |
 | [handout.md](handout.md) | Original bootstrap brief (historical) |
 | [LICENSE](LICENSE) | MIT file; the final product licensing decision is still pending |
 

@@ -250,7 +250,8 @@ loop (S3) and accepts an authenticated session lease on
 `[Install]` section and no `RuntimeMaxSec`. Production ARM (S5) enumerates the
 G213 by USB ancestry and may construct `RealSink` / `EvdevGrabber` only after
 an explicit authenticated `ARM`. Do **not** enable or start the unit from this
-G3 section. IRL pass-through remains G4.
+G3 section. IRL pass-through remains a G4 claim: one named slice is
+recorded as accepted; full G4 is not closed.
 
 `ExecStart` is `/usr/bin/contextdeck-broker`. Install that binary with the
 documented `/usr` prefix (section 9) before any later G4 start. Do not start
@@ -308,10 +309,23 @@ group is gone. Unplug/replug the G213 if event-node ownership stays stale.
 
 ## 7. Crash, hang, watchdog, cutoff, and TTY recovery
 
-This is the documented recovery path for the input broker. It does **not**
-require running the unit or grabbing the G213. Do **not** start or enable
-`contextdeck-broker.service` from this section. Real-keyboard proof of
-FD-close ungrab on this kernel is G4 / S5, not S3.
+This is the documented recovery path for the input broker. Do **not** start or
+enable `contextdeck-broker.service` from this section. Device-free S3 evidence
+does not require a second keyboard or SSH. One named physical slice on
+candidate `cb72ae0` is recorded as accepted (explicit ARM, sampled
+pass-through, matching-invocation cutoff, typing after descriptor close; META
+Worker 16). Full G4 remains open (watchdog/hang, held-modifier-at-death, LED
+return, all-control fidelity, production/autostart).
+
+### Independent recovery path (live G4)
+
+Any live G4 or physical-grab procedure requires an independently verified
+second physical keyboard or SSH from another device **before** the broker is
+started or ARM is attempted. That path must remain available through the
+trial. Either route is sufficient; both are not required. The
+invocation-bound cutoff helper is supplemental recovery evidence and never a
+substitute for that path. Device-free S3 procedures (CTest, watchdog-selftest,
+`rehearse_trial_cutoff.sh`) may remain keyboard-free.
 
 ### What the broker does
 
@@ -334,8 +348,8 @@ FD-close ungrab on this kernel is G4 / S5, not S3.
 ### Invocation-bound trial cutoff
 
 The 2 s watchdog recovers a stuck event loop. It does not bound a live loop
-that has stopped forwarding. Before any future authenticated `ARM`, arm an
-invocation-bound transient timer with
+that has stopped forwarding. Before any authenticated `ARM` on a live grab,
+arm an invocation-bound transient timer with
 `packaging/systemd/contextdeck-trial-cutoff.sh`. Default window is 30 seconds
 (allowed 20–45). The timer is PID1-owned (`Persistent=no`,
 `AccuracySec=1us`, `RandomizedDelaySec=0`) and re-checks the exact
@@ -343,25 +357,28 @@ invocation-bound transient timer with
 --signal=SIGKILL` on that unit. It never uses `pkill`, `killall`, a guessed
 PID, or restart.
 
-Exact order for a later authorized trial (do not run from this section):
+Exact order for a later authorized live trial (do not run from this section):
 
-1. Start the broker manually and confirm it is disarmed (`STATUS` /
+1. Independently verify a second physical keyboard or SSH from another
+   device and keep that path available. Failure here means **do not start**
+   and **do not ARM**.
+2. Start the broker manually and confirm it is disarmed (`STATUS` /
    `armed=0`). Do not enable the unit.
-2. Read and record the current `InvocationID`
+3. Read and record the current `InvocationID`
    (`systemctl show -p InvocationID --value contextdeck-broker.service`).
-3. Arm the transient cutoff with that exact identity and verify the timer is
+4. Arm the transient cutoff with that exact identity and verify the timer is
    loaded with `OnActiveSec=30s` (or the chosen 20–45 value) and
    `AccuracySec=1us`. Setup failure means **do not ARM**.
-4. Only after that may a future explicit authenticated `ARM` be attempted.
-5. On normal completion, `DISARM`, cancel the cutoff, then stop the broker.
-6. If the broker hangs or the invoking shell disappears, the watchdog and/or
+5. Only after that may an explicit authenticated `ARM` be attempted.
+6. On normal completion, `DISARM`, cancel the cutoff, then stop the broker.
+7. If the broker hangs or the invoking shell disappears, the watchdog and/or
    cutoff kill only the matching invocation.
-7. If timer setup, identity verification, or any prerequisite fails, do not
+8. If timer setup, identity verification, or any prerequisite fails, do not
    ARM.
-8. Clean up the timer and all temporary state.
-9. Final state must be statically and operationally verifiable: broker
-   inactive or safely disarmed, no grabbed physical device, no stale virtual
-   device, no active trial timer, and unchanged input-remapper state.
+9. Clean up the timer and all temporary state.
+10. Final state must be statically and operationally verifiable: broker
+    inactive or safely disarmed, no grabbed physical device, no stale virtual
+    device, no active trial timer, and unchanged input-remapper state.
 
 A cutoff kill is a controlled recovery event. Do **not** report it as a
 watchdog PASS. Distinguish:
@@ -370,21 +387,22 @@ watchdog PASS. Distinguish:
 |-------|----------------|------------------------|
 | Watchdog expiry (`WatchdogSec=2`) | the event-loop thread stopped feeding | physical typing; cutoff path |
 | Invocation-bound cutoff expiry | PID1 killed the matching invocation after 30 s | that the watchdog fired; physical typing |
-| Physical usability | G4 on this kernel after descriptor close | either userspace timer |
+| Physical usability after descriptor close | named-slice typing after matching-invocation cutoff death | watchdog/hang abort; held-modifier-at-death; all-control fidelity |
 
-A second keyboard or SSH remains a valid **optional** recovery path. It is
-not required for the cutoff demonstration. Limitations: PID1/user-manager
-must be running; a kernel hang, machine power loss, or session teardown is
-outside this helper; `TimeoutStopSec`/`TimeoutAbortSec` bound systemd's stop
-job, not the 30 s trial window.
+The cutoff helper is supplemental recovery evidence. It never replaces the
+independent second-keyboard or SSH path required for live G4. Limitations:
+PID1/user-manager must be running; a kernel hang, machine power loss, or
+session teardown is outside this helper; `TimeoutStopSec`/`TimeoutAbortSec`
+bound systemd's stop job, not the 30 s trial window.
 
 ### Hang (watchdog)
 
 A hung event loop stops feeding `WATCHDOG=1`. systemd then aborts the
 process (default watchdog signal is `SIGABRT`) after `WatchdogSec=2`.
 Because `Restart=no`, the unit stays dead. If the broker had been armed,
-descriptor close is what must return the physical keyboard; that
-close-on-death behavior is kernel-side and still needs G4 on this host.
+descriptor close is what must return the physical keyboard. Named-slice
+cutoff death showed G213 typing after descriptor close; watchdog/hang abort
+still needs G4 on this host.
 
 The production hang procedure is external: `SIGSTOP` the broker PID from a
 recovery path, observe that watchdog feeding stops, then let systemd abort
@@ -402,10 +420,12 @@ on systemd `--user` fixtures that do not name the broker.
 `SIGTERM` is the orderly stop. `SIGKILL` and `SIGABRT` (watchdog) skip
 userspace teardown. The planned armed teardown order remains ungrab
 physical first, then balanced synthetic releases, then destroy the virtual
-device. A dead process cannot run that sequence; G4 must show that closing
-the evdev and uinput descriptors is enough.
+device. A dead process cannot run that sequence. Named-slice cutoff SIGKILL
+showed typing after descriptor close; watchdog abort, held-modifier-at-death,
+and LED return still need G4.
 
-Do not enable autostart until that G4 evidence exists (handout §29).
+Do not enable autostart until full G4 evidence exists (handout §29). The
+named slice does not authorize autostart.
 
 ### TTY / second-seat recovery
 
@@ -414,11 +434,15 @@ grabbed. If the broker is hung and the G213 is silent, recover from a
 path that does not need that keyboard:
 
 1. Another physical keyboard on the same seat, or
-2. SSH / another machine, or
-3. A TTY already reachable without the G213.
+2. SSH / another machine.
 
-That path is optional once the invocation-bound cutoff is armed. Then, only
-when recovering a **running** broker (not during S3):
+An already-open TTY is extra recovery only if it does not depend on the
+G213. It is not a third substitute for the live-G4 precondition.
+
+For a live G4 grab a second physical keyboard or SSH must already have been
+verified before start or ARM (see Independent recovery path above). The
+cutoff helper does not make that optional. Device-free S3 does not start the
+unit. Then, only when recovering a **running** broker (not during S3):
 
 ```sh
 # Recovery — COOPERATOR-run, and only if the unit was started later.
@@ -438,8 +462,8 @@ PID from the recovery path. Unplug/replug the G213 only as a last resort.
 Quitting the session app, closing the broker socket, or letting the 6 s
 lease expire also disarms (ungrab-first) without needing `systemctl stop`.
 That is the S4 recovery path when the seat is still usable. If the G213 is
-silent, still use a second keyboard/SSH/TTY as above — do not assume the
-grabbed keyboard can send the quit chord.
+silent, still use the already-verified second keyboard or SSH as above —
+do not assume the grabbed keyboard can send the quit chord.
 
 After recovery, confirm typing on a text field. Do not paste key names,
 scan codes, or raw event dumps into notes.
@@ -504,9 +528,11 @@ state returns to if00 only; a runtime LED write failure does not disarm.
 
 ### TTY recovery
 
-Same as section 7. Prefer stopping the session app (drops the lease) when the
-seat still types. If the G213 is grabbed and silent, recover from another
-keyboard, SSH, or an already-open TTY, then `systemctl stop
+Same as section 7. The live-G4 precondition remains a second physical
+keyboard or SSH, verified before start or ARM. Prefer stopping the session
+app (drops the lease) when the seat still types. If the G213 is grabbed and
+silent, recover from that already-verified path (an already-open TTY is
+extra recovery only if it does not depend on the G213), then `systemctl stop
 contextdeck-broker.service` only if that unit was actually started.
 
 ## 9. Install the broker binary (S5) — COOPERATOR-run
@@ -547,7 +573,9 @@ Verify (still no start):
 | `systemctl is-enabled contextdeck-broker` | not enabled (`static` / no `[Install]`) |
 | `systemctl is-active contextdeck-broker` | `inactive` |
 
-Do **not** `systemctl start`. IRL G4 is a separate acceptance.
+Do **not** `systemctl start`. An inactive install of candidate `cb72ae0` is
+separately recorded as `deployment-PASS` (META Worker 14). Remaining IRL G4
+claims are a separate acceptance. This section does not grant a start.
 
 ## Logs to keep private
 

@@ -202,14 +202,21 @@ Durable rules for this project:
   identity and `SIGKILL`s only the matching main process. A cutoff kill is a
   controlled recovery event, not a watchdog PASS. Cancel the timer after a
   normal disarm and before stopping the broker. Setup failure means do not ARM.
-  A second keyboard or SSH remains a valid optional recovery path. PID1/user
-  manager, kernel descriptor close, machine power, and session death are
-  outside this userspace path.
+  For any live G4 or physical-grab procedure, a second physical keyboard or
+  SSH from another device must be independently verified before the broker
+  is started or ARM is attempted and must remain available through the trial.
+  Either route is sufficient. The cutoff helper is supplemental evidence,
+  never a substitute. Device-free S3 tests do not require that path.
+  PID1/user manager, kernel descriptor close, machine power, and session
+  death are outside this userspace path.
 - Recovery order for an orderly disarm: ungrab physical sources first, then
   best-effort synthetic releases, then destroy the virtual device. The real
   keyboard must stay usable. Kernel close behavior (grab release on evdev
-  close, uinput teardown on close) is verified in source but still needs
-  acceptance on this kernel.
+  close, uinput teardown on close) is verified in source. One named physical
+  slice (explicit ARM, sampled pass-through, matching-invocation cutoff,
+  typing after descriptor close) is recorded as accepted on candidate
+  `cb72ae0`; remaining G4 claims (watchdog/hang, held-modifier-at-death, LED
+  return, all-control fidelity, production autostart) still need acceptance.
 - RGB failure disables lighting only; input behavior is unaffected. Never
   auto-switch to direct HID or restart unrelated RGB software.
 - Uninstall reverses only owned units/rules/files; user profiles are preserved
@@ -250,5 +257,5 @@ interception entirely and M2 owns it.
 ## Open evidence gates
 
 See ROADMAP.md: G1 physical controls, G2 RGB behavior, G3 device authority,
-G4 input safety, G5 desktop behavior, G6 licensing, G7 power actions,
-G8 release lifecycle.
+G4 input safety (named slice accepted; remainder open), G5 desktop behavior,
+G6 licensing, G7 power actions, G8 release lifecycle.

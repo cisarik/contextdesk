@@ -24,11 +24,20 @@ COOPERATOR action, separate from any authorized report-file preparation.
   non-destructive startup, and desktop UI. Unrelated gates such as G7 are not
   closed by restating that acceptance.
 - Current whole: **M2 `g213-contextdeck-input-passthrough-safety`** — pass-through
-  input broker. Planning is done; the repository contains the production path.
-  **G4 real-hardware acceptance remains uncompleted.** Restoring this whole does
-  not restart its first Planner or its acceptance budgets. Next unresolved work
-  is a bounded recovery-design decision and production safety gaps, then
-  separately authorized validation — not a live grab.
+  input broker. Planning and production implementation are complete enough for
+  deployment. Exact candidate `cb72ae0388307b514182efc6936712e3da42cda4` was
+  installed and verified on the reference host while the broker remained
+  inactive (`deployment-PASS`; META Worker 14, `14_report_00.md`). One
+  independently demonstrated physical slice passed: external recovery proof,
+  explicit authenticated ARM, sampled G213 pass-through, matching-invocation
+  cutoff death, and G213 typing after descriptor close (`acceptance-PASS` for
+  that named slice; META Worker 16, `16_report_00.md`). Trace:
+  `projects/contextdesk/00/02-g213-contextdeck-input-passthrough-safety/`.
+  **Full G4 remains open.** Restoring this whole does not restart its first
+  Planner or its acceptance budgets. Next remaining work is a separately
+  authorized fresh task for watchdog/hang recovery, held-modifier-at-death,
+  LED return / all-control fidelity, or an explicitly chosen documentation
+  or decision step — not a claim that the next choice is already accepted.
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -63,7 +72,7 @@ done-as-planned.
 | M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
-| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — production path in repo (ARM, IPC, watchdog, install, late uinput ACL); **G4 uncompleted** |
+| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — production path in repo; inactive install (`deployment-PASS`); named ARM/pass-through/cutoff slice (`acceptance-PASS`); **full G4 open** |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
 | M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
@@ -84,7 +93,7 @@ ship:
 | G1 | Routing matrix for all 20 requested controls | Special-button remapping | **Closed** — probe measured 2026-09-11: F1–F12 on if00 (59–68/87/88), media+volume on if01 (165/164/163, 113/114/115) all host-remappable; Game Mode and Backlight emit **zero** host events — firmware-only, permanently out of the remap catalog (`docs/hardware/g213-control-matrix.md`) |
 | G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **Closed — proven IRL** during M1 (five zones, modes, speed, gradient all verified physically) |
 | G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Model accepted.** Repo packaging: system user `contextdeck-broker`, guard udev (G213 event + `/dev/port` + `i2c`, hidraw kept), narrow event grant, late uinput ACL after seat `uaccess`. Whether a host has those files installed is operations evidence, not implied by the tree. Never autostart an unproven broker |
-| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | **Uncompleted.** Implementation/test reports are not physical pass-through or recovery proof |
+| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | **Open.** Named physical slice accepted on candidate `cb72ae0` (explicit ARM, sampled pass-through, matching-invocation cutoff, post-death typing). Remaining: watchdog/hang, held-modifier-at-death, LED return, all-control fidelity, input-remapper coexistence beyond that sample, production/autostart. A documentation commit does not close G4 |
 | G5 | KWin lifecycle, identity, focus-race measurements | Contextual behavior claims | Partially exercised in M1 (bridge, heartbeat, self-context) |
 | G6 | License decision + dependency provenance | Release | Planned |
 | G7 | Authorized display-off and suspend acceptance | Enabling power actions | **IRL pending** — M1 test steps 7–8 (`CanSuspend=yes` verified; `KScreen::Dpms` linked; see the known suspect note) |
@@ -314,7 +323,7 @@ restoring the full automated context ecosystem without manual steps.
 ### M2 input passthrough safety — in progress
 
 Planner report 01/01 PASS (native Plan Mode, archived in META). Implementation
-in the repository (not G4 proof):
+in the repository (tree content, not a G4 close):
 
 - **S1 engine** — fail-closed identity matcher, balanced synthetic ledger, 1:1
   forwarding with SYN pairing, SYN_DROPPED reconciliation, all-or-nothing
@@ -332,20 +341,30 @@ in the repository (not G4 proof):
 - **uinput ACL ordering** — additive `setfacl` for `contextdeck-broker` from
   `99-contextdeck-broker-uinput.rules` after seat `uaccess` (not from `62-*`).
 
-**G4 remains uncompleted.** No implementation report proves physical
-pass-through, crash/hang recovery, or input-remapper coexistence under grab.
-A host may or may not have installed the packaging files; that is operations
-evidence. The broker must stay static/inactive until a separately authorized
-G4 run. Missing a second keyboard or tested off-box SSH blocks the old live-grab
-procedure; it does not waive it.
+**G4 remains open.** Worker 16 recorded `acceptance-PASS` for one named slice
+on candidate `cb72ae0`; that is not full G4 and does not close this whole. A
+later documentation commit does not rerun that hardware. Remaining: watchdog/hang
+recovery, held-modifier-at-death, LED-return behavior, all-control fidelity,
+input-remapper coexistence beyond the sampled trial, and production/autostart
+readiness. A host may or may not have installed the packaging files; that is
+operations evidence. The broker must stay static/inactive with no autostart
+until those remaining claims are separately authorized and accepted.
 
-**Next unresolved M2 work:** a bounded recovery-design decision for development
-with one physical keyboard, plus production safety gaps already visible in
-source (silent uinput write errors; virtual-device capabilities from
-`passthroughCapabilities()` rather than measured source bits / LED return path;
-logind `sd_pid_get_session` vs user-manager-launched session apps). Then
-separately authorized validation. Documentation here does not grant grab, ARM,
-or host mutation.
+For any live G4 grab, an independently verified second physical keyboard or
+SSH from another device is a mandatory safety precondition before the broker
+is started or ARM is attempted, and it must remain available through the trial.
+Either route is sufficient. A cutoff timer is additional evidence and never a
+replacement. Device-free S3 procedures may remain keyboard-free.
+
+**Next remaining M2 work:** the named slice is accepted. A separately
+authorized fresh task remains for watchdog/hang, held-modifier-at-death, LED
+return / all-control fidelity, or an explicitly chosen documentation or
+decision step. Documentation here does not grant grab, ARM, autostart, or host
+mutation, and does not choose which remainder comes next. Production safety
+gaps already visible in source (silent uinput write errors; virtual-device
+capabilities from `passthroughCapabilities()` rather than measured source bits /
+LED return path; logind `sd_pid_get_session` vs user-manager-launched session
+apps) stay in that remainder unless a later prompt names them.
 
 Registered tests live in `CMakeLists.txt`. Historical “N/N CTest” lines in META
 are not current suite truth.

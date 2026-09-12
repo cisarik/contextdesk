@@ -16,10 +16,13 @@ this project.
 - **M2 `g213-contextdeck-input-passthrough-safety` is in progress in this
   repository.** The tree contains the production broker path, explicit
   session-app ARM action, Unix-socket IPC lease, watchdog integration, broker
-  install rule, and the late uinput ACL rule. **G4 real-hardware acceptance is
-  not completed.** Implementation and unit tests do not prove physical
-  pass-through or crash recovery. Restoring this planned whole does not restart
-  its initial planning or acceptance budgets.
+  install rule, and the late uinput ACL rule. Candidate `cb72ae0` has a
+  recorded inactive-host `deployment-PASS` and one named physical
+  `acceptance-PASS` (explicit authenticated ARM, sampled G213 pass-through,
+  matching-invocation cutoff recovery, post-death G213 typing). **Full G4
+  remains open** (watchdog/hang, held-modifier-at-death, LED return,
+  all-control fidelity, production/autostart). Restoring this planned whole
+  does not restart its initial planning or acceptance budgets.
 - Tree: `handout.md`, `AGENTS.md`, `README.md`, `ROADMAP.md`, `LICENSE`, `docs/`,
   `CMakeLists.txt`, `cmake/`, `src/` (session app + `src/broker/`), `ui/`,
   `kwin/`, `tests/unit/`, `packaging/` (systemd, udev, sysusers), and the pinned
@@ -31,8 +34,9 @@ this project.
   Worker prompt.
 - Repository artifacts are not installed host state. Presence of packaging
   files, a local `build/` binary, or `/usr` copies on one machine does not mean
-  every host is installed or verified. Host enablement and G4 remain
-  COOPERATOR-owned operations evidence.
+  every host is installed or verified. Host enablement, named physical
+  acceptance, and remaining G4 claims remain COOPERATOR-owned operations
+  evidence. A documentation commit does not rerun hardware acceptance.
 - `handout.md` is the original COOPERATOR-to-ORCHESTRATOR bootstrap contract
   (historical). Read it for intent and safety constraints; it is not a renewed
   bootstrap task. Fast path: §1–6 (roles, delivery, AP/META/trace), §29 (grab
@@ -61,11 +65,15 @@ this project.
 - M2 Planner report 01/01 passed (native Plan Mode). The repository now has
   production wiring: enumerator + `RealSink`/`EvdevGrabber` behind explicit
   `LEASE`/`ARM`, session IPC, watchdog, G3 packaging, and the late uinput ACL
-  rule. **Nothing in documentation grants live grab.** The next unresolved M2
-  work is a bounded recovery-design decision (safe development with one physical
-  keyboard, without waiving the independent-recovery rule) and production safety
-  gaps, then separately authorized validation. The Super-key **deck layer**
-  brainstorm remains a future whole after M3, recorded in ROADMAP.
+  rule. Candidate `cb72ae0` has a recorded inactive `deployment-PASS` and one
+  named-slice `acceptance-PASS`. **Nothing in documentation grants live grab
+  or autostart.** Full G4 remains open. The next remaining M2 work is a
+  separately authorized fresh task for watchdog/hang, held-modifier-at-death,
+  LED return / all-control fidelity, or an explicitly chosen documentation or
+  decision step — not a recovery-design decision that blocks any live grab,
+  and not a claim that the next choice is already accepted. The Super-key
+  **deck layer** brainstorm remains a future whole after M3, recorded in
+  ROADMAP.
 - COOPERATOR-granted mutation classes for M1 host enablement (named, bounded):
   install `openrgb` from the repo including its udev rules; run the OpenRGB SDK
   server on loopback; install/load the KWin script via `kpackagetool6` or
@@ -150,7 +158,12 @@ this project.
   ambiguous repo state. Commit and push need separate explicit authority.
 - Input grabbing must not ship before the handout §29 safety acceptance: a crash
   leaves the real keyboard usable, no stuck modifiers, no duplicate/phantom events,
-  documented TTY recovery. Never autostart an unproven grabbing path.
+  documented TTY recovery. Never autostart an unproven grabbing path. For any
+  live G4 grab, a second physical keyboard or SSH from another device must be
+  independently verified before the broker is started or ARM is attempted and
+  must remain available through the trial. Either route is sufficient. A cutoff
+  timer is supplemental evidence, never a substitute. Device-free S3 tests do
+  not require that path.
 - Never log ordinary typed keystrokes. Suspend goes through logind/systemd policy,
   never `/sys/power/state`. Planner evidence (report 01/01) found
   `sleep.target`/`suspend.target` loaded and `CanSuspend=yes` — the old "masked
