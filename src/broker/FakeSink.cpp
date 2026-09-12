@@ -4,14 +4,18 @@
 
 namespace contextdeck::broker {
 
-void FakeSink::writeEvent(uint16_t type, uint16_t code, int32_t value)
+bool FakeSink::writeEvent(uint16_t type, uint16_t code, int32_t value)
 {
+    if (failWrites) {
+        return false;
+    }
     events_.push_back(RecordedEvent{type, code, value});
+    return true;
 }
 
-void FakeSink::flushSyn()
+bool FakeSink::flushSyn()
 {
-    events_.push_back(RecordedEvent{EV_SYN, SYN_REPORT, 0});
+    return writeEvent(EV_SYN, SYN_REPORT, 0);
 }
 
 } // namespace contextdeck::broker

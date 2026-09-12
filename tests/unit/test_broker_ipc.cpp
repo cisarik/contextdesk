@@ -10,9 +10,11 @@
 #include "broker/Watchdog.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <poll.h>
 #include <string>
 #include <sys/socket.h>
@@ -34,7 +36,9 @@ using contextdeck::broker::IPeerCredentials;
 using contextdeck::broker::IpcRequest;
 using contextdeck::broker::IpcVerb;
 using contextdeck::broker::KernelPeerCredentials;
+using contextdeck::broker::ILoginLookup;
 using contextdeck::broker::KeyLedger;
+using contextdeck::broker::LoginSessionView;
 using contextdeck::broker::LogindSeatAuthorizer;
 using contextdeck::broker::Logger;
 using contextdeck::broker::PeerCredentials;
@@ -450,6 +454,133 @@ void testLogindRejectsRootAndBadPid()
     EXPECT(!auth.authorize(cred));
 }
 
+LoginSessionView goodSession(uid_t uid)
+{
+    LoginSessionView view;
+    view.uid = uid;
+    view.seat = "seat0";
+    view.type = "wayland";
+    view.active = true;
+    view.remote = false;
+    return view;
+}
+
+class FakeLoginLookup final : public ILoginLookup {
+public:
+    int pidRc = -ENODATA;
+    std::string pidName;
+    std::map<std::string, LoginSessionView> byName;
+    std::vector<std::string> uidNames;
+
+    int pidSession(pid_t, std::string &session) const override
+    {
+        session = pidName;
+        return pidRc;
+    }
+
+    bool inspectSession(const std::string &session, LoginSessionView &out) const override
+    {
+        const auto it = byName.find(session);
+        if (it == byName.end()) {
+            return false;
+        }
+        out = it->second;
+        return true;
+    }
+
+    std::vector<std::string> sessionsForUid(uid_t) const override { return uidNames; }
+};
+
+void testLogindDirectAndFallback()
+{
+    const uid_t uid = ::getuid();
+    PeerCredentials cred = selfCred();
+
+    FakeLoginLookup direct;
+    direct.pidRc = 0;
+    direct.pidName = "s1";
+    direct.byName["s1"] = goodSession(uid);
+    LogindSeatAuthorizer authDirect(direct);
+    EXPECT(authDirect.authorize(cred));
+
+    FakeLoginLookup fallback;
+    fallback.pidRc = -ENODATA;
+    fallback.uidNames = {"s1"};
+    fallback.byName["s1"] = goodSession(uid);
+    LogindSeatAuthorizer authFallback(fallback);
+    EXPECT(authFallback.authorize(cred));
+
+    FakeLoginLookup none;
+    none.pidRc = -ENODATA;
+    LogindSeatAuthorizer authNone(none);
+    EXPECT(!authNone.authorize(cred));
+
+    FakeLoginLookup ambiguous;
+    ambiguous.pidRc = -ENODATA;
+    ambiguous.uidNames = {"s1", "s2"};
+    ambiguous.byName["s1"] = goodSession(uid);
+    ambiguous.byName["s2"] = goodSession(uid);
+    ambiguous.byName["s2"].seat = "seat1";
+    LogindSeatAuthorizer authAmbiguous(ambiguous);
+    EXPECT(!authAmbiguous.authorize(cred));
+
+    FakeLoginLookup inactive;
+    inactive.pidRc = -ENODATA;
+    inactive.uidNames = {"s1"};
+    inactive.byName["s1"] = goodSession(uid);
+    inactive.byName["s1"].active = false;
+    LogindSeatAuthorizer authInactive(inactive);
+    EXPECT(!authInactive.authorize(cred));
+
+    FakeLoginLookup remote;
+    remote.pidRc = -ENODATA;
+    remote.uidNames = {"s1"};
+    remote.byName["s1"] = goodSession(uid);
+    remote.byName["s1"].remote = true;
+    LogindSeatAuthorizer authRemote(remote);
+    EXPECT(!authRemote.authorize(cred));
+
+    FakeLoginLookup unseated;
+    unseated.pidRc = -ENODATA;
+    unseated.uidNames = {"s1"};
+    unseated.byName["s1"] = goodSession(uid);
+    unseated.byName["s1"].seat.clear();
+    LogindSeatAuthorizer authUnseated(unseated);
+    EXPECT(!authUnseated.authorize(cred));
+
+    FakeLoginLookup tty;
+    tty.pidRc = -ENODATA;
+    tty.uidNames = {"s1"};
+    tty.byName["s1"] = goodSession(uid);
+    tty.byName["s1"].type = "tty";
+    LogindSeatAuthorizer authTty(tty);
+    EXPECT(!authTty.authorize(cred));
+
+    FakeLoginLookup mismatch;
+    mismatch.pidRc = -ENODATA;
+    mismatch.uidNames = {"s1"};
+    mismatch.byName["s1"] = goodSession(uid == 1 ? 2 : 1);
+    LogindSeatAuthorizer authMismatch(mismatch);
+    EXPECT(!authMismatch.authorize(cred));
+
+    FakeLoginLookup otherError;
+    otherError.pidRc = -EPERM;
+    otherError.uidNames = {"s1"};
+    otherError.byName["s1"] = goodSession(uid);
+    LogindSeatAuthorizer authOther(otherError);
+    EXPECT(!authOther.authorize(cred));
+
+    FakeLoginLookup directIneligible;
+    directIneligible.pidRc = 0;
+    directIneligible.pidName = "s1";
+    directIneligible.byName["s1"] = goodSession(uid);
+    directIneligible.byName["s1"].type = "tty";
+    directIneligible.uidNames = {"s2"};
+    directIneligible.byName["s2"] = goodSession(uid);
+    LogindSeatAuthorizer authNoFallback(directIneligible);
+    EXPECT(!authNoFallback.authorize(cred));
+}
+
 void testNoArmBeforeAuthOnListen()
 {
     SignalEpollWait wait;
@@ -502,6 +633,7 @@ int main()
     testDisconnectMalformedExpiryShutdown();
     testListenUnixSocketAndLoop();
     testLogindRejectsRootAndBadPid();
+    testLogindDirectAndFallback();
     testNoArmBeforeAuthOnListen();
     if (g_failures != 0) {
         std::fprintf(stderr, "%d ipc test(s) failed\n", g_failures);

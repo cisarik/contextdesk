@@ -109,7 +109,7 @@ int runWatchdogSelftest()
         , source_(source)
     {
     }
-    void afterWait() override { engine_.ingest(source_); }
+    void afterWait() override { (void)engine_.ingest(source_); }
 
   private:
     ForwardingEngine &engine_;

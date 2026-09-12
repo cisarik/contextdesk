@@ -30,9 +30,11 @@ public:
     bool claimSource() override;
     void unclaimSource() override;
     void closeSource() override;
+    SinkCapabilities measuredCapabilities() const override;
 
     std::optional<InputEvent> read() override;
     std::set<uint16_t> keysDown() const override;
+    bool writeLed(uint16_t code, int32_t value);
 
     bool opened() const { return opened_; }
     int fd() const { return fd_; }
@@ -52,5 +54,7 @@ private:
     bool opened_ = false;
     bool failed_ = false;
 };
+
+SinkCapabilities measureEvdevCapabilities(const ::libevdev *dev, bool includeLeds);
 
 } // namespace contextdeck::broker

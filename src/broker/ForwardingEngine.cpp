@@ -11,38 +11,59 @@ ForwardingEngine::ForwardingEngine(ISink &sink, KeyLedger &ledger, Logger &logge
 {
 }
 
-void ForwardingEngine::handleDropped(ISource &source)
+bool ForwardingEngine::failWrite()
+{
+    logger_.error("sink-write-failed");
+    return false;
+}
+
+bool ForwardingEngine::handleDropped(ISource &source)
 {
     logger_.state("sync-dropped");
     const std::vector<LedgerEmit> emitted = ledger_.reconcileAfterSync(source.tag(), source.keysDown());
     for (const LedgerEmit &item : emitted) {
-        sink_.writeEvent(EV_KEY, item.code, item.value);
+        if (!sink_.writeEvent(EV_KEY, item.code, item.value)) {
+            return failWrite();
+        }
     }
-    sink_.flushSyn();
+    if (!sink_.flushSyn()) {
+        return failWrite();
+    }
+    return true;
 }
 
-void ForwardingEngine::ingest(ISource &source)
+bool ForwardingEngine::ingest(ISource &source)
 {
     while (const std::optional<InputEvent> event = source.read()) {
         switch (event->kind) {
         case InputEvent::Kind::Key:
             ledger_.onKey(source.tag(), event->code, event->value);
-            sink_.writeEvent(EV_KEY, event->code, event->value);
+            if (!sink_.writeEvent(EV_KEY, event->code, event->value)) {
+                return failWrite();
+            }
             break;
         case InputEvent::Kind::Led:
-            sink_.writeEvent(EV_LED, event->code, event->value);
+            // Physical LED reports are not forwarded. Compositor LED state
+            // returns through the virtual uinput fd to if00 only.
             break;
         case InputEvent::Kind::Msc:
-            sink_.writeEvent(EV_MSC, event->code, event->value);
+            if (!sink_.writeEvent(EV_MSC, event->code, event->value)) {
+                return failWrite();
+            }
             break;
         case InputEvent::Kind::SynReport:
-            sink_.flushSyn();
+            if (!sink_.flushSyn()) {
+                return failWrite();
+            }
             break;
         case InputEvent::Kind::SynDropped:
-            handleDropped(source);
+            if (!handleDropped(source)) {
+                return false;
+            }
             break;
         }
     }
+    return true;
 }
 
 } // namespace contextdeck::broker

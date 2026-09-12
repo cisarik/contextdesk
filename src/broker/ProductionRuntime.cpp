@@ -1,6 +1,39 @@
 #include "broker/ProductionRuntime.h"
 
+#include <linux/input.h>
+
 namespace contextdeck::broker {
+namespace {
+
+class EvdevIf00Led final : public ILedTarget {
+public:
+    explicit EvdevIf00Led(EvdevSource &source)
+        : source_(source)
+    {
+    }
+
+    bool writeLed(uint16_t code, int32_t value) override { return source_.writeLed(code, value); }
+
+private:
+    EvdevSource &source_;
+};
+
+} // namespace
+
+bool applyLedFeedback(const std::vector<RecordedEvent> &events, ILedTarget &if00, Logger &logger)
+{
+    bool ok = true;
+    for (const RecordedEvent &ev : events) {
+        if (ev.type != EV_LED) {
+            continue;
+        }
+        if (!if00.writeLed(ev.code, ev.value)) {
+            logger.error("led-write-failed");
+            ok = false;
+        }
+    }
+    return ok;
+}
 
 RealLifecycleSink::RealLifecycleSink(SinkCapabilities capabilities)
     : capabilities_(std::move(capabilities))
@@ -12,6 +45,15 @@ RealLifecycleSink::~RealLifecycleSink()
     destroyVirtual();
 }
 
+bool RealLifecycleSink::applyMeasuredCapabilities(const SinkCapabilities &capabilities)
+{
+    if (capabilities.keyCodes.empty()) {
+        return false;
+    }
+    capabilities_ = capabilities;
+    return true;
+}
+
 bool RealLifecycleSink::createVirtual()
 {
     if (impl_ != nullptr) {
@@ -21,23 +63,63 @@ bool RealLifecycleSink::createVirtual()
     return impl_ != nullptr;
 }
 
+void RealLifecycleSink::unwatchFeedback()
+{
+    if (wait_ != nullptr && watchedFd_ >= 0) {
+        wait_->removeFd(watchedFd_);
+    }
+    watchedFd_ = -1;
+}
+
 void RealLifecycleSink::destroyVirtual()
 {
+    unwatchFeedback();
     impl_.reset();
 }
 
-void RealLifecycleSink::writeEvent(uint16_t type, uint16_t code, int32_t value)
+bool RealLifecycleSink::prepareVirtual()
 {
-    if (impl_ != nullptr) {
-        impl_->writeEvent(type, code, value);
+    if (impl_ == nullptr || impl_->fd() < 0 || !impl_->makeNonBlocking()) {
+        return false;
     }
+    if (wait_ == nullptr) {
+        return true;
+    }
+    const int fd = impl_->fd();
+    if (!wait_->addFd(fd)) {
+        return false;
+    }
+    watchedFd_ = fd;
+    return true;
 }
 
-void RealLifecycleSink::flushSyn()
+int RealLifecycleSink::feedbackFd() const
 {
-    if (impl_ != nullptr) {
-        impl_->flushSyn();
+    return impl_ != nullptr ? impl_->fd() : -1;
+}
+
+bool RealLifecycleSink::writeEvent(uint16_t type, uint16_t code, int32_t value)
+{
+    if (impl_ == nullptr) {
+        return false;
     }
+    return impl_->writeEvent(type, code, value);
+}
+
+bool RealLifecycleSink::flushSyn()
+{
+    if (impl_ == nullptr) {
+        return false;
+    }
+    return impl_->flushSyn();
+}
+
+std::vector<RecordedEvent> RealLifecycleSink::drainLed()
+{
+    if (impl_ == nullptr) {
+        return {};
+    }
+    return impl_->drainLed();
 }
 
 ProductionArmControl::ProductionArmControl(IDeviceEnumerator &enumerator, EvdevSource &if00, EvdevSource &if01,
@@ -103,13 +185,14 @@ void ProductionArmControl::disarm()
 }
 
 BrokerLoopWork::BrokerLoopWork(SessionIpc &ipc, ForwardingEngine &engine, EvdevSource &if00, EvdevSource &if01,
-                               IArmControl &arm, Logger &logger)
+                               IArmControl &arm, Logger &logger, RealLifecycleSink *leds)
     : ipc_(ipc)
     , engine_(engine)
     , if00_(if00)
     , if01_(if01)
     , arm_(arm)
     , logger_(logger)
+    , leds_(leds)
 {
 }
 
@@ -119,11 +202,18 @@ void BrokerLoopWork::afterWait()
     if (!arm_.armed()) {
         return;
     }
-    engine_.ingest(if00_);
-    engine_.ingest(if01_);
+    if (!engine_.ingest(if00_) || !engine_.ingest(if01_)) {
+        arm_.disarm();
+        return;
+    }
     if (if00_.hadError() || if01_.hadError()) {
         logger_.error("source-read-failed");
         arm_.disarm();
+        return;
+    }
+    if (leds_ != nullptr) {
+        EvdevIf00Led if00Led(if00_);
+        (void)applyLedFeedback(leds_->drainLed(), if00Led, logger_);
     }
 }
 

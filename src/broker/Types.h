@@ -68,4 +68,10 @@ struct RecordedEvent {
     int32_t value = 0;
 };
 
+struct SinkCapabilities {
+    std::vector<uint16_t> keyCodes;
+    std::vector<uint16_t> ledCodes;
+    std::vector<uint16_t> mscCodes;
+};
+
 } // namespace contextdeck::broker

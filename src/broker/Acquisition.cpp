@@ -1,4 +1,5 @@
 #include "broker/Acquisition.h"
+#include "broker/RealSink.h"
 
 #include <linux/input.h>
 
@@ -41,15 +42,16 @@ void Acquisition::emitSyntheticDisarm()
     if (events_ == nullptr) {
         return;
     }
+    // Cleanup writes are best-effort. Ledger is already cleared.
     for (const LedgerEmit &item : emitted) {
-        events_->writeEvent(EV_KEY, item.code, item.value);
+        (void)events_->writeEvent(EV_KEY, item.code, item.value);
     }
     if (!emitted.empty()) {
-        events_->flushSyn();
+        (void)events_->flushSyn();
     }
 }
 
-void Acquisition::rollbackFrom(int openedSources, bool if00Claimed, bool if01Opened, bool if01Claimed)
+void Acquisition::rollbackFrom(bool if00Opened, bool if00Claimed, bool if01Opened, bool if01Claimed, bool virtualCreated)
 {
     if (if01Claimed) {
         record("unclaim-if01");
@@ -64,14 +66,16 @@ void Acquisition::rollbackFrom(int openedSources, bool if00Claimed, bool if01Ope
         record("unclaim-if00");
         if00_.unclaimSource();
     }
-    if (openedSources >= 1) {
+    if (if00Opened) {
         record("close-if00");
         if00_.closeSource();
         ledger_.clearPhysical(SourceTag::If00);
     }
     emitSyntheticDisarm();
-    record("destroy-virtual");
-    sink_.destroyVirtual();
+    if (virtualCreated) {
+        record("destroy-virtual");
+        sink_.destroyVirtual();
+    }
     armed_ = false;
     logger_.state("disarmed");
 }
@@ -82,35 +86,51 @@ bool Acquisition::arm()
         return true;
     }
     logger_.state("arming");
-    record("create-virtual");
-    if (!sink_.createVirtual()) {
-        logger_.error("virtual-create-failed");
-        logger_.state("disarmed");
-        return false;
-    }
 
     record("open-if00");
     if (!if00_.openSource()) {
         logger_.error("source-open-failed");
-        rollbackFrom(0, false, false, false);
-        return false;
-    }
-    record("claim-if00");
-    if (!if00_.claimSource()) {
-        logger_.error("source-claim-failed");
-        rollbackFrom(1, false, false, false);
+        logger_.state("disarmed");
         return false;
     }
     record("open-if01");
     if (!if01_.openSource()) {
         logger_.error("source-open-failed");
-        rollbackFrom(1, true, false, false);
+        rollbackFrom(true, false, false, false, false);
+        return false;
+    }
+
+    record("measure-capabilities");
+    const SinkCapabilities caps = unionSourceCapabilities(if00_.measuredCapabilities(), if01_.measuredCapabilities());
+    if (!sink_.applyMeasuredCapabilities(caps)) {
+        logger_.error("capability-invalid");
+        rollbackFrom(true, false, true, false, false);
+        return false;
+    }
+
+    record("create-virtual");
+    if (!sink_.createVirtual()) {
+        logger_.error("virtual-create-failed");
+        rollbackFrom(true, false, true, false, true);
+        return false;
+    }
+    record("prepare-virtual");
+    if (!sink_.prepareVirtual()) {
+        logger_.error("led-setup-failed");
+        rollbackFrom(true, false, true, false, true);
+        return false;
+    }
+
+    record("claim-if00");
+    if (!if00_.claimSource()) {
+        logger_.error("source-claim-failed");
+        rollbackFrom(true, false, true, false, true);
         return false;
     }
     record("claim-if01");
     if (!if01_.claimSource()) {
         logger_.error("source-claim-failed");
-        rollbackFrom(1, true, true, false);
+        rollbackFrom(true, true, true, false, true);
         return false;
     }
 

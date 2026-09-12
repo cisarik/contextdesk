@@ -115,7 +115,7 @@ bool EvdevSource::openSource()
     if (path_.empty()) {
         return false;
     }
-    fd_ = ::open(path_.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    fd_ = ::open(path_.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);
     if (fd_ < 0) {
         return false;
     }
@@ -208,6 +208,46 @@ std::set<uint16_t> EvdevSource::keysDown() const
         }
     }
     return down;
+}
+
+SinkCapabilities measureEvdevCapabilities(const ::libevdev *dev, bool includeLeds)
+{
+    SinkCapabilities out;
+    if (dev == nullptr) {
+        return out;
+    }
+    for (int code = 0; code < KEY_CNT; ++code) {
+        if (libevdev_has_event_code(dev, EV_KEY, code) != 0) {
+            out.keyCodes.push_back(static_cast<uint16_t>(code));
+        }
+    }
+    if (includeLeds) {
+        for (int code = 0; code < LED_CNT; ++code) {
+            if (libevdev_has_event_code(dev, EV_LED, code) != 0) {
+                out.ledCodes.push_back(static_cast<uint16_t>(code));
+            }
+        }
+    }
+    for (int code = 0; code < MSC_CNT; ++code) {
+        if (libevdev_has_event_code(dev, EV_MSC, code) != 0) {
+            out.mscCodes.push_back(static_cast<uint16_t>(code));
+        }
+    }
+    return out;
+}
+
+SinkCapabilities EvdevSource::measuredCapabilities() const
+{
+    return measureEvdevCapabilities(dev_, tag_ == SourceTag::If00);
+}
+
+bool EvdevSource::writeLed(uint16_t code, int32_t value)
+{
+    if (!opened_ || dev_ == nullptr || tag_ != SourceTag::If00) {
+        return false;
+    }
+    const enum libevdev_led_value led = value != 0 ? LIBEVDEV_LED_ON : LIBEVDEV_LED_OFF;
+    return libevdev_kernel_set_led_value(dev_, code, led) == 0;
 }
 
 } // namespace contextdeck::broker

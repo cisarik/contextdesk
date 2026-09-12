@@ -11,10 +11,13 @@ class ForwardingEngine {
 public:
     ForwardingEngine(ISink &sink, KeyLedger &ledger, Logger &logger);
 
-    void ingest(ISource &source);
+    // Returns false on a bounded sink-write-failed condition. The caller must
+    // disarm. Physical EV_LED is not forwarded (return path is virtual→if00).
+    bool ingest(ISource &source);
 
 private:
-    void handleDropped(ISource &source);
+    bool handleDropped(ISource &source);
+    bool failWrite();
 
     ISink &sink_;
     KeyLedger &ledger_;

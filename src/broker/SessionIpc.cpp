@@ -85,36 +85,115 @@ bool FixedUidAuthorizer::authorize(const PeerCredentials &cred) const
     return cred.uid == uid_;
 }
 
-bool LogindSeatAuthorizer::authorize(const PeerCredentials &cred) const
+int SystemdLoginLookup::pidSession(pid_t pid, std::string &session) const
 {
-    if (cred.pid <= 0 || cred.uid == 0) {
-        return false;
+    char *name = nullptr;
+    const int rc = sd_pid_get_session(pid, &name);
+    if (rc < 0) {
+        session.clear();
+        return rc;
     }
-
-    char *session = nullptr;
-    if (sd_pid_get_session(cred.pid, &session) < 0 || session == nullptr) {
-        return false;
+    if (name == nullptr || name[0] == '\0') {
+        free(name);
+        session.clear();
+        return -ENODATA;
     }
+    session = name;
+    free(name);
+    return 0;
+}
 
+bool SystemdLoginLookup::inspectSession(const std::string &session, LoginSessionView &out) const
+{
     uid_t sessionUid = static_cast<uid_t>(-1);
-    const int uidRc = sd_session_get_uid(session, &sessionUid);
+    if (sd_session_get_uid(session.c_str(), &sessionUid) < 0) {
+        return false;
+    }
     char *seat = nullptr;
-    const int seatRc = sd_session_get_seat(session, &seat);
     char *type = nullptr;
-    const int typeRc = sd_session_get_type(session, &type);
-    const int active = sd_session_is_active(session);
-    const int remote = sd_session_is_remote(session);
-
-    const bool uidMatch = uidRc >= 0 && sessionUid == cred.uid;
-    const bool seated = seatRc >= 0 && seat != nullptr && seat[0] != '\0';
-    const bool graphical = typeRc >= 0 && type != nullptr
-        && (std::strcmp(type, "wayland") == 0 || std::strcmp(type, "x11") == 0);
-    const bool ok = uidMatch && seated && graphical && active > 0 && remote == 0;
-
+    const int seatRc = sd_session_get_seat(session.c_str(), &seat);
+    const int typeRc = sd_session_get_type(session.c_str(), &type);
+    const int active = sd_session_is_active(session.c_str());
+    const int remote = sd_session_is_remote(session.c_str());
+    out.uid = sessionUid;
+    out.seat = (seatRc >= 0 && seat != nullptr) ? seat : "";
+    out.type = (typeRc >= 0 && type != nullptr) ? type : "";
+    out.active = active > 0;
+    out.remote = remote != 0;
     free(type);
     free(seat);
-    free(session);
-    return ok;
+    if (active < 0 || remote < 0) {
+        return false;
+    }
+    return true;
+}
+
+std::vector<std::string> SystemdLoginLookup::sessionsForUid(uid_t uid) const
+{
+    char **sessions = nullptr;
+    const int n = sd_uid_get_sessions(uid, 0, &sessions);
+    std::vector<std::string> out;
+    if (n < 0 || sessions == nullptr) {
+        return out;
+    }
+    for (int i = 0; sessions[i] != nullptr; ++i) {
+        out.emplace_back(sessions[i]);
+        free(sessions[i]);
+    }
+    free(sessions);
+    return out;
+}
+
+LogindSeatAuthorizer::LogindSeatAuthorizer()
+    : lookup_(&owned_)
+{
+}
+
+LogindSeatAuthorizer::LogindSeatAuthorizer(const ILoginLookup &lookup)
+    : lookup_(&lookup)
+{
+}
+
+bool LogindSeatAuthorizer::eligible(const LoginSessionView &view, uid_t uid) const
+{
+    const bool graphical = view.type == "wayland" || view.type == "x11";
+    return view.uid == uid && !view.seat.empty() && graphical && view.active && !view.remote;
+}
+
+bool LogindSeatAuthorizer::authorize(const PeerCredentials &cred) const
+{
+    if (cred.pid <= 0 || cred.uid == 0 || lookup_ == nullptr) {
+        return false;
+    }
+
+    std::string session;
+    const int rc = lookup_->pidSession(cred.pid, session);
+    if (rc >= 0 && !session.empty()) {
+        LoginSessionView view;
+        if (!lookup_->inspectSession(session, view)) {
+            return false;
+        }
+        return eligible(view, cred.uid);
+    }
+    if (rc != -ENODATA && rc != -ENXIO && rc != -ENOENT) {
+        return false;
+    }
+
+    int eligibleCount = 0;
+    for (const std::string &name : lookup_->sessionsForUid(cred.uid)) {
+        LoginSessionView view;
+        if (!lookup_->inspectSession(name, view)) {
+            continue;
+        }
+        if (!eligible(view, cred.uid)) {
+            continue;
+        }
+        ++eligibleCount;
+        if (eligibleCount > 1) {
+            return false;
+        }
+    }
+    return eligibleCount == 1;
 }
 
 SessionIpc::SessionIpc(SignalEpollWait &wait, IArmControl &arm, ISessionAuthorizer &auth, IPeerCredentials &creds,

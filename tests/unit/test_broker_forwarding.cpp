@@ -46,7 +46,7 @@ int main()
 
     source.enqueue(InputEvent{InputEvent::Kind::Key, kCodeA, 1});
     source.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(source);
+    EXPECT(engine.ingest(source));
     EXPECT(sink.events().size() == 2);
     EXPECT(sink.events()[0].type == EV_KEY && sink.events()[0].code == kCodeA && sink.events()[0].value == 1);
     EXPECT(sink.events()[1].type == EV_SYN && sink.events()[1].code == SYN_REPORT && sink.events()[1].value == 0);
@@ -54,7 +54,7 @@ int main()
 
     source.enqueue(InputEvent{InputEvent::Kind::Key, kCodeA, 2});
     source.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(source);
+    EXPECT(engine.ingest(source));
     EXPECT(sink.events().size() == 4);
     EXPECT(sink.events()[2].type == EV_KEY && sink.events()[2].code == kCodeA && sink.events()[2].value == 2);
     EXPECT(sink.events()[3].type == EV_SYN && sink.events()[3].code == SYN_REPORT);
@@ -63,35 +63,34 @@ int main()
 
     source.enqueue(InputEvent{InputEvent::Kind::Led, kLedNuml, 1});
     source.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(source);
-    EXPECT(sink.events().size() == 6);
-    EXPECT(sink.events()[4].type == EV_LED && sink.events()[4].code == kLedNuml && sink.events()[4].value == 1);
-    EXPECT(sink.events()[5].type == EV_SYN && sink.events()[5].code == SYN_REPORT);
+    EXPECT(engine.ingest(source));
+    EXPECT(sink.events().size() == 5);
+    EXPECT(sink.events()[4].type == EV_SYN && sink.events()[4].code == SYN_REPORT);
 
     FakeSource media(SourceTag::If01);
     media.enqueue(InputEvent{InputEvent::Kind::Key, kCodeMedia, 1});
     media.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
     media.enqueue(InputEvent{InputEvent::Kind::Key, kCodeMedia, 0});
     media.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(media);
-    EXPECT(sink.events().size() == 10);
-    EXPECT(sink.events()[6].type == EV_KEY && sink.events()[6].value == 1);
-    EXPECT(sink.events()[7].type == EV_SYN);
-    EXPECT(sink.events()[8].type == EV_KEY && sink.events()[8].value == 0);
-    EXPECT(sink.events()[9].type == EV_SYN);
+    EXPECT(engine.ingest(media));
+    EXPECT(sink.events().size() == 9);
+    EXPECT(sink.events()[5].type == EV_KEY && sink.events()[5].value == 1);
+    EXPECT(sink.events()[6].type == EV_SYN);
+    EXPECT(sink.events()[7].type == EV_KEY && sink.events()[7].value == 0);
+    EXPECT(sink.events()[8].type == EV_SYN);
 
     source.enqueue(InputEvent{InputEvent::Kind::Key, kCodeA, 0});
     source.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(source);
+    EXPECT(engine.ingest(source));
     EXPECT(ledger.counters().keysDownSynthetic == 0);
 
     source.enqueue(InputEvent{InputEvent::Kind::Key, kCodeA, 1});
     source.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(source);
+    EXPECT(engine.ingest(source));
     sink.clear();
     source.setPhysicalKeys({});
     source.enqueue(InputEvent{InputEvent::Kind::SynDropped, 0, 0});
-    engine.ingest(source);
+    EXPECT(engine.ingest(source));
     EXPECT(sink.events().size() == 2);
     EXPECT(sink.events()[0].type == EV_KEY && sink.events()[0].code == kCodeA && sink.events()[0].value == 0);
     EXPECT(sink.events()[1].type == EV_SYN && sink.events()[1].code == SYN_REPORT);
@@ -101,14 +100,28 @@ int main()
     sink.clear();
     source.setPhysicalKeys({kCodeA});
     source.enqueue(InputEvent{InputEvent::Kind::SynDropped, 0, 0});
-    engine.ingest(source);
+    EXPECT(engine.ingest(source));
     EXPECT(sink.events().size() == 2);
     EXPECT(sink.events()[0].type == EV_KEY && sink.events()[0].value == 1);
     EXPECT(sink.events()[1].type == EV_SYN);
     EXPECT(ledger.syntheticDown(kCodeA));
 
-    static_assert(std::is_same_v<decltype(engine.ingest(source)), void>,
-                  "forwarding is a void ingest; there is no remap/command catalog");
+    {
+        Logger failLogger;
+        KeyLedger failLedger;
+        FakeSink failSink;
+        failSink.failWrites = true;
+        FakeSource failSource(SourceTag::If00);
+        ForwardingEngine failEngine(failSink, failLedger, failLogger);
+        failSource.enqueue(InputEvent{InputEvent::Kind::Key, kCodeA, 1});
+        failSource.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
+        EXPECT(!failEngine.ingest(failSource));
+        EXPECT(failSink.events().empty());
+        EXPECT(failLedger.syntheticDown(kCodeA));
+    }
+
+    static_assert(std::is_same_v<decltype(engine.ingest(source)), bool>,
+                  "ingest reports sink-write-failed; there is no remap/command catalog");
 
     if (g_failures != 0) {
         std::fprintf(stderr, "test_broker_forwarding: %d failure(s)\n", g_failures);

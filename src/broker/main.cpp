@@ -29,7 +29,8 @@ int runBroker()
     }
 
     contextdeck::broker::KeyLedger ledger;
-    contextdeck::broker::RealLifecycleSink sink(contextdeck::broker::passthroughCapabilities());
+    contextdeck::broker::RealLifecycleSink sink;
+    sink.setWait(&wait);
     contextdeck::broker::EvdevSource if00(contextdeck::broker::SourceTag::If00);
     contextdeck::broker::EvdevSource if01(contextdeck::broker::SourceTag::If01);
     contextdeck::broker::Acquisition acquisition(sink, if00, if01, ledger, logger, &sink);
@@ -48,7 +49,7 @@ int runBroker()
         return 1;
     }
 
-    contextdeck::broker::BrokerLoopWork work(ipc, engine, if00, if01, control, logger);
+    contextdeck::broker::BrokerLoopWork work(ipc, engine, if00, if01, control, logger, &sink);
     contextdeck::broker::SystemdWatchdog watchdog;
     contextdeck::broker::EventLoop loop(wait, watchdog, contextdeck::broker::watchdogFeedTimeoutMs(), &work);
     loop.run();

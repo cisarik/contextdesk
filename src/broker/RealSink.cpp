@@ -2,9 +2,12 @@
 #include "broker/Types.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <fcntl.h>
 #include <libevdev/libevdev-uinput.h>
 #include <linux/input.h>
 #include <string>
+#include <unistd.h>
 
 namespace contextdeck::broker {
 namespace {
@@ -99,17 +102,67 @@ RealSink::~RealSink()
     }
 }
 
-void RealSink::writeEvent(uint16_t type, uint16_t code, int32_t value)
+bool RealSink::writeEvent(uint16_t type, uint16_t code, int32_t value)
 {
     if (uinputDevice_ == nullptr) {
-        return;
+        return false;
     }
-    (void)libevdev_uinput_write_event(uinputDevice_, type, code, value);
+    return libevdev_uinput_write_event(uinputDevice_, type, code, value) == 0;
 }
 
-void RealSink::flushSyn()
+bool RealSink::flushSyn()
 {
-    writeEvent(EV_SYN, SYN_REPORT, 0);
+    return writeEvent(EV_SYN, SYN_REPORT, 0);
+}
+
+int RealSink::fd() const
+{
+    if (uinputDevice_ == nullptr) {
+        return -1;
+    }
+    return libevdev_uinput_get_fd(uinputDevice_);
+}
+
+bool RealSink::makeNonBlocking()
+{
+    const int raw = fd();
+    if (raw < 0) {
+        return false;
+    }
+    const int flags = ::fcntl(raw, F_GETFL, 0);
+    if (flags < 0) {
+        return false;
+    }
+    return ::fcntl(raw, F_SETFL, flags | O_NONBLOCK) == 0;
+}
+
+std::vector<RecordedEvent> RealSink::drainLed()
+{
+    std::vector<RecordedEvent> out;
+    const int raw = fd();
+    if (raw < 0) {
+        return out;
+    }
+    for (int nread = 0; nread < 64; ++nread) {
+        input_event ev{};
+        const ssize_t n = ::read(raw, &ev, sizeof(ev));
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+        if (n == 0) {
+            break;
+        }
+        if (n != static_cast<ssize_t>(sizeof(ev))) {
+            break;
+        }
+        if (ev.type == EV_LED) {
+            out.push_back(RecordedEvent{ev.type, ev.code, ev.value});
+        }
+    }
+    return out;
 }
 
 } // namespace contextdeck::broker

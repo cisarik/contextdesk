@@ -52,6 +52,8 @@ public:
     bool createOk = true;
     bool created = false;
     bool destroyed = false;
+    bool prepareOk = true;
+    bool prepareVirtual() override { return prepareOk; }
 };
 
 std::ptrdiff_t indexOf(const std::vector<std::string> &history, const std::string &step)
@@ -166,15 +168,66 @@ int main()
         EXPECT(!acq.armed());
         EXPECT(!grab00.grabbed());
         EXPECT(!grab01.grabbed());
-        EXPECT(countStep(grabLog, "grab-if00") == 1);
+        EXPECT(countStep(grabLog, "grab-if00") == 0);
         EXPECT(countStep(grabLog, "grab-if01") == 0);
-        EXPECT(countStep(grabLog, "ungrab-if00") == 1);
+        EXPECT(countStep(grabLog, "ungrab-if00") == 0);
         EXPECT(countStep(grabLog, "ungrab-if01") == 0);
-        EXPECT(sink.destroyed);
+        EXPECT(!sink.created);
+        EXPECT(!sink.destroyed);
     }
 
     {
         EXPECT(EvdevGrabber::create(nullptr) == nullptr);
+    }
+
+    {
+        Logger logger;
+        KeyLedger ledger;
+        ledger.onKey(SourceTag::If00, kCodeA, 1);
+        RecordingSink lifecycle;
+        FakeSink events;
+        events.failWrites = true;
+        std::vector<std::string> grabLog;
+        FakeGrabber grab00("if00", grabLog);
+        FakeGrabber grab01("if01", grabLog);
+        GrabbingSource if00(SourceTag::If00, grab00);
+        GrabbingSource if01(SourceTag::If01, grab01);
+        Acquisition acq(lifecycle, if00, if01, ledger, logger, &events);
+        EXPECT(acq.arm());
+        acq.disarm();
+        EXPECT(!acq.armed());
+        EXPECT(!grab00.grabbed());
+        EXPECT(!grab01.grabbed());
+        EXPECT(lifecycle.destroyed);
+        EXPECT(events.events().empty());
+        EXPECT(ledger.counters().keysDownSynthetic == 0);
+        const auto unclaimIf01 = indexOf(acq.history(), "unclaim-if01");
+        const auto unclaimIf00 = indexOf(acq.history(), "unclaim-if00");
+        const auto synthetic = indexOf(acq.history(), "synthetic-disarm");
+        const auto destroy = indexOf(acq.history(), "destroy-virtual");
+        EXPECT(unclaimIf01 >= 0 && unclaimIf00 >= 0 && synthetic >= 0 && destroy >= 0);
+        EXPECT(unclaimIf01 < synthetic);
+        EXPECT(unclaimIf00 < synthetic);
+        EXPECT(synthetic < destroy);
+    }
+
+    {
+        Logger logger;
+        KeyLedger ledger;
+        RecordingSink sink;
+        sink.prepareOk = false;
+        std::vector<std::string> grabLog;
+        FakeGrabber grab00("if00", grabLog);
+        FakeGrabber grab01("if01", grabLog);
+        GrabbingSource if00(SourceTag::If00, grab00);
+        GrabbingSource if01(SourceTag::If01, grab01);
+        Acquisition acq(sink, if00, if01, ledger, logger);
+        EXPECT(!acq.arm());
+        EXPECT(!acq.armed());
+        EXPECT(sink.created);
+        EXPECT(sink.destroyed);
+        EXPECT(countStep(grabLog, "grab-if00") == 0);
+        EXPECT(countStep(grabLog, "grab-if01") == 0);
     }
 
     if (g_failures != 0) {

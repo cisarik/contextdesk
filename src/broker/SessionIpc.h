@@ -45,9 +45,40 @@ private:
     uid_t uid_;
 };
 
+struct LoginSessionView {
+    uid_t uid = static_cast<uid_t>(-1);
+    std::string seat;
+    std::string type;
+    bool active = false;
+    bool remote = false;
+};
+
+class ILoginLookup {
+public:
+    virtual ~ILoginLookup() = default;
+    virtual int pidSession(pid_t pid, std::string &session) const = 0;
+    virtual bool inspectSession(const std::string &session, LoginSessionView &out) const = 0;
+    virtual std::vector<std::string> sessionsForUid(uid_t uid) const = 0;
+};
+
+class SystemdLoginLookup final : public ILoginLookup {
+public:
+    int pidSession(pid_t pid, std::string &session) const override;
+    bool inspectSession(const std::string &session, LoginSessionView &out) const override;
+    std::vector<std::string> sessionsForUid(uid_t uid) const override;
+};
+
 class LogindSeatAuthorizer final : public ISessionAuthorizer {
 public:
+    LogindSeatAuthorizer();
+    explicit LogindSeatAuthorizer(const ILoginLookup &lookup);
     bool authorize(const PeerCredentials &cred) const override;
+
+private:
+    bool eligible(const LoginSessionView &view, uid_t uid) const;
+
+    SystemdLoginLookup owned_;
+    const ILoginLookup *lookup_ = nullptr;
 };
 
 class IArmControl {

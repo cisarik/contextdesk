@@ -70,23 +70,24 @@ int runSelftest()
     if00Events.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
     if00Events.enqueue(InputEvent{InputEvent::Kind::Key, kCode, 2});
     if00Events.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(if00Events);
-    if (ledger.counters().keysDownSynthetic != 1) {
+    if (!engine.ingest(if00Events) || ledger.counters().keysDownSynthetic != 1) {
         std::fprintf(stderr, "contextdeck-broker: error=selftest-repeat-ledger\n");
         return 1;
     }
 
     if00Events.setPhysicalKeys(std::set<uint16_t>{});
     if00Events.enqueue(InputEvent{InputEvent::Kind::SynDropped, 0, 0});
-    engine.ingest(if00Events);
-    if (ledger.counters().droppedSync != 1 || ledger.counters().keysDownSynthetic != 0) {
+    if (!engine.ingest(if00Events) || ledger.counters().droppedSync != 1 || ledger.counters().keysDownSynthetic != 0) {
         std::fprintf(stderr, "contextdeck-broker: error=selftest-sync-dropped\n");
         return 1;
     }
 
     if00Events.enqueue(InputEvent{InputEvent::Kind::Key, kCode, 1});
     if00Events.enqueue(InputEvent{InputEvent::Kind::SynReport, 0, 0});
-    engine.ingest(if00Events);
+    if (!engine.ingest(if00Events)) {
+        std::fprintf(stderr, "contextdeck-broker: error=selftest-ingest\n");
+        return 1;
+    }
 
     QuietSink lifecycle;
     std::vector<std::string> grabLog;

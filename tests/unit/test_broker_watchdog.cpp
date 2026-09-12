@@ -249,7 +249,7 @@ void testIngestProgressPreservesForwarding()
         void afterWait() override
         {
             watchdogDuringIngest = wd_.count("watchdog");
-            engine_.ingest(source_);
+            (void)engine_.ingest(source_);
         }
 
     private:

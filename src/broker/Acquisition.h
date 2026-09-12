@@ -15,6 +15,9 @@ public:
     virtual ~ILifecycleSink() = default;
     virtual bool createVirtual() = 0;
     virtual void destroyVirtual() = 0;
+    virtual bool applyMeasuredCapabilities(const SinkCapabilities &) { return true; }
+    virtual bool prepareVirtual() { return true; }
+    virtual int feedbackFd() const { return -1; }
 };
 
 class ILifecycleSource {
@@ -27,6 +30,7 @@ public:
     virtual bool claimSource() = 0;
     virtual void unclaimSource() = 0;
     virtual void closeSource() = 0;
+    virtual SinkCapabilities measuredCapabilities() const { return {}; }
 };
 
 class Acquisition {
@@ -37,10 +41,11 @@ public:
     bool arm();
     void disarm();
     bool armed() const { return armed_; }
+    int sinkFeedbackFd() const { return sink_.feedbackFd(); }
     const std::vector<std::string> &history() const { return history_; }
 
 private:
-    void rollbackFrom(int openedSources, bool if00Claimed, bool if01Opened, bool if01Claimed);
+    void rollbackFrom(bool if00Opened, bool if00Claimed, bool if01Opened, bool if01Claimed, bool virtualCreated);
     void releaseSourcesUngrabFirst();
     void emitSyntheticDisarm();
     void record(const char *step);
