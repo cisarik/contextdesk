@@ -28,7 +28,12 @@ this document grants none.
 - libevdev filter + uinput virtual keyboard. The broker starts **disabled**;
   autostart is opt-in only after G4 acceptance.
 - Operating contract essentials:
-  - create the virtual device before attempting exclusive ownership;
+  - open both G213 sources without grabbing, verify identity, and measure the
+    live capability union (`EV_KEY` union, `EV_LED` from if00 only, `EV_MSC`;
+    never `EV_REP`) before creating the virtual device, then grab;
+  - a runtime virtual-device write failure is `sink-write-failed` and disarms
+    with ungrab-first cleanup; compositor `EV_LED` returns to physical if00
+    only and a runtime LED write failure does not disarm typing;
   - multi-node acquisition is non-atomic — if any claim fails, release all;
   - freeze the resolved action at physical key-down;
   - keep separate physical/synthetic key-ownership records;
@@ -120,8 +125,12 @@ this document grants none.
 - Broker IPC: Unix-domain socket `/run/contextdeck/broker.sock` (systemd
   `RuntimeDirectory=contextdeck`). The peer is authenticated with kernel
   `SO_PEERCRED` (never client-supplied UID/GID). The UID must belong to an
-  active local seated graphical session (`wayland`/`x11` via logind). Root
-  and remote sessions are rejected. Group membership is not authorization.
+  active local seated graphical session (`wayland`/`x11` via logind). Direct
+  `sd_pid_get_session` is used first. If that lookup reports no session, the
+  broker enumerates `sd_uid_get_sessions` and accepts exactly one eligible
+  active local seated graphical session. Root, remote, inactive, unseated,
+  non-graphical, UID-mismatched, and ambiguous sessions are rejected. Group
+  membership is not authorization.
   Bounded messages only (`STATUS`, `LEASE`, `HEARTBEAT`, `ARM`, `DISARM`,
   `RELEASE`); no "inject arbitrary keys" operation. One lease may arm the
   broker; disconnect, expiry, malformed framing, or broker shutdown disarms
@@ -174,19 +183,33 @@ Durable rules for this project:
   arming authority: an explicit user action sends `LEASE` then `ARM`, renewed
   by `HEARTBEAT`. Default lease is 6000 ms. Socket existence, session-app
   `start()`, and `STATUS` never arm. Production ARM enumerates the G213 by USB
-  ancestry and interface number (never remembered `eventN`), then opens
-  sources and constructs `RealSink`/`EvdevGrabber`. Losing the peer, a
+  ancestry and interface number (never remembered `eventN`), then opens both
+  sources without grabbing, measures the live capability union, creates the
+  virtual device, and only then grabs. Losing the peer, a
   malformed frame, failed `SO_PEERCRED`, lease expiry, or orderly broker stop
-  calls `Acquisition::disarm()` before teardown.
+  calls `Acquisition::disarm()` before teardown. A runtime sink write failure
+  is `sink-write-failed` and takes the same ungrab-first disarm path.
 - The systemd watchdog (`WatchdogSec=2`) is fed from the broker event-loop
   thread with `sd_notify("WATCHDOG=1")` after each wait return (including idle
   timeout) and after that iteration's ingest work. A hung wait or hung ingest
   stops feeding. There is no helper thread or detached timer. 2 s is
-  configured, not a measured recovery time on this kernel (G4).
-- Recovery order: disarm → release synthetic state → destroy the virtual
-  device → release real-device ownership → real keyboard stays usable.
-  Kernel close behavior (grab release on evdev close, uinput teardown on
-  close) is verified in source but still needs acceptance on this kernel.
+  configured, not a measured recovery time on this kernel (G4). `WATCHDOG=1`
+  does not extend stop/abort timeouts. The unit pins `TimeoutStopSec=5` and
+  `TimeoutAbortSec=5` and has no `RuntimeMaxSec`.
+- An invocation-bound transient cutoff timer (default `OnActiveSec=30s`,
+  `AccuracySec=1us`) may be armed against the live `InvocationID` after the
+  broker is running and before any authenticated `ARM`. Expiry re-checks that
+  identity and `SIGKILL`s only the matching main process. A cutoff kill is a
+  controlled recovery event, not a watchdog PASS. Cancel the timer after a
+  normal disarm and before stopping the broker. Setup failure means do not ARM.
+  A second keyboard or SSH remains a valid optional recovery path. PID1/user
+  manager, kernel descriptor close, machine power, and session death are
+  outside this userspace path.
+- Recovery order for an orderly disarm: ungrab physical sources first, then
+  best-effort synthetic releases, then destroy the virtual device. The real
+  keyboard must stay usable. Kernel close behavior (grab release on evdev
+  close, uinput teardown on close) is verified in source but still needs
+  acceptance on this kernel.
 - RGB failure disables lighting only; input behavior is unaffected. Never
   auto-switch to direct HID or restart unrelated RGB software.
 - Uninstall reverses only owned units/rules/files; user profiles are preserved

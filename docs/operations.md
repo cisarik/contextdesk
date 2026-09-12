@@ -244,9 +244,12 @@ Do **not** `systemctl enable contextdeck-broker`. Do **not**
 `systemctl start contextdeck-broker`. The unit has no `[Install]` section.
 The binary now sends `READY=1` and feeds `WATCHDOG=1` from its idle event
 loop (S3) and accepts an authenticated session lease on
-`/run/contextdeck/broker.sock` (S4). Production ARM (S5) enumerates the G213
-by USB ancestry and may construct `RealSink` / `EvdevGrabber` only after an
-explicit authenticated `ARM`. Do **not** enable or start the unit from this
+`/run/contextdeck/broker.sock` (S4). The unit is `Type=notify` with
+`NotifyAccess=main`, `WatchdogSec=2`, `TimeoutStopSec=5`, `TimeoutAbortSec=5`,
+`Restart=no`, `LimitCORE=0`, and `RuntimeDirectoryMode=0755`. It has no
+`[Install]` section and no `RuntimeMaxSec`. Production ARM (S5) enumerates the
+G213 by USB ancestry and may construct `RealSink` / `EvdevGrabber` only after
+an explicit authenticated `ARM`. Do **not** enable or start the unit from this
 G3 section. IRL pass-through remains G4.
 
 `ExecStart` is `/usr/bin/contextdeck-broker`. Install that binary with the
@@ -303,7 +306,7 @@ sudo groupdel contextdeck-broker
 `userdel` may already remove the matching group; ignore `groupdel` if the
 group is gone. Unplug/replug the G213 if event-node ownership stays stale.
 
-## 7. Crash, hang, watchdog, and TTY recovery
+## 7. Crash, hang, watchdog, cutoff, and TTY recovery
 
 This is the documented recovery path for the input broker. It does **not**
 require running the unit or grabbing the G213. Do **not** start or enable
@@ -312,16 +315,68 @@ FD-close ungrab on this kernel is G4 / S5, not S3.
 
 ### What the broker does
 
-- `Type=notify` plus `WatchdogSec=2`. `Restart=no` (a crash must not re-grab).
+- `Type=notify`, `NotifyAccess=main`, `WatchdogSec=2`, `TimeoutStopSec=5`,
+  `TimeoutAbortSec=5`. `Restart=no` (a crash must not re-grab). No
+  `RuntimeMaxSec`. Do not send `EXTEND_TIMEOUT_USEC`.
 - `READY=1` is sent once the single-thread event loop is running.
 - `WATCHDOG=1` is sent from **that same thread** after `epoll_wait` (or the
   test wait) returns, including idle timeout, and after that iteration's
-  ingest work returns. Half of 2 s is a 1 s wait.
-- There is no helper thread and no detached timer. If wait or ingest blocks,
-  watchdog notifications stop and systemd can detect the hang.
+  ingest work returns. Half of 2 s is a 1 s wait. Watchdog pings do not
+  extend stop or abort timeouts.
+- There is no helper thread and no detached in-process timer. If wait or
+  ingest blocks, watchdog notifications stop and systemd can detect the hang.
 - Orderly stop (SIGTERM/SIGINT via signalfd) leaves the loop and sends
   `STOPPING=1`. Crash / watchdog abort / SIGKILL do not run userspace
   cleanup; recovery relies on kernel close of any held descriptors.
+- Orderly disarm ungrabs physical sources first, then best-effort synthetic
+  releases, then destroys the virtual device.
+
+### Invocation-bound trial cutoff
+
+The 2 s watchdog recovers a stuck event loop. It does not bound a live loop
+that has stopped forwarding. Before any future authenticated `ARM`, arm an
+invocation-bound transient timer with
+`packaging/systemd/contextdeck-trial-cutoff.sh`. Default window is 30 seconds
+(allowed 20–45). The timer is PID1-owned (`Persistent=no`,
+`AccuracySec=1us`, `RandomizedDelaySec=0`) and re-checks the exact
+`InvocationID` immediately before `systemctl kill --kill-whom=main
+--signal=SIGKILL` on that unit. It never uses `pkill`, `killall`, a guessed
+PID, or restart.
+
+Exact order for a later authorized trial (do not run from this section):
+
+1. Start the broker manually and confirm it is disarmed (`STATUS` /
+   `armed=0`). Do not enable the unit.
+2. Read and record the current `InvocationID`
+   (`systemctl show -p InvocationID --value contextdeck-broker.service`).
+3. Arm the transient cutoff with that exact identity and verify the timer is
+   loaded with `OnActiveSec=30s` (or the chosen 20–45 value) and
+   `AccuracySec=1us`. Setup failure means **do not ARM**.
+4. Only after that may a future explicit authenticated `ARM` be attempted.
+5. On normal completion, `DISARM`, cancel the cutoff, then stop the broker.
+6. If the broker hangs or the invoking shell disappears, the watchdog and/or
+   cutoff kill only the matching invocation.
+7. If timer setup, identity verification, or any prerequisite fails, do not
+   ARM.
+8. Clean up the timer and all temporary state.
+9. Final state must be statically and operationally verifiable: broker
+   inactive or safely disarmed, no grabbed physical device, no stale virtual
+   device, no active trial timer, and unchanged input-remapper state.
+
+A cutoff kill is a controlled recovery event. Do **not** report it as a
+watchdog PASS. Distinguish:
+
+| Event | What it proves | What it does not prove |
+|-------|----------------|------------------------|
+| Watchdog expiry (`WatchdogSec=2`) | the event-loop thread stopped feeding | physical typing; cutoff path |
+| Invocation-bound cutoff expiry | PID1 killed the matching invocation after 30 s | that the watchdog fired; physical typing |
+| Physical usability | G4 on this kernel after descriptor close | either userspace timer |
+
+A second keyboard or SSH remains a valid **optional** recovery path. It is
+not required for the cutoff demonstration. Limitations: PID1/user-manager
+must be running; a kernel hang, machine power loss, or session teardown is
+outside this helper; `TimeoutStopSec`/`TimeoutAbortSec` bound systemd's stop
+job, not the 30 s trial window.
 
 ### Hang (watchdog)
 
@@ -339,7 +394,8 @@ is no hidden production hang command in the binary. Full steps:
 
 S3 proves the feed/hang coupling in CTest (`test_broker_watchdog`) and
 `contextdeck-broker watchdog-selftest`. It does **not** start the system
-unit.
+unit. Device-free cutoff rehearsal is `tests/unit/rehearse_trial_cutoff.sh`
+on systemd `--user` fixtures that do not name the broker.
 
 ### Crash
 
@@ -361,7 +417,8 @@ path that does not need that keyboard:
 2. SSH / another machine, or
 3. A TTY already reachable without the G213.
 
-Then, only when recovering a **running** broker (not during S3):
+That path is optional once the invocation-bound cutoff is armed. Then, only
+when recovering a **running** broker (not during S3):
 
 ```sh
 # Recovery — COOPERATOR-run, and only if the unit was started later.
@@ -370,10 +427,10 @@ systemctl stop contextdeck-broker.service
 # if stop cannot complete because the unit was never started, that is success
 ```
 
-If systemd already watchdog-aborted the process, `systemctl status` should
-show inactive/failed and the keyboard should type again after descriptor
-close. Do not `systemctl enable`. Do not `systemctl start` to "test
-recovery". Do not change input-remapper.
+If systemd already watchdog-aborted or cutoff-killed the process,
+`systemctl status` should show inactive/failed and the keyboard should type
+again after descriptor close. Do not `systemctl enable`. Do not
+`systemctl start` to "test recovery". Do not change input-remapper.
 
 If stop is not enough, `kill -TERM` then `kill -KILL` the `contextdeck-broker`
 PID from the recovery path. Unplug/replug the G213 only as a last resort.
@@ -424,8 +481,10 @@ Replies: `OK …` or `ERR MALFORMED|UNAUTH|LEASE_HELD|NO_LEASE|UNAUTHORIZED|UNKN
 - On `accept`, the broker reads `SO_PEERCRED` from the kernel. Failed creds
   close the fd before any command is parsed. Root, other UIDs, remote
   sessions, and sessions without a local seat are rejected via logind
-  (`sd_pid_get_session`, active, `wayland`/`x11`, `sd_session_get_uid`
-  matching the kernel UID, `sd_session_is_remote==0`).
+  (`sd_pid_get_session` first; if that reports no session, enumerate
+  `sd_uid_get_sessions` and accept exactly one eligible active local seated
+  `wayland`/`x11` session; reject root, remote, inactive, unseated,
+  non-graphical, UID mismatch, and ambiguity).
 
 ### Lifecycle
 
@@ -435,11 +494,13 @@ Disconnect, malformed framing, lease expiry, failed authentication, or
 releases, then destroy virtual), then drops the lease.
 
 S5 production `ARM` enumerates the G213 by USB ancestry (`046d:c336` plus
-interface `00`/`01`), then constructs `RealSink` and `EvdevGrabber` only
-after an authenticated lease holder sends `ARM`. Startup, socket creation,
-`STATUS`, and `LEASE` do not open event nodes or `/dev/uinput`. Game Mode and
-Backlight stay firmware-only and are not in the remap catalog. Missing or
-invalid devices fail closed and leave the broker disarmed.
+interface `00`/`01`), opens both sources without grabbing, measures the live
+capability union, creates the virtual device, then grabs. Startup, socket
+creation, `STATUS`, and `LEASE` do not open event nodes or `/dev/uinput`.
+Game Mode and Backlight stay firmware-only and are not in the remap catalog.
+Missing or invalid devices fail closed and leave the broker disarmed. A
+runtime sink write failure disarms with ungrab-first cleanup. Compositor LED
+state returns to if00 only; a runtime LED write failure does not disarm.
 
 ### TTY recovery
 
@@ -481,6 +542,8 @@ Verify (still no start):
 | `/usr/bin/contextdeck-broker` | exists, executable |
 | `diff packaging/systemd/contextdeck-broker.service /etc/systemd/system/contextdeck-broker.service` | empty |
 | unit `RuntimeDirectoryMode` | `0755` |
+| unit `TimeoutStopSec` / `TimeoutAbortSec` | `5` / `5` |
+| unit `WatchdogSec` | `2` |
 | `systemctl is-enabled contextdeck-broker` | not enabled (`static` / no `[Install]`) |
 | `systemctl is-active contextdeck-broker` | `inactive` |
 

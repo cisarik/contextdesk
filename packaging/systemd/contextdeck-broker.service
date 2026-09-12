@@ -5,6 +5,7 @@ Documentation=https://github.com/cisarik/contextdesk
 
 [Service]
 Type=notify
+NotifyAccess=main
 User=contextdeck-broker
 Group=contextdeck-broker
 # Fed from the broker event-loop thread only: READY=1 once the loop is
@@ -13,6 +14,11 @@ Group=contextdeck-broker
 # There is no notify helper thread. Do not raise this without changing the
 # loop timeout (half of WatchdogSec).
 WatchdogSec=2
+# Bounded stop/abort so a hung teardown cannot sit in deactivating. Do not
+# add RuntimeMaxSec: the trial cutoff is an invocation-bound transient timer,
+# not a standing unit lifetime. Do not send EXTEND_TIMEOUT_USEC.
+TimeoutStopSec=5
+TimeoutAbortSec=5
 Restart=no
 LimitCORE=0
 PrivateNetwork=yes

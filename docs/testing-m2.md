@@ -54,10 +54,14 @@ scan):
   VID/PID, and nodes without USB ancestry. Interface `02` is ignored.
 - Production objects start disarmed; enumerator/`open`/`createVirtual` are
   not called until explicit `arm()`.
-- Missing devices fail closed without opening sources.
-- Invalid/non-evdev paths fail closed, ungrab/cleanup, no leftover fds.
+- Missing or invalid paths fail closed **without** creating a virtual device
+  and without grabbing.
+- Measured capability union: `EV_KEY` union, `EV_LED` from if00 only,
+  `EV_MSC`, never `EV_REP`. Create happens after measure, grab after create.
 - `RealLifecycleSink` construction does not create uinput.
 - `EvdevGrabber::create` refuses a null or fd-less handle.
+- LED return writes go to if00 only; a runtime LED write failure is
+  `led-write-failed` and does not disarm.
 
 `test_broker_ipc` checks (no G213, no `/dev/uinput`):
 
@@ -70,6 +74,23 @@ scan):
   ungrab-first teardown on `FakeGrabber`.
 - Listen/accept on a temporary Unix socket with mode `0666` does not arm
   before authentication.
+- Logind: direct session path, exactly-one fallback, and rejection of zero
+  candidates, ambiguity, inactive, remote, unseated, non-graphical, UID
+  mismatch, and non-session lookup errors that are not fallback-eligible.
+
+`test_broker_forwarding` / `test_broker_acquisition` add fail-closed
+`sink-write-failed` (disarm, ungrab-first, ledger clear, best-effort cleanup
+writes) and LED-setup abort before grab.
+
+`test_trial_cutoff` checks the helper usage/timeout range, missing-unit
+refusal, production unit pins (`TimeoutStopSec=5`, `TimeoutAbortSec=5`, no
+`RuntimeMaxSec`), and `systemd-analyze verify` on the unit file. It does not
+start the broker.
+
+Device-free cutoff rehearsal (systemd `--user` only, unique nonce, no broker
+or device names) is `tests/unit/rehearse_trial_cutoff.sh`. Cases: normal
+completion before expiry; exited fixture; hung fixture; invoking-shell loss;
+timer/setup failure; stale invocation guard. Every path removes fixtures.
 
 `contextdeck-broker watchdog-selftest` is the same coupling in the broker
 binary. It does not open devices and does not use `NOTIFY_SOCKET`.
@@ -78,12 +99,16 @@ Static unit check (does not start the service):
 
 ```sh
 systemd-analyze verify packaging/systemd/contextdeck-broker.service
+bash -n packaging/systemd/contextdeck-trial-cutoff.sh
+tests/unit/test_trial_cutoff.sh .
 ```
 
 Missing `/usr/bin/contextdeck-broker` may warn until the documented `/usr`
-install (operations §9). `WatchdogSec=2` and `Type=notify` are the live
-settings. After install, `systemd-analyze verify` of the installed unit
-should match the repository file, including `RuntimeDirectoryMode=0755`.
+install (operations §9). `WatchdogSec=2`, `TimeoutStopSec=5`,
+`TimeoutAbortSec=5`, and `Type=notify` are the live settings. After install,
+`systemd-analyze verify` of the installed unit should match the repository
+file, including `RuntimeDirectoryMode=0755`. Do not treat a cutoff kill as a
+watchdog PASS.
 
 ## Watchdog semantics
 
@@ -95,9 +120,15 @@ should match the repository file, including `RuntimeDirectoryMode=0755`.
 | Ingest/work blocked | no ping for that iteration | abort after 2 s |
 | Process crash / `SIGKILL` | none | unit dead (`Restart=no`) |
 | `SIGTERM` / `SIGINT` | loop stops, `STOPPING=1` | orderly exit |
+| Invocation-bound cutoff expiry | none from the broker; PID1 `SIGKILL` of the matching invocation | controlled recovery, **not** a watchdog PASS |
 
 The feed is the event-loop thread. A second thread that pings while the
 loop is stuck is forbidden and is not present.
+
+The trial cutoff is a separate PID1 timer (`OnActiveSec=30s`,
+`AccuracySec=1us`). It is armed per invocation after the broker is running
+and before `ARM`. Cancel it after a normal disarm. A second keyboard or SSH
+is an optional recovery path, not a prerequisite.
 
 ## Production hang harness (G4 only)
 
