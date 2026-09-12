@@ -5,10 +5,13 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 
 > **Status: early development.** Five-zone lighting and application context
 > (M1) are implemented and recorded as accepted on hardware. The input broker
-> (M2) exists in this repository and can be installed **inactive**. One named
-> physical slice (explicit ARM, sampled G213 pass-through, invocation-bound
-> cutoff recovery) is recorded as accepted on the reference host; **full G4**
-> remains open. The plan lives in [ROADMAP.md](ROADMAP.md) and the design in
+> (M2) exists in this repository and can be installed **inactive**. Named
+> physical slices (explicit ARM, sampled G213 pass-through, invocation-bound
+> cutoff recovery, armed watchdog abort with a held modifier) are recorded as
+> accepted on the reference host; **full G4** remains open, including live
+> host suspend/resume. A systemd-sleep hook can stop an active broker before
+> sleep and start it once afterwards, always disarmed; that path is not live
+> accepted yet. The plan lives in [ROADMAP.md](ROADMAP.md) and the design in
 > [docs/architecture.md](docs/architecture.md).
 
 ## The idea
@@ -49,8 +52,8 @@ enough; device-free tests do not need that path.
 |------|-------|
 | Plan | Foundation planning accepted; M2 in progress — [ROADMAP.md](ROADMAP.md) |
 | Lighting (M1) | Implemented; recorded as COOPERATOR-accepted IRL (five zones, not per-key) |
-| Input broker (M2) | Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL). Inactive install recorded; one named physical slice accepted; **full G4 remains open** |
-| Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named ARM/pass-through/cutoff slice accepted; watchdog/hang, held-modifier, LED, all-control, and production autostart still open |
+| Input broker (M2) | Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL, suspend/resume sleep hook). Inactive install recorded; named physical slices accepted; **full G4 remains open** (live suspend/resume not accepted) |
+| Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named ARM/pass-through/cutoff and armed-watchdog/held-modifier slices accepted; LED, all-control, live suspend/resume, and production autostart still open |
 | Build / tests | CMake + Ninja; registered CTest suite owned by [CMakeLists.txt](CMakeLists.txt) |
 | Host install | Packaging files are in the repo. Installed vs not-installed is host evidence — see [docs/operations.md](docs/operations.md). The broker unit has no `[Install]` section and must not autostart |
 
@@ -60,6 +63,7 @@ enough; device-free tests do not need that path.
 |------|---------|
 | [ROADMAP.md](ROADMAP.md) | The plan: milestones, evidence gates, current state |
 | [docs/architecture.md](docs/architecture.md) | Accepted architecture and boundaries |
+| [docs/adr/](docs/adr/) | Product ADRs (suspend/resume sleep hook: ADR 0001) |
 | [docs/operations.md](docs/operations.md) | Host enablement, G3/S5 install, recovery notes |
 | [docs/testing-m2.md](docs/testing-m2.md) | M2 / G4 test pack (named slice accepted; full G4 not passed) |
 | [handout.md](handout.md) | Original bootstrap brief (historical) |

@@ -14,6 +14,9 @@ Group=contextdeck-broker
 # There is no notify helper thread. Do not raise this without changing the
 # loop timeout (half of WatchdogSec).
 WatchdogSec=2
+# Suspend/resume: packaging/systemd/contextdeck-sleep.sh stops this unit on
+# systemd-sleep pre and may start it once, disarmed, after post. Do not
+# disable this watchdog, raise it to survive freeze, or add [Install].
 # Bounded stop/abort so a hung teardown cannot sit in deactivating. Do not
 # add RuntimeMaxSec: the trial cutoff is an invocation-bound transient timer,
 # not a standing unit lifetime. Do not send EXTEND_TIMEOUT_USEC.

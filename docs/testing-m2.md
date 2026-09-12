@@ -7,10 +7,11 @@ the G213 except under a separately authorized live G4 prompt.
 
 One named physical slice is recorded as accepted on candidate `cb72ae0`
 (explicit ARM, sampled G213 pass-through, matching-invocation cutoff,
-post-death typing; META Worker 16). **Full G4 remains open:** watchdog/hang
-recovery, held-modifier-at-death, LED-return behavior, all-control fidelity,
-input-remapper coexistence beyond that sampled trial, and production/autostart
-readiness.
+post-death typing; META Worker 16). A second named slice on the same runtime
+candidate / docs descendant `9a89095` recorded armed watchdog abort with a
+held modifier (META Worker 19). **Full G4 remains open:** LED-return
+behavior, all-control fidelity, live host suspend/resume, input-remapper
+coexistence beyond those samples, and production/autostart readiness.
 
 ## What S3 proves without a keyboard
 
@@ -94,6 +95,19 @@ refusal, production unit pins (`TimeoutStopSec=5`, `TimeoutAbortSec=5`, no
 `RuntimeMaxSec`), and `systemd-analyze verify` on the unit file. It does not
 start the broker.
 
+`test_sleep_hook` checks the systemd-sleep script with a fake `systemctl`
+confined to a temporary directory (no host `systemctl`, no `/run`, no
+suspend): non-sleep modes are no-ops; inactive/failed units write no marker;
+an active unit is stopped and started once, always disarmed / no lease;
+failed pre-stop never starts; post-start failure is not retried; duplicate
+phases, stale/malformed/wrong-mode markers, concurrent state change, and
+reboot-like marker absence fail closed. This is **not** live suspend
+evidence.
+
+`test_broker_ipc_client` checks that `BrokerIpcClient` start, `STATUS` probe,
+and reconnect after broker loss never emit `LEASE` or `ARM` without an
+explicit `arm()` call.
+
 Device-free cutoff rehearsal (systemd `--user` only, unique nonce, no broker
 or device names) is `tests/unit/rehearse_trial_cutoff.sh`. Cases: normal
 completion before expiry; exited fixture; hung fixture; invoking-shell loss;
@@ -107,7 +121,9 @@ Static unit check (does not start the service):
 ```sh
 systemd-analyze verify packaging/systemd/contextdeck-broker.service
 bash -n packaging/systemd/contextdeck-trial-cutoff.sh
+bash -n packaging/systemd/contextdeck-sleep.sh
 tests/unit/test_trial_cutoff.sh .
+tests/unit/test_sleep_hook.sh .
 ```
 
 Missing `/usr/bin/contextdeck-broker` may warn until the documented `/usr`
@@ -171,6 +187,28 @@ recovery; `Restart=no` remains set.
 Fail: the unit restarts and re-grabs; the G213 stays silent after death;
 recovery requires rebooting as the first step.
 
+## Live suspend / resume (G4, still open)
+
+Do **not** run `systemctl suspend`, `systemctl hibernate`, or any power
+action from this file. Device-free evidence is `test_sleep_hook` plus
+`test_broker_ipc_client`. Those tests do not prove host sleep.
+
+When a later authorized G4 session runs live suspend, expect:
+
+- An independently verified second keyboard or SSH before any broker start or
+  ARM, kept through the trial.
+- If the broker was active, the sleep hook stops it on `pre` so
+  `WatchdogSec=2` does not abort a frozen process.
+- After resume, the unit starts once only if it was active before that sleep,
+  and it starts **disarmed** (no lease, no grab). Inactive/failed brokers stay
+  down.
+- The session app reconnects with `STATUS` only. Re-ARM is an explicit user
+  action, not automatic.
+- Fail: watchdog abort during freeze because the hook did not stop an active
+  unit; silent start of an inactive broker; automatic re-ARM; a restart loop.
+
+Until that live run exists, host suspend/resume remains an open G4 claim.
+
 ## Crash / hang recovery (later, when the unit actually runs)
 
 Do **not** execute these against a live seat for S3. They are remaining G4
@@ -203,13 +241,15 @@ death; recovery requires rebooting as the first step.
 
 ## What this file does not cover
 
-The named physical slice covered sampled grab, pass-through, matching-invocation
-cutoff death, and typing after descriptor close. Remaining G4 claims:
-watchdog/hang recovery, held-modifier-at-death, LED return, all-control
-fidelity, and input-remapper coexistence beyond that sample. Autostart (G8)
-stays forbidden until those pass. Session IPC (S4) is covered by
-`test_broker_ipc` and `docs/operations.md` §8; production install is
-`docs/operations.md` §9. Do not start the broker unit to exercise either.
+The named physical slices covered sampled grab, pass-through, matching-invocation
+cutoff death, typing after descriptor close, and armed watchdog abort with a
+held modifier. Remaining G4 claims: LED return, all-control fidelity,
+input-remapper coexistence beyond those samples, and live host suspend/resume.
+Autostart (G8) stays forbidden until those pass. Session IPC (S4) is covered by
+`test_broker_ipc` / `test_broker_ipc_client` and `docs/operations.md` §8;
+production install is `docs/operations.md` §9. The sleep hook is covered by
+`test_sleep_hook`; do not invoke `systemctl suspend` from this file. Do not
+start the broker unit to exercise S3.
 
 Never paste ordinary typed text, key names, scan codes, raw event
 payloads, USB serials, or per-event timing into reports.

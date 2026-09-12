@@ -237,6 +237,8 @@ sudo udevadm trigger --action=add --sysname-match=uinput --settle
 
 sudo install -m 0644 packaging/systemd/contextdeck-broker.service \
   /etc/systemd/system/contextdeck-broker.service
+sudo install -m 0755 packaging/systemd/contextdeck-sleep.sh \
+  /usr/lib/systemd/system-sleep/contextdeck-broker
 sudo systemctl daemon-reload
 ```
 
@@ -275,6 +277,7 @@ copy node numbers into public notes.
 | `sudo -u contextdeck-broker test -r /dev/uinput && sudo -u contextdeck-broker test -w /dev/uinput` | both succeed (`test` uses `access(2)`; it does not inject events) |
 | input-remapper | still enabled/active; G213 preset untouched |
 | `systemctl is-enabled contextdeck-broker` | not enabled (expected fail / `not-found` / `disabled`) |
+| `/usr/lib/systemd/system-sleep/contextdeck-broker` | executable sleep hook; installing it is not a broker start |
 
 If hidraw lost the session ACL, rollback immediately — lighting would break
 and this install over-reached. If `/dev/uinput` lost the session-user ACL or
@@ -293,6 +296,7 @@ sudo rm -f /etc/udev/rules.d/61-contextdeck-input-guard.rules \
            /etc/udev/rules.d/62-contextdeck-broker.rules \
            /etc/udev/rules.d/99-contextdeck-broker-uinput.rules \
            /etc/systemd/system/contextdeck-broker.service \
+           /usr/lib/systemd/system-sleep/contextdeck-broker \
            /usr/lib/sysusers.d/contextdeck-broker.conf
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=input
@@ -311,11 +315,12 @@ group is gone. Unplug/replug the G213 if event-node ownership stays stale.
 
 This is the documented recovery path for the input broker. Do **not** start or
 enable `contextdeck-broker.service` from this section. Device-free S3 evidence
-does not require a second keyboard or SSH. One named physical slice on
-candidate `cb72ae0` is recorded as accepted (explicit ARM, sampled
-pass-through, matching-invocation cutoff, typing after descriptor close; META
-Worker 16). Full G4 remains open (watchdog/hang, held-modifier-at-death, LED
-return, all-control fidelity, production/autostart).
+does not require a second keyboard or SSH. Named physical slices on candidate
+`cb72ae0` / docs descendant `9a89095` are recorded as accepted: explicit ARM,
+sampled pass-through, matching-invocation cutoff, typing after descriptor
+close (Worker 16); armed watchdog abort with a held modifier (Worker 19).
+Full G4 remains open (LED return, all-control fidelity, live host
+suspend/resume, production/autostart).
 
 ### Independent recovery path (live G4)
 
@@ -387,7 +392,7 @@ watchdog PASS. Distinguish:
 |-------|----------------|------------------------|
 | Watchdog expiry (`WatchdogSec=2`) | the event-loop thread stopped feeding | physical typing; cutoff path |
 | Invocation-bound cutoff expiry | PID1 killed the matching invocation after 30 s | that the watchdog fired; physical typing |
-| Physical usability after descriptor close | named-slice typing after matching-invocation cutoff death | watchdog/hang abort; held-modifier-at-death; all-control fidelity |
+| Physical usability after descriptor close | named-slice typing after matching-invocation cutoff death | LED return; all-control fidelity; live suspend |
 
 The cutoff helper is supplemental recovery evidence. It never replaces the
 independent second-keyboard or SSH path required for live G4. Limitations:
@@ -401,8 +406,9 @@ A hung event loop stops feeding `WATCHDOG=1`. systemd then aborts the
 process (default watchdog signal is `SIGABRT`) after `WatchdogSec=2`.
 Because `Restart=no`, the unit stays dead. If the broker had been armed,
 descriptor close is what must return the physical keyboard. Named-slice
-cutoff death showed G213 typing after descriptor close; watchdog/hang abort
-still needs G4 on this host.
+cutoff death showed G213 typing after descriptor close; Worker 19 recorded
+armed watchdog abort with a held modifier. LED return, all-control fidelity,
+and live host suspend/resume still need G4.
 
 The production hang procedure is external: `SIGSTOP` the broker PID from a
 recovery path, observe that watchdog feeding stops, then let systemd abort
@@ -421,8 +427,9 @@ on systemd `--user` fixtures that do not name the broker.
 userspace teardown. The planned armed teardown order remains ungrab
 physical first, then balanced synthetic releases, then destroy the virtual
 device. A dead process cannot run that sequence. Named-slice cutoff SIGKILL
-showed typing after descriptor close; watchdog abort, held-modifier-at-death,
-and LED return still need G4.
+showed typing after descriptor close; Worker 19 recorded armed watchdog abort
+with a held modifier. LED return, all-control fidelity, and live host
+suspend/resume still need G4.
 
 Do not enable autostart until full G4 evidence exists (handout §29). The
 named slice does not authorize autostart.
@@ -459,6 +466,30 @@ again after descriptor close. Do not `systemctl enable`. Do not
 If stop is not enough, `kill -TERM` then `kill -KILL` the `contextdeck-broker`
 PID from the recovery path. Unplug/replug the G213 only as a last resort.
 
+### Suspend / resume
+
+System sleep is handled by `packaging/systemd/contextdeck-sleep.sh`, installed
+as `/usr/lib/systemd/system-sleep/contextdeck-broker`. It is not autostart
+and it does not arm. Installing the hook only means: if the broker unit is
+**active** when the machine enters `suspend` / `hibernate` / `hybrid-sleep` /
+`suspend-then-hibernate`, stop it before the freeze; after resume, start it
+once **only if** that same cycle recorded a valid active-before-sleep marker
+and the unit is `inactive`. The restarted broker is always disarmed: no
+lease, no virtual device, no grab. The session app may reconnect and probe
+`STATUS`; it must not restore ARM. The user can click the existing Arm
+action afterwards.
+
+The marker is root-owned mode `0600` under `/run/contextdeck-sleep`, outside
+the broker `RuntimeDirectory`. Reboot clears `/run`, so a marker cannot start
+the unit after boot. A failed pre-sleep stop or post-resume start is a
+bounded journal line (`class=error reason=stop-failed|start-failed`) and is
+not retried. `WatchdogSec=2` and `Restart=no` stay as they are; do not mask
+sleep targets or inhibit user sleep to work around the watchdog.
+
+This section does **not** authorize a live suspend. Host suspend/resume
+acceptance remains open G4. Device-free coverage is `test_sleep_hook` (fake
+`systemctl`, no `/run`, no `systemctl suspend`).
+
 Quitting the session app, closing the broker socket, or letting the 6 s
 lease expire also disarms (ungrab-first) without needing `systemctl stop`.
 That is the S4 recovery path when the seat is still usable. If the G213 is
@@ -474,10 +505,11 @@ More procedure detail: `docs/testing-m2.md`.
 
 The broker listens on `/run/contextdeck/broker.sock`. Override with
 `CONTEXTDECK_BROKER_SOCKET` only in tests. The session app probes `STATUS` at
-startup and does **not** auto-arm. Arming is a deliberate tray or Diagnostics
-action (`Arm G213 pass-through…`) that sends authenticated `LEASE` then `ARM`.
-`DISARM` and `RELEASE` are equally explicit. Do **not** start the system unit
-to try this.
+startup and after a reconnect and does **not** auto-arm. A broker stop or
+sleep-hook restart invalidates any prior lease/ARM intent. Arming is a
+deliberate tray or Diagnostics action (`Arm G213 pass-through…`) that sends
+authenticated `LEASE` then `ARM`. `DISARM` and `RELEASE` are equally explicit.
+Do **not** start the system unit to try this.
 
 ### Protocol
 
@@ -515,7 +547,9 @@ Replies: `OK …` or `ERR MALFORMED|UNAUTH|LEASE_HELD|NO_LEASE|UNAUTHORIZED|UNKN
 Broker starts **disarmed**. Creating the socket does not arm. One lease only.
 Disconnect, malformed framing, lease expiry, failed authentication, or
 `shutdown`/`SIGTERM` disarms first (ungrab physical, then balanced synthetic
-releases, then destroy virtual), then drops the lease.
+releases, then destroy virtual), then drops the lease. A systemd-sleep `post`
+start is the same disarmed startup; the session client's retry path probes
+`STATUS` only and does not emit `LEASE`/`ARM` until the user does.
 
 S5 production `ARM` enumerates the G213 by USB ancestry (`046d:c336` plus
 interface `00`/`01`), opens both sources without grabbing, measures the live
@@ -556,16 +590,20 @@ sudo install -m 0644 packaging/systemd/contextdeck-broker.service \
 sudo systemctl daemon-reload
 ```
 
-`cmake --install --component broker` installs only `contextdeck-broker` to
-`/usr/bin/contextdeck-broker`. The unit copy refreshes `RuntimeDirectoryMode=0755`
-so the seat user can traverse `/run/contextdeck` without joining group
-`contextdeck-broker`.
+`cmake --install --component broker` installs `contextdeck-broker` to
+`/usr/bin/contextdeck-broker` and the sleep hook to
+`/usr/lib/systemd/system-sleep/contextdeck-broker`. The hook is not
+autostart: it only stops an already-active unit on sleep `pre` and may start
+it once, disarmed, on `post`. The unit copy refreshes
+`RuntimeDirectoryMode=0755` so the seat user can traverse `/run/contextdeck`
+without joining group `contextdeck-broker`.
 
 Verify (still no start):
 
 | Check | Expected |
 |-------|----------|
 | `/usr/bin/contextdeck-broker` | exists, executable |
+| `/usr/lib/systemd/system-sleep/contextdeck-broker` | exists, executable; same script as `packaging/systemd/contextdeck-sleep.sh` |
 | `diff packaging/systemd/contextdeck-broker.service /etc/systemd/system/contextdeck-broker.service` | empty |
 | unit `RuntimeDirectoryMode` | `0755` |
 | unit `TimeoutStopSec` / `TimeoutAbortSec` | `5` / `5` |

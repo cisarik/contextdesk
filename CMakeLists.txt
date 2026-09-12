@@ -134,6 +134,10 @@ set_target_properties(contextdeck_broker_core contextdeck-broker PROPERTIES AUTO
 install(TARGETS contextdeck-broker
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         COMPONENT broker)
+install(PROGRAMS packaging/systemd/contextdeck-sleep.sh
+        DESTINATION lib/systemd/system-sleep
+        RENAME contextdeck-broker
+        COMPONENT broker)
 
 enable_testing()
 
@@ -198,3 +202,15 @@ add_test(NAME test_udev_verify
 add_test(NAME test_trial_cutoff
          COMMAND bash "${CMAKE_SOURCE_DIR}/tests/unit/test_trial_cutoff.sh"
                  "${CMAKE_SOURCE_DIR}")
+
+add_test(NAME test_sleep_hook
+         COMMAND bash "${CMAKE_SOURCE_DIR}/tests/unit/test_sleep_hook.sh"
+                 "${CMAKE_SOURCE_DIR}")
+
+add_executable(test_broker_ipc_client
+    tests/unit/test_broker_ipc_client.cpp
+    src/app/BrokerIpcClient.cpp
+)
+target_include_directories(test_broker_ipc_client PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(test_broker_ipc_client PRIVATE contextdeck_ipc Qt6::Test Qt6::Network)
+add_test(NAME test_broker_ipc_client COMMAND test_broker_ipc_client -nocrashhandler)

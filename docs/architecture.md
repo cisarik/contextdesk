@@ -91,7 +91,10 @@ this document grants none.
 | Identified app without profile | Global defaults |
 | Unknown/stale context, lock screen, no active window | Pass-through |
 | ContextDeck settings / unsuitable shell surface | Neutral / pass-through |
-| Reconnect or resume | Wait for fresh context + policy sync |
+| Reconnect or resume (lighting / context) | Wait for fresh context + policy sync |
+| System sleep while broker inactive or failed | Sleep hook is a no-op; no start after resume |
+| System sleep while broker active | Hook stops the unit on `pre` (orderly SIGTERM); after `post` starts it once, always disarmed, only if a valid active-before-sleep marker exists |
+| Session app reconnect after resume | Existing bounded retry; `STATUS` only; no silent `LEASE`/`ARM` |
 
 ## Configuration contract
 
@@ -212,11 +215,24 @@ Durable rules for this project:
 - Recovery order for an orderly disarm: ungrab physical sources first, then
   best-effort synthetic releases, then destroy the virtual device. The real
   keyboard must stay usable. Kernel close behavior (grab release on evdev
-  close, uinput teardown on close) is verified in source. One named physical
-  slice (explicit ARM, sampled pass-through, matching-invocation cutoff,
-  typing after descriptor close) is recorded as accepted on candidate
-  `cb72ae0`; remaining G4 claims (watchdog/hang, held-modifier-at-death, LED
-  return, all-control fidelity, production autostart) still need acceptance.
+  close, uinput teardown on close) is verified in source. Named physical
+  slices recorded as accepted on candidate `cb72ae0` / docs descendant
+  `9a89095`: explicit ARM, sampled pass-through, matching-invocation cutoff,
+  typing after descriptor close (Worker 16); armed watchdog abort with a held
+  modifier (Worker 19). Remaining G4 claims (LED return, all-control
+  fidelity, live host suspend/resume, production autostart) still need
+  acceptance.
+- System suspend/resume is a lifecycle boundary, not a watchdog failure.
+  `packaging/systemd/contextdeck-sleep.sh` (installed as
+  `/usr/lib/systemd/system-sleep/contextdeck-broker`) stops an **active**
+  broker on sleep `pre` so `WatchdogSec=2` cannot abort a frozen process, and
+  starts that unit once on `post` only when an ephemeral root-owned marker
+  proves it was active before that sleep. The marker lives in
+  `/run/contextdeck-sleep`, not `RuntimeDirectory`. Post-resume start is the
+  existing disarmed path: no lease, no virtual device, no automatic re-ARM.
+  An inactive or failed broker is not started. Failed stop or start is
+  bounded and fail-closed. See [ADR 0001](adr/0001-broker-suspend-resume-sleep-hook.md).
+  Device-free hook tests are not live suspend evidence.
 - RGB failure disables lighting only; input behavior is unaffected. Never
   auto-switch to direct HID or restart unrelated RGB software.
 - Uninstall reverses only owned units/rules/files; user profiles are preserved
