@@ -14,6 +14,7 @@ SessionApplication::SessionApplication(QApplication *app, QObject *parent)
     : QObject(parent)
     , m_app(app)
     , m_context(this)
+    , m_workspace(this)
     , m_rgb(this)
     , m_power(this)
     , m_controller(&m_context, &m_rgb, &m_power, this)
@@ -23,6 +24,7 @@ SessionApplication::SessionApplication(QApplication *app, QObject *parent)
 {
     Q_UNUSED(m_app);
     m_controller.setBrokerIpc(&m_brokerIpc);
+    m_controller.setWorkspaceReceiver(&m_workspace);
     connect(&m_tray, &TrayController::showSettingsRequested, &m_settings, &SettingsHost::show);
 }
 
@@ -33,6 +35,9 @@ bool SessionApplication::start()
         qCInfo(lcApp) << "bus name registered:" << kServiceName;
     } else {
         qCWarning(lcApp) << "running degraded:" << m_context.lastError();
+    }
+    if (!m_workspace.start()) {
+        qCWarning(lcApp) << "workspace observation unavailable:" << m_workspace.errorClass();
     }
     m_controller.load();
     if (QGuiApplication::platformName() == QLatin1String("offscreen")) {

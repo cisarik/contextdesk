@@ -11,7 +11,7 @@ this document grants none.
 
 | Component | Responsibility | Hard boundaries |
 |-----------|----------------|-----------------|
-| Session application (Qt6/KF6: `QApplication` + `KStatusNotifierItem`, lazy Kirigami/QML settings) | Tray, settings, profiles, KWin context bridge, app inventory, RGB client, approved desktop actions | No raw keyboard-device access |
+| Session application (Qt6/KF6: `QApplication` + `KStatusNotifierItem`, lazy Kirigami/QML settings) | Tray, settings, profiles, KWin context bridge, virtual-desktop observation, app inventory, RGB client, approved desktop actions | No raw keyboard-device access |
 | Input broker (C++20, libevdev + uinput) | Verified G213 event routing, policy application, virtual input, lifecycle safety | No GUI/QML, no RGB, no network, no shell execution, no ordinary-key logging |
 | OpenRGB (external service) | G213 lighting transport over the SDK | Separately reviewed device access; loopback only |
 
@@ -85,6 +85,31 @@ this document grants none.
   original window across an unobserved compositor focus transition is **not**
   promised.
 
+## Virtual desktop observation
+
+Workspace-aware lighting observes `org.kde.KWin` `/VirtualDesktopManager`
+from the session application (`WorkspaceReceiver` on the named connection
+`contextdeck-workspace`). Desktop state is not duplicated through the KWin
+script.
+
+- Subscribe to service-owner changes and desktop-manager signals, then call
+  `Properties.GetAll` for a complete snapshot (`count`, `current`, `desktops`).
+- Treat each signal as an invalidation. Coalesce bursts; keep one in-flight
+  snapshot plus one pending refresh; discard replies from replaced owners or
+  superseded revisions.
+- Validate count, identities, names, positions, and current-desktop membership
+  before activating state. Unknown workspace with an active layout resolves to
+  `untouched` (recorded device default).
+- A 2 s refresh deadline, then 1/2/4/8/16/30 s recovery, covers owner loss and
+  stalled replies. Idle desktop state does not expire merely because no signal
+  arrives; a silent compositor hang without an observable event is undetectable.
+- Diagnostics pause/resume is a simulated observation interruption. It does
+  not stop KWin or the session bus.
+
+The five-slot resolver composes desktop indicators and application colors into
+the existing OpenRGB protocol-5 path. Transport, broker, and the KWin bridge
+are unchanged by this whole.
+
 | Condition | Mapping behavior |
 |-----------|------------------|
 | Identified app with profile | App overrides over global defaults |
@@ -100,18 +125,21 @@ this document grants none.
 
 - One authoritative versioned document:
   `$XDG_CONFIG_HOME/contextdeck/profiles.json`
-  (fallback `$HOME/.config/contextdeck/profiles.json`).
-- Resolution: app override → global → pass-through. `Inherit Global` (app
-  level) resolves through the global profile; it is invalid on the global
-  profile itself. `Disabled` is explicit consumption, never inferred from
-  absence.
+  (fallback `$HOME/.config/contextdeck/profiles.json`). Schema 3 is the
+  activatable version. Schema 1 and 2 load in memory with preserving lighting
+  mapping and are not rewritten until explicit save.
+- Resolution: session override → active workspace layout → application
+  preset → global preset. `Inherit Global` (app level) resolves through the
+  global profile; it is invalid on the global profile itself. `Disabled` is
+  explicit consumption, never inferred from absence.
 - Typed actions only: `InheritGlobal`, `PassThrough`, `Disabled`,
   `EmitShortcut` (one validated chord), `ApprovedSystemAction` (`Suspend`,
   `DisplaysOff` — IDs only until G7).
-- Persistence: validate the entire draft before activation → atomic
-  `QSaveFile` replacement (no direct-write fallback) → bounded last-valid
-  backup beside the document. Invalid or newer-schema files are preserved
-  untouched. Cold start with no valid configuration resolves to pass-through.
+- Persistence: validate the entire draft before activation → preserve exact
+  previous bytes in `.bak` through `QSaveFile` → atomic `QSaveFile` replacement
+  (no direct-write fallback). Invalid, unsupported, or migration-fallback
+  files are not overwritten. Cold start with no valid configuration resolves
+  to pass-through plus untouched lighting.
 - Application matcher stores friendly display identity plus technical match
   identity. Unknown semantic fields are rejected, not silently discarded.
 - KConfig may hold window geometry/presentation only — never a second owner of

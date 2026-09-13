@@ -228,8 +228,40 @@ bool parseKeys(const QJsonValue &value, const QString &path, bool allowInherit, 
     return true;
 }
 
-bool parseZoneArray(const QJsonValue &zonesValue, const QString &path, std::optional<std::array<ZoneValue, kZoneCount>> &out,
-                    PersistenceError &error)
+std::optional<ZoneRole> zoneRoleFromJsonName(QStringView name)
+{
+    if (name == QLatin1String("static")) {
+        return ZoneRole::Static;
+    }
+    if (name == QLatin1String("desktop_indicator")) {
+        return ZoneRole::DesktopIndicator;
+    }
+    if (name == QLatin1String("app_color")) {
+        return ZoneRole::AppColor;
+    }
+    if (name == QLatin1String("off")) {
+        return ZoneRole::Off;
+    }
+    return std::nullopt;
+}
+
+QString zoneRoleJsonName(ZoneRole role)
+{
+    switch (role) {
+    case ZoneRole::Static:
+        return QStringLiteral("static");
+    case ZoneRole::DesktopIndicator:
+        return QStringLiteral("desktop_indicator");
+    case ZoneRole::AppColor:
+        return QStringLiteral("app_color");
+    case ZoneRole::Off:
+        return QStringLiteral("off");
+    }
+    return QStringLiteral("static");
+}
+
+bool parseZoneArrayV2(const QJsonValue &zonesValue, const QString &path,
+                      std::optional<std::array<ZoneValue, kZoneCount>> &out, PersistenceError &error)
 {
     if (zonesValue.isNull()) {
         out.reset();
@@ -250,7 +282,89 @@ bool parseZoneArray(const QJsonValue &zonesValue, const QString &path, std::opti
         if (!color) {
             return false;
         }
+        parsed[static_cast<size_t>(i)].role = ZoneRole::Static;
         parsed[static_cast<size_t>(i)].color = *color;
+    }
+    out = parsed;
+    return true;
+}
+
+bool parseZoneObjectV3(const QJsonValue &value, const QString &path, bool allowDynamicRoles, ZoneValue &out,
+                       PersistenceError &error)
+{
+    if (!value.isObject()) {
+        error = makeError(QStringLiteral("lighting.zones entries must be objects"), path);
+        return false;
+    }
+    const QJsonObject object = value.toObject();
+    if (!object.contains(QStringLiteral("role")) || !object.value(QStringLiteral("role")).isString()) {
+        error = makeError(QStringLiteral("zone.role must be a string"), path + QStringLiteral(".role"));
+        return false;
+    }
+    const auto role = zoneRoleFromJsonName(object.value(QStringLiteral("role")).toString());
+    if (!role) {
+        error = makeError(QStringLiteral("unknown zone role"), path + QStringLiteral(".role"));
+        return false;
+    }
+    if (!allowDynamicRoles && zoneRoleIsDynamic(*role)) {
+        error = makeError(QStringLiteral("application lighting may use only static or off zone roles"),
+                          path + QStringLiteral(".role"));
+        return false;
+    }
+
+    QStringList allowed{QStringLiteral("role")};
+    if (*role != ZoneRole::Off) {
+        allowed << QStringLiteral("color");
+    }
+    if (!checkObjectKeys(object, allowed, path, error)) {
+        return false;
+    }
+
+    ZoneValue parsed;
+    parsed.role = *role;
+    if (*role == ZoneRole::Off) {
+        if (object.contains(QStringLiteral("color"))) {
+            error = makeError(QStringLiteral("off zones must not include color"), path + QStringLiteral(".color"));
+            return false;
+        }
+        out = parsed;
+        return true;
+    }
+    if (!object.contains(QStringLiteral("color"))) {
+        error = makeError(QStringLiteral("zone.color is required"), path + QStringLiteral(".color"));
+        return false;
+    }
+    const auto color = parseColor(object.value(QStringLiteral("color")), path + QStringLiteral(".color"), error);
+    if (!color) {
+        return false;
+    }
+    parsed.color = *color;
+    out = parsed;
+    return true;
+}
+
+bool parseZoneArrayV3(const QJsonValue &zonesValue, const QString &path, bool allowDynamicRoles,
+                      std::optional<std::array<ZoneValue, kZoneCount>> &out, PersistenceError &error)
+{
+    if (zonesValue.isNull()) {
+        out.reset();
+        return true;
+    }
+    if (!zonesValue.isArray()) {
+        error = makeError(QStringLiteral("lighting.zones must be null or an array of five objects"), path);
+        return false;
+    }
+    const QJsonArray zones = zonesValue.toArray();
+    if (zones.size() != kZoneCount) {
+        error = makeError(QStringLiteral("lighting.zones must contain exactly five objects"), path);
+        return false;
+    }
+    std::array<ZoneValue, kZoneCount> parsed{};
+    for (int i = 0; i < kZoneCount; ++i) {
+        if (!parseZoneObjectV3(zones.at(i), path + QStringLiteral("[%1]").arg(i), allowDynamicRoles,
+                               parsed[static_cast<size_t>(i)], error)) {
+            return false;
+        }
     }
     out = parsed;
     return true;
@@ -289,14 +403,16 @@ std::optional<Lighting> parseLightingV1(const QJsonObject &object, const QString
     }
     lighting.baseColor = *baseColor;
     if (object.contains(QStringLiteral("zones"))) {
-        if (!parseZoneArray(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), lighting.zones, error)) {
+        if (!parseZoneArrayV2(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), lighting.zones,
+                              error)) {
             return std::nullopt;
         }
     }
     return lighting;
 }
 
-std::optional<Lighting> parseLighting(const QJsonObject &object, const QString &path, PersistenceError &error)
+std::optional<Lighting> parseLightingCommon(const QJsonObject &object, const QString &path, int schemaVersion,
+                                           bool allowDynamicRoles, PersistenceError &error)
 {
     static const QStringList allowed{
         QStringLiteral("mode"),
@@ -344,14 +460,19 @@ std::optional<Lighting> parseLighting(const QJsonObject &object, const QString &
     }
 
     if (object.contains(QStringLiteral("zones"))) {
-        if (!parseZoneArray(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), lighting.zones, error)) {
+        const bool ok = schemaVersion >= 3
+            ? parseZoneArrayV3(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), allowDynamicRoles,
+                               lighting.zones, error)
+            : parseZoneArrayV2(object.value(QStringLiteral("zones")), path + QStringLiteral(".zones"), lighting.zones,
+                               error);
+        if (!ok) {
             return std::nullopt;
         }
     }
 
     if (object.contains(QStringLiteral("speed"))) {
         const QJsonValue speedValue = object.value(QStringLiteral("speed"));
-        if (!isInteger(speedValue) || speedValue.toDouble() < 0) {
+        if (!isInteger(speedValue) || speedValue.toDouble() < 0 || speedValue.toDouble() > 2147483647.0) {
             error = makeError(QStringLiteral("lighting.speed must be a non-negative integer"),
                               path + QStringLiteral(".speed"));
             return std::nullopt;
@@ -478,7 +599,12 @@ QJsonObject lightingToJson(const Lighting &lighting)
     if (lighting.zones) {
         QJsonArray zones;
         for (const ZoneValue &zone : *lighting.zones) {
-            zones.append(colorToJson(zone.color));
+            QJsonObject entry;
+            entry.insert(QStringLiteral("role"), zoneRoleJsonName(zone.role));
+            if (zone.role != ZoneRole::Off) {
+                entry.insert(QStringLiteral("color"), colorToJson(zone.color));
+            }
+            zones.append(entry);
         }
         object.insert(QStringLiteral("zones"), zones);
     } else {
@@ -548,7 +674,7 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
         outcome.error = makeError(QStringLiteral("future schema_version is refused"), QStringLiteral("schema_version"));
         return outcome;
     }
-    if (schemaVersion != 1 && schemaVersion != kSchemaVersion) {
+    if (schemaVersion != 1 && schemaVersion != 2 && schemaVersion != kSchemaVersion) {
         outcome.error = makeError(QStringLiteral("unsupported schema_version"), QStringLiteral("schema_version"));
         return outcome;
     }
@@ -567,6 +693,7 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
     auto lightingMigrationFallback = [&]() {
         LoadOutcome fallback;
         fallback.ok = true;
+        fallback.migrationFallback = true;
         fallback.document.schemaVersion = kSchemaVersion;
         fallback.document.globalLighting = untouchedLighting();
         fallback.error = outcome.error;
@@ -628,8 +755,8 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
     const auto lighting = schemaVersion == 1
         ? parseLightingV1(global.value(QStringLiteral("lighting")).toObject(), QStringLiteral("global.lighting"),
                           outcome.error)
-        : parseLighting(global.value(QStringLiteral("lighting")).toObject(), QStringLiteral("global.lighting"),
-                        outcome.error);
+        : parseLightingCommon(global.value(QStringLiteral("lighting")).toObject(), QStringLiteral("global.lighting"),
+                              schemaVersion, true, outcome.error);
     if (!lighting) {
         if (schemaVersion == 1 && isSchema1LightingMigrationFailure(outcome.error)) {
             return lightingMigrationFallback();
@@ -706,8 +833,8 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
                 const auto appLighting = schemaVersion == 1
                     ? parseLightingV1(object.value(QStringLiteral("lighting")).toObject(),
                                       path + QStringLiteral(".lighting"), outcome.error)
-                    : parseLighting(object.value(QStringLiteral("lighting")).toObject(),
-                                    path + QStringLiteral(".lighting"), outcome.error);
+                    : parseLightingCommon(object.value(QStringLiteral("lighting")).toObject(),
+                                          path + QStringLiteral(".lighting"), schemaVersion, false, outcome.error);
                 if (!appLighting) {
                     if (schemaVersion == 1 && isSchema1LightingMigrationFailure(outcome.error)) {
                         return lightingMigrationFallback();
@@ -758,6 +885,18 @@ PersistenceError ProfileStore::validate(const ProfileDocument &document)
         if (it.value().action == ActionType::InheritGlobal) {
             return makeError(QStringLiteral("inherit_global is valid only on an application profile"),
                              QStringLiteral("global.keys"));
+        }
+    }
+    for (int i = 0; i < document.applications.size(); ++i) {
+        const std::optional<Lighting> &lighting = document.applications.at(i).lighting;
+        if (!lighting || !lighting->zones) {
+            continue;
+        }
+        for (int zone = 0; zone < kZoneCount; ++zone) {
+            if (zoneRoleIsDynamic((*lighting->zones)[static_cast<size_t>(zone)].role)) {
+                return makeError(QStringLiteral("application lighting may use only static or off zone roles"),
+                                 QStringLiteral("applications[%1].lighting.zones[%2].role").arg(i).arg(zone));
+            }
         }
     }
     return {};
@@ -861,30 +1000,44 @@ SaveOutcome ProfileStore::save(const ProfileDocument &document) const
         return outcome;
     }
 
+    auto writeAtomically = [](const QString &target, const QByteArray &payload) -> bool {
+        QSaveFile writer(target);
+        writer.setDirectWriteFallback(false);
+        if (!writer.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        if (writer.write(payload) != payload.size()) {
+            writer.cancelWriting();
+            return false;
+        }
+        return writer.commit();
+    };
+
     QFile existing(path);
     const bool hadExisting = existing.exists();
     if (hadExisting) {
-        const QString backup = backupPath();
-        QFile::remove(backup);
-        if (!existing.copy(backup)) {
+        if (!existing.open(QIODevice::ReadOnly)) {
+            outcome.error = makeError(QStringLiteral("unable to read existing configuration; original file preserved"),
+                                      path);
+            return outcome;
+        }
+        const QByteArray original = existing.readAll();
+        existing.close();
+        const LoadOutcome existingParsed = parseDocument(original, path);
+        if (!existingParsed.ok || existingParsed.migrationFallback) {
+            outcome.error = makeError(QStringLiteral("refusing to overwrite unsupported or invalid existing document"),
+                                      path);
+            outcome.error.preserved = true;
+            return outcome;
+        }
+        if (!writeAtomically(backupPath(), original)) {
             outcome.error = makeError(QStringLiteral("unable to write backup; original file preserved"), path);
             return outcome;
         }
     }
 
-    QSaveFile writer(path);
-    writer.setDirectWriteFallback(false);
-    if (!writer.open(QIODevice::WriteOnly)) {
-        outcome.error = makeError(QStringLiteral("unable to open atomic writer; original file preserved"), path);
-        return outcome;
-    }
-    if (writer.write(bytes) != bytes.size()) {
-        writer.cancelWriting();
+    if (!writeAtomically(path, bytes)) {
         outcome.error = makeError(QStringLiteral("write failed; original file preserved"), path);
-        return outcome;
-    }
-    if (!writer.commit()) {
-        outcome.error = makeError(QStringLiteral("commit failed; original file preserved"), path);
         return outcome;
     }
 

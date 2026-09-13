@@ -2,11 +2,13 @@
 
 #include "app/BrokerIpcClient.h"
 #include "context/DBusNames.h"
+#include "context/WorkspaceReceiver.h"
 #include "core/ControlCatalog.h"
 #include "core/Resolver.h"
 #include "core/ZoneMap.h"
 
 #include <QLoggingCategory>
+#include <QMetaObject>
 #include <QStringList>
 
 #include <algorithm>
@@ -75,8 +77,18 @@ bool applyZoneColor(Lighting &lighting, int index, const Rgb &color, const Rgb &
     if (index < 0 || index >= kZoneCount) {
         return false;
     }
+    if (lighting.zones.has_value()) {
+        ZoneValue &zone = (*lighting.zones)[static_cast<size_t>(index)];
+        if (zone.role == ZoneRole::Off) {
+            return false;
+        }
+        zone.color = color;
+        lighting.baseColor = color;
+        lighting.mode = LightingMode::Direct;
+        return true;
+    }
     std::array<Rgb, kZoneCount> colors = zoneColorsFromPreset(lighting);
-    if (!lighting.zones && !lighting.baseColor) {
+    if (!lighting.baseColor) {
         colors.fill(fallback);
     }
     colors[static_cast<size_t>(index)] = color;
@@ -84,6 +96,62 @@ bool applyZoneColor(Lighting &lighting, int index, const Rgb &color, const Rgb &
     lighting.baseColor = color;
     lighting.mode = LightingMode::Direct;
     return true;
+}
+
+Lighting sanitizeApplicationLighting(const Lighting &source)
+{
+    Lighting lighting = source;
+    if (lighting.zones) {
+        std::array<ZoneValue, kZoneCount> zones = *lighting.zones;
+        for (ZoneValue &zone : zones) {
+            if (zone.role == ZoneRole::Off) {
+                zone.color = {};
+            } else {
+                zone.role = ZoneRole::Static;
+            }
+        }
+        lighting.zones = zones;
+    }
+    if (lighting.mode == LightingMode::Untouched) {
+        lighting.mode = LightingMode::Direct;
+        if (!lighting.baseColor && !lighting.zones) {
+            lighting.baseColor = kDefaultEffectColor;
+        }
+    }
+    return lighting;
+}
+
+Lighting applicationLightingOrSanitized(const ApplicationProfile &profile, const Lighting &global)
+{
+    if (profile.lighting.has_value()) {
+        return *profile.lighting;
+    }
+    return sanitizeApplicationLighting(global);
+}
+
+QString slotContributionName(SlotContribution contribution)
+{
+    switch (contribution) {
+    case SlotContribution::SessionOverride:
+        return QStringLiteral("session_override");
+    case SlotContribution::Static:
+        return QStringLiteral("static");
+    case SlotContribution::DesktopIndicatorCurrent:
+        return QStringLiteral("desktop_current");
+    case SlotContribution::DesktopIndicatorInactive:
+        return QStringLiteral("desktop_inactive");
+    case SlotContribution::DesktopIndicatorAbsent:
+        return QStringLiteral("desktop_absent");
+    case SlotContribution::AppColor:
+        return QStringLiteral("app_color");
+    case SlotContribution::Off:
+        return QStringLiteral("off");
+    case SlotContribution::DeviceDefault:
+        return QStringLiteral("device_default");
+    case SlotContribution::None:
+        break;
+    }
+    return QStringLiteral("none");
 }
 
 bool applyGradient(Lighting &lighting, const Rgb &start, const Rgb &end)
@@ -96,15 +164,17 @@ bool applyGradient(Lighting &lighting, const Rgb &start, const Rgb &end)
 
 } // namespace
 
-AppController::AppController(ContextReceiver *context, OpenRgbClient *rgb, PowerActions *power, QObject *parent)
+AppController::AppController(ContextReceiver *context, OpenRgbClient *rgb, PowerActions *power, QObject *parent,
+                             QString configRoot)
     : QObject(parent)
     , m_context(context)
     , m_rgb(rgb)
     , m_power(power)
+    , m_store(std::move(configRoot))
 {
     m_document.globalLighting = defaultLighting();
-    connect(m_context, &ContextReceiver::currentIdentityChanged, this, &AppController::onIdentityChanged);
-    connect(m_context, &ContextReceiver::bridgeLost, this, &AppController::onIdentityChanged);
+    connect(m_context, &ContextReceiver::currentIdentityChanged, this, &AppController::onContextInputsChanged);
+    connect(m_context, &ContextReceiver::bridgeLost, this, &AppController::onContextInputsChanged);
     connect(m_context, &ContextReceiver::bridgeConnectedChanged, this, &AppController::contextChanged);
     connect(m_context, &ContextReceiver::inventoryChanged, this, &AppController::onInventoryChanged);
     connect(m_context, &ContextReceiver::degradedChanged, this, &AppController::contextChanged);
@@ -125,6 +195,16 @@ void AppController::setBrokerIpc(BrokerIpcClient *client)
     }
     connect(m_brokerIpc, &BrokerIpcClient::stateChanged, this, &AppController::diagnosticsChanged);
     connect(m_brokerIpc, &BrokerIpcClient::stateChanged, this, &AppController::presentationChanged);
+}
+
+void AppController::setWorkspaceReceiver(WorkspaceReceiver *receiver)
+{
+    m_workspace = receiver;
+    if (m_workspace == nullptr) {
+        return;
+    }
+    connect(m_workspace, &WorkspaceReceiver::stateChanged, this, &AppController::scheduleRecompute);
+    connect(m_workspace, &WorkspaceReceiver::diagnosticsChanged, this, &AppController::diagnosticsChanged);
 }
 
 void AppController::load()
@@ -148,7 +228,7 @@ void AppController::load()
     }
     rememberExternalContext();
     refreshResolvedProfile();
-    applyLighting();
+    recompute();
     emit documentChanged();
     emit contextChanged();
 }
@@ -403,7 +483,86 @@ QString AppController::heroBadge() const
 
 QStringList AppController::heroZones() const
 {
-    return zoneHexList(effectiveLighting());
+    QStringList list;
+    for (const Rgb &color : m_resolution.previewColors) {
+        list.push_back(toHex(color));
+    }
+    if (list.size() != kZoneCount) {
+        return zoneHexList(effectiveLighting());
+    }
+    return list;
+}
+
+bool AppController::workspaceLayoutActive() const
+{
+    return m_resolution.workspaceLayoutActive;
+}
+
+bool AppController::workspaceObservationPaused() const
+{
+    return m_workspace != nullptr && m_workspace->isPaused();
+}
+
+QString AppController::workspaceSummary() const
+{
+    if (!m_resolution.workspaceLayoutActive) {
+        return QStringLiteral("Workspace layout is inactive.");
+    }
+    if (m_resolution.workspaceUnavailable) {
+        return QStringLiteral("Workspace observation unavailable — desired fallback is the recorded device default. This is not physical readback.");
+    }
+    if (currentWorkspaceState().refreshPending) {
+        return QStringLiteral("Refreshing desktop snapshot; last desired preview is retained.");
+    }
+    QString text = QStringLiteral("Desired preview: desktop %1 of %2, indicator capacity %3")
+                       .arg(currentWorkspaceState().currentOrdinal)
+                       .arg(m_resolution.desktopCount)
+                       .arg(m_resolution.indicatorCapacity);
+    if (m_resolution.overflowCount > 0) {
+        text += QStringLiteral(". Overflow: %1 desktops are not represented.").arg(m_resolution.overflowCount);
+    }
+    if (m_resolution.currentDesktopUnrepresented) {
+        text += QStringLiteral(" Current desktop is not represented.");
+    }
+    return text;
+}
+
+QVariantList AppController::globalZoneSlots() const
+{
+    QVariantList list;
+    const Lighting &lighting = m_document.globalLighting;
+    for (int i = 0; i < kZoneCount; ++i) {
+        QVariantMap map;
+        ZoneRole role = ZoneRole::Static;
+        Rgb color = kDefaultEffectColor;
+        if (lighting.zones) {
+            role = (*lighting.zones)[static_cast<size_t>(i)].role;
+            color = (*lighting.zones)[static_cast<size_t>(i)].color;
+        } else if (lighting.baseColor) {
+            color = *lighting.baseColor;
+        }
+        QString roleName = QStringLiteral("static");
+        switch (role) {
+        case ZoneRole::DesktopIndicator:
+            roleName = QStringLiteral("desktop_indicator");
+            break;
+        case ZoneRole::AppColor:
+            roleName = QStringLiteral("app_color");
+            break;
+        case ZoneRole::Off:
+            roleName = QStringLiteral("off");
+            color = {};
+            break;
+        case ZoneRole::Static:
+            break;
+        }
+        map.insert(QStringLiteral("role"), roleName);
+        map.insert(QStringLiteral("color"), toHex(color));
+        map.insert(QStringLiteral("ordinal"), m_resolution.representedOrdinals[static_cast<size_t>(i)]);
+        map.insert(QStringLiteral("contribution"), slotContributionName(m_resolution.slotContributions[static_cast<size_t>(i)]));
+        list.push_back(map);
+    }
+    return list;
 }
 
 QVariantList AppController::inventory() const
@@ -492,6 +651,17 @@ QVariantMap AppController::diagnostics() const
     map.insert(QStringLiteral("brokerIpcState"), brokerIpcState());
     map.insert(QStringLiteral("isSelfWindow"), isSelfWindow());
     map.insert(QStringLiteral("lastExternalApplication"), m_lastExternalApplication);
+    map.insert(QStringLiteral("workspaceLayoutActive"), workspaceLayoutActive());
+    map.insert(QStringLiteral("workspaceUnavailable"), m_resolution.workspaceUnavailable);
+    map.insert(QStringLiteral("workspaceRefreshPending"), currentWorkspaceState().refreshPending);
+    map.insert(QStringLiteral("workspaceDesktopCount"), m_resolution.desktopCount);
+    map.insert(QStringLiteral("workspaceCurrentOrdinal"), currentWorkspaceState().currentOrdinal);
+    map.insert(QStringLiteral("workspaceIndicatorCapacity"), m_resolution.indicatorCapacity);
+    map.insert(QStringLiteral("workspaceOverflow"), m_resolution.overflowCount);
+    map.insert(QStringLiteral("workspaceErrorClass"), m_workspace != nullptr ? m_workspace->errorClass() : QString());
+    map.insert(QStringLiteral("workspacePaused"), workspaceObservationPaused());
+    map.insert(QStringLiteral("workspaceSnapshots"),
+               m_workspace != nullptr ? QVariant::fromValue(m_workspace->snapshotCount()) : 0);
     return map;
 }
 
@@ -532,7 +702,7 @@ void AppController::setApplicationColor(const QString &id, const QString &hex)
     }
     for (ApplicationProfile &profile : m_document.applications) {
         if (profile.id == id) {
-            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            Lighting lighting = applicationLightingOrSanitized(profile, m_document.globalLighting);
             lighting.baseColor = *color;
             lighting.mode = LightingMode::Direct;
             lighting.zones.reset();
@@ -572,7 +742,7 @@ void AppController::addProfileFromInventory(int index)
     }
     Lighting lighting = m_document.globalLighting;
     lighting.mode = LightingMode::Direct;
-    profile.lighting = lighting;
+    profile.lighting = sanitizeApplicationLighting(lighting);
     m_document.applications.push_back(profile);
     emit documentChanged();
 }
@@ -675,7 +845,92 @@ void AppController::applyGlobalGradient(const QString &startHex, const QString &
     m_sessionLighting = SessionLightingMode::Automatic;
     emit lightingModeChanged();
     emit documentChanged();
-    applyLighting();
+    recompute();
+}
+
+void AppController::setGlobalZoneRole(int index, const QString &roleName)
+{
+    if (index < 0 || index >= kZoneCount) {
+        return;
+    }
+    ZoneRole role = ZoneRole::Static;
+    if (roleName == QLatin1String("desktop_indicator")) {
+        role = ZoneRole::DesktopIndicator;
+    } else if (roleName == QLatin1String("app_color")) {
+        role = ZoneRole::AppColor;
+    } else if (roleName == QLatin1String("off")) {
+        role = ZoneRole::Off;
+    } else if (roleName != QLatin1String("static")) {
+        return;
+    }
+    std::array<ZoneValue, kZoneCount> zones = m_document.globalLighting.zones.value_or(
+        zoneValuesFromColors(zoneColorsFromPreset(m_document.globalLighting)));
+    if (!m_document.globalLighting.zones && !m_document.globalLighting.baseColor) {
+        for (ZoneValue &zone : zones) {
+            zone.color = kDefaultEffectColor;
+        }
+    }
+    zones[static_cast<size_t>(index)].role = role;
+    if (role == ZoneRole::Off) {
+        zones[static_cast<size_t>(index)].color = {};
+    } else if (zones[static_cast<size_t>(index)].color == Rgb{}) {
+        zones[static_cast<size_t>(index)].color = kDefaultEffectColor;
+    }
+    m_document.globalLighting.zones = zones;
+    m_document.globalLighting.mode = LightingMode::Direct;
+    if (!m_document.globalLighting.baseColor) {
+        m_document.globalLighting.baseColor = kDefaultEffectColor;
+    }
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    recompute();
+}
+
+void AppController::useDefaultWorkspaceLayout()
+{
+    std::array<ZoneValue, kZoneCount> zones{};
+    for (int i = 0; i < 4; ++i) {
+        zones[static_cast<size_t>(i)].role = ZoneRole::DesktopIndicator;
+        zones[static_cast<size_t>(i)].color = kDefaultEffectColor;
+    }
+    zones[4].role = ZoneRole::AppColor;
+    zones[4].color = Rgb{0x40, 0x40, 0x40};
+    m_document.globalLighting.mode = LightingMode::Direct;
+    m_document.globalLighting.restoreMode = LightingMode::Wave;
+    m_document.globalLighting.baseColor = kDefaultEffectColor;
+    m_document.globalLighting.zones = zones;
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    recompute();
+}
+
+void AppController::useStaticZoneLayout()
+{
+    std::array<Rgb, kZoneCount> colors = zoneColorsFromPreset(m_document.globalLighting);
+    if (!m_document.globalLighting.zones && !m_document.globalLighting.baseColor) {
+        colors.fill(kDefaultEffectColor);
+    }
+    m_document.globalLighting.zones = zoneValuesFromColors(colors);
+    m_document.globalLighting.mode = LightingMode::Direct;
+    if (!m_document.globalLighting.baseColor) {
+        m_document.globalLighting.baseColor = colors.front();
+    }
+    m_sessionLighting = SessionLightingMode::Automatic;
+    emit lightingModeChanged();
+    emit documentChanged();
+    recompute();
+}
+
+void AppController::setWorkspaceObservationPaused(bool paused)
+{
+    if (m_workspace == nullptr) {
+        return;
+    }
+    m_workspace->setPaused(paused);
+    emit diagnosticsChanged();
+    recompute();
 }
 
 void AppController::setGlobalSpeed(int percent)
@@ -710,7 +965,7 @@ void AppController::setApplicationLightingMode(const QString &id, const QString 
     }
     for (ApplicationProfile &profile : m_document.applications) {
         if (profile.id == id) {
-            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            Lighting lighting = applicationLightingOrSanitized(profile, m_document.globalLighting);
             applyMode(lighting, *mode, Rgb{0x7c, 0x3a, 0xed});
             profile.lighting = lighting;
             emit documentChanged();
@@ -728,7 +983,7 @@ void AppController::setApplicationZoneColor(const QString &id, int index, const 
     }
     for (ApplicationProfile &profile : m_document.applications) {
         if (profile.id == id) {
-            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            Lighting lighting = applicationLightingOrSanitized(profile, m_document.globalLighting);
             if (!applyZoneColor(lighting, index, *color, Rgb{0x7c, 0x3a, 0xed})) {
                 return;
             }
@@ -749,7 +1004,7 @@ void AppController::applyApplicationGradient(const QString &id, const QString &s
     }
     for (ApplicationProfile &profile : m_document.applications) {
         if (profile.id == id) {
-            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            Lighting lighting = applicationLightingOrSanitized(profile, m_document.globalLighting);
             applyGradient(lighting, *start, *end);
             profile.lighting = lighting;
             emit documentChanged();
@@ -763,7 +1018,7 @@ void AppController::setApplicationSpeed(const QString &id, int percent)
 {
     for (ApplicationProfile &profile : m_document.applications) {
         if (profile.id == id) {
-            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            Lighting lighting = applicationLightingOrSanitized(profile, m_document.globalLighting);
             if (!applySpeedPercent(lighting, percent)) {
                 return;
             }
@@ -783,7 +1038,7 @@ void AppController::setApplicationBreathingColor(const QString &id, const QStrin
     }
     for (ApplicationProfile &profile : m_document.applications) {
         if (profile.id == id) {
-            Lighting lighting = profile.lighting.value_or(m_document.globalLighting);
+            Lighting lighting = applicationLightingOrSanitized(profile, m_document.globalLighting);
             applyBreathingColor(lighting, *color);
             profile.lighting = lighting;
             emit documentChanged();
@@ -849,19 +1104,109 @@ void AppController::assignEmitShortcut(const QString &controlName, const QString
 
 void AppController::onIdentityChanged()
 {
-    ++m_identityUpdates;
-    rememberExternalContext();
-    const ApplicationIdentity identity = m_context->identity();
-    if (m_sessionLighting == SessionLightingMode::TemporaryColor && !isOwnSurface(identity)
-        && identity.isIdentified()) {
-        m_sessionLighting = SessionLightingMode::Automatic;
-        m_document.preferences.automaticEnabled = true;
-        emit lightingModeChanged();
-        qCInfo(lcUi) << "temporary_color expired on external identity change";
+    onContextInputsChanged();
+}
+
+void AppController::onContextInputsChanged()
+{
+    if (m_contextEventQueued) {
+        return;
     }
-    refreshResolvedProfile();
-    applyLighting();
-    emit contextChanged();
+    m_contextEventQueued = true;
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            m_contextEventQueued = false;
+            ++m_identityUpdates;
+            rememberExternalContext();
+            const ApplicationIdentity identity = m_context->identity();
+            if (m_sessionLighting == SessionLightingMode::TemporaryColor && !isOwnSurface(identity)
+                && identity.isIdentified()) {
+                m_sessionLighting = SessionLightingMode::Automatic;
+                m_document.preferences.automaticEnabled = true;
+                emit lightingModeChanged();
+                qCInfo(lcUi) << "temporary_color expired on external identity change";
+            }
+            refreshResolvedProfile();
+            recompute();
+            emit contextChanged();
+            emit diagnosticsChanged();
+        },
+        Qt::QueuedConnection);
+}
+
+void AppController::scheduleRecompute()
+{
+    if (m_recomputeQueued) {
+        return;
+    }
+    m_recomputeQueued = true;
+    QMetaObject::invokeMethod(this, &AppController::recompute, Qt::QueuedConnection);
+}
+
+WorkspaceState AppController::currentWorkspaceState() const
+{
+    if (m_workspace == nullptr) {
+        return WorkspaceState{};
+    }
+    return m_workspace->state();
+}
+
+std::optional<Lighting> AppController::sessionOverrideLighting() const
+{
+    if (m_sessionLighting == SessionLightingMode::LightsOff) {
+        Lighting lighting;
+        lighting.mode = LightingMode::Off;
+        return lighting;
+    }
+    if (m_sessionLighting == SessionLightingMode::DeviceDefault) {
+        return untouchedLighting();
+    }
+    if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
+        Lighting lighting;
+        lighting.mode = LightingMode::Direct;
+        lighting.baseColor = m_temporaryColor;
+        return lighting;
+    }
+    return std::nullopt;
+}
+
+void AppController::recompute()
+{
+    m_recomputeQueued = false;
+    const WorkspaceState workspace = currentWorkspaceState();
+    m_resolution = resolveContextLighting(m_document, m_context->identity(), workspace, sessionOverrideLighting());
+    const bool deferWorkspace = workspace.refreshPending && !sessionOverrideLighting().has_value() && m_hasLastDesired
+        && m_resolution.workspaceLayoutActive && !m_resolution.workspaceUnavailable;
+    if (deferWorkspace) {
+        emit presentationChanged();
+        emit diagnosticsChanged();
+        return;
+    }
+    sendLighting(m_resolution.desired);
+    emit presentationChanged();
+    emit diagnosticsChanged();
+}
+
+Lighting AppController::effectiveLighting() const
+{
+    return m_resolution.lighting;
+}
+
+void AppController::applyLighting()
+{
+    recompute();
+}
+
+void AppController::sendLighting(const DesiredLighting &desired)
+{
+    if (m_hasLastDesired && m_lastDesired == desired) {
+        return;
+    }
+    m_rgb->setDesiredState(desired);
+    m_lastDesired = desired;
+    m_hasLastDesired = true;
+    ++m_lightingUpdates;
     emit diagnosticsChanged();
 }
 
@@ -962,37 +1307,6 @@ QString AppController::lightsPhrase() const
         return QStringLiteral("vlastné farby");
     }
     return lightingModeJsonName(lighting.mode);
-}
-
-Lighting AppController::effectiveLighting() const
-{
-    if (m_sessionLighting == SessionLightingMode::LightsOff) {
-        Lighting lighting;
-        lighting.mode = LightingMode::Off;
-        return lighting;
-    }
-    if (m_sessionLighting == SessionLightingMode::DeviceDefault) {
-        return untouchedLighting();
-    }
-    if (m_sessionLighting == SessionLightingMode::TemporaryColor) {
-        Lighting lighting;
-        lighting.mode = LightingMode::Direct;
-        lighting.baseColor = m_temporaryColor;
-        return lighting;
-    }
-    return resolveLighting(m_document, m_context->identity());
-}
-
-void AppController::applyLighting()
-{
-    sendLighting(effectiveLighting());
-}
-
-void AppController::sendLighting(const Lighting &lighting)
-{
-    m_rgb->setDesiredState(toDesiredLighting(lighting));
-    ++m_lightingUpdates;
-    emit diagnosticsChanged();
 }
 
 void AppController::speedBounds(LightingMode mode, quint32 &slowest, quint32 &fastest) const

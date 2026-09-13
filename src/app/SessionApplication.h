@@ -6,6 +6,7 @@
 #include "app/SettingsHost.h"
 #include "app/TrayController.h"
 #include "context/ContextReceiver.h"
+#include "context/WorkspaceReceiver.h"
 #include "rgb/OpenRgbClient.h"
 
 #include <QObject>
@@ -27,6 +28,7 @@ public:
 private:
     QApplication *m_app = nullptr;
     ContextReceiver m_context;
+    WorkspaceReceiver m_workspace;
     OpenRgbClient m_rgb;
     PowerActions m_power;
     AppController m_controller;

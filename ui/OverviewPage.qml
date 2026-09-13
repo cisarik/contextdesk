@@ -20,6 +20,18 @@ Kirigami.ScrollablePage {
         ZoneHero {
             Layout.fillWidth: true
         }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.8
+            text: "Farby nižšie sú desired preview, nie fyzické čítanie z klávesnice."
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: app.workspaceLayoutActive
+            text: app.workspaceSummary
+        }
 
         Controls.Label {
             Layout.fillWidth: true

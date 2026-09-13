@@ -1,17 +1,19 @@
 # ContextDeck specification
 
-Product behavior for the M1 configuration and lighting contract. This file is
+Product behavior for the configuration and lighting contract. This file is
 the owner of terminology, assignment states, matchers, persistence, the control
-catalog, lighting, context fallbacks, and explicit non-goals. Architecture and
-process live elsewhere; operations and IRL tests have their own owners.
+catalog, lighting, workspace observation, context fallbacks, and explicit
+non-goals. Architecture and process live elsewhere; operations and IRL tests
+have their own owners.
 
 ## Terminology
 
 - **G213**: Logitech G213 Prodigy keyboard, USB vendor `046d`, product `c336`.
   Five physical RGB zones. Not per-key RGB.
 - **Session application**: the `contextdeck` process. Owns profiles, the KWin
-  context receiver, the OpenRGB client, the tray, and approved desktop actions.
-  It never reads, grabs, or injects keyboard or HID events.
+  context receiver, virtual-desktop observation, the OpenRGB client, the tray,
+  and approved desktop actions. It never reads, grabs, or injects keyboard or
+  HID events.
 - **Profile document**: `$XDG_CONFIG_HOME/contextdeck/profiles.json`, falling
   back to `$HOME/.config/contextdeck/profiles.json`.
 - **Assignment**: the typed action bound to one catalog control in a profile.
@@ -21,10 +23,12 @@ process live elsewhere; operations and IRL tests have their own owners.
 
 ## Layering
 
-1. Typed profile document (schema_version 2).
-2. Deterministic resolver: identity + control → assignment, and identity →
-   lighting preset. No I/O, D-Bus, device access, or GUI.
-3. Context bridge supplies identity to the session application.
+1. Typed profile document (schema_version 3).
+2. Deterministic resolver: identity + control → assignment, and identity +
+   workspace state → lighting preset. No I/O, D-Bus, device access, or GUI.
+3. Context bridge supplies application identity to the session application.
+   Virtual-desktop state is observed separately through KWin's
+   `VirtualDesktopManager`.
 4. Lighting client applies the resolved **desired state** (a device mode plus,
    for `direct`, five zone colors) through OpenRGB SDK protocol 5 on loopback.
    `untouched` produces no device traffic.
@@ -70,25 +74,33 @@ application profile and uses the global profile.
 
 ## schema_version policy
 
-The only activatable schema is integer `2`. A missing, non-integer, or other
-`schema_version` is refused. A **future** version (greater than 2) is refused
+The only activatable schema is integer `3`. A missing, non-integer, or other
+`schema_version` is refused. A **future** version (greater than 3) is refused
 without rewriting the file. Unknown semantic fields are rejected rather than
 silently discarded. Device scope other than vendor `046d`, product `c336`,
 model `logitech-g213-prodigy` is rejected.
 
-A version-1 file is read, migrated in memory to schema 2, and used. It is
+A version-1 file is read, migrated in memory to schema 3, and used. It is
 **never rewritten on disk** unless the user saves. Version-1 `automatic`
 becomes `untouched` (the color is kept as `base_color` for later Direct use);
 `lights_off` becomes `off`; `temporary_color` becomes `direct`. A failed
 version-1 lighting migration preserves the original bytes and yields
-pass-through plus untouched lighting.
+pass-through plus untouched lighting. The same in-memory mapping applies to
+valid schema-2 documents.
 
 ## Persistence and recovery
 
 - The entire draft is validated before activation.
 - Replacement uses `QSaveFile` with no direct-write fallback.
 - Replacing a previously valid file keeps exactly one sibling backup,
-  `profiles.json.bak`.
+  `profiles.json.bak`, by writing the previous exact bytes through `QSaveFile`
+  (no remove-then-copy). A backup failure cancels the primary replacement.
+- Explicit **Uložiť** is the only persistence boundary. Reading never rewrites
+  the file, never creates a backup, and never enables workspace roles.
+- Replacement is refused when the existing document is unsupported, invalid, or
+  only loads through a migration-error fallback. The previous bytes stay.
+- After the first schema-3 save, an older binary refuses the file; keep a
+  COOPERATOR-owned pre-upgrade copy if a downgrade must survive later saves.
 - Any validation or write failure leaves the previous bytes untouched and
   returns a structured error: reason, JSON path or field, and `preserved`.
 - Configuration root is injectable so tests never touch the real user config.
@@ -108,29 +120,91 @@ substitutes for them.
 ## Lighting
 
 Five physical zones, never per-key color. Zone names, in order: Left Area,
-Middle Area, Right Area, Arrow and Homekeys, Numpad. Each zone entry is a
-small typed value (a color today) so a later zone-role model can be added
-without reshaping the document. Zone roles, desktop awareness, and workspace
-logic are out of this whole.
-
-The keyboard has **no readback**. "Sent successfully" is never hardware
-acceptance. Desired state, connection state, and last error are three
-separate truths. Only the operator's eyes close a lighting claim.
+Middle Area, Right Area, Arrow and Homekeys, Numpad. The keyboard has **no
+readback**. "Sent successfully" is never hardware acceptance. Desired state,
+connection state, and last error are three separate truths. Only the
+operator's eyes close a lighting claim.
 
 `lighting` is a preset object:
 
 | Field | Meaning |
 |-------|---------|
 | `mode` | ∈ {`untouched`, `direct`, `wave`, `cycle`, `breathing`, `off`} |
-| `zones` | `null` or exactly five `#rrggbb` entries. Meaningful for `direct`. |
-| `base_color` | Optional `#rrggbb`. Migration source from version 1, the single-color form of `direct`, and the **mode-specific Breathing color**. When Breathing is selected without a color, ContextDeck sends `#7c3aed`. |
+| `zones` | Absent/`null`, or exactly five **objects**. Schema 2 stored five `#rrggbb` strings; those map to `static` objects in memory. |
+| `base_color` | Optional `#rrggbb`. Direct may use it when zones are absent. Breathing without a color still sends `#7c3aed`. |
 | `restore_mode` | Device mode to return to (`direct`, `wave`, `cycle`, `breathing`, `off`). Defaults to `wave`. Not `untouched`. |
-| `speed` | Optional non-negative integer. OpenRGB protocol speed for `wave`, `cycle`, and `breathing`. Absent means the controller's default for that mode. Encoded values are clamped to the mode's `speed_min`/`speed_max` (G213 ranges may be inverted: slower is a larger number). |
+| `speed` | Optional integer from 0 through `2147483647`. Encoded values are clamped to the mode's `speed_min`/`speed_max`. |
 
-Unknown mode names, wrong zone counts, and unknown semantic fields are
-rejected. `direct` requires `base_color` or exactly five zones. `speed` is
-ignored for `untouched`, `direct`, and `off` at encode time but may still be
-stored.
+Unknown mode names, wrong slot counts or types, and unknown semantic fields
+are rejected. `direct` requires `base_color` or five zones. Serialization
+emits lowercase colors and schema 3.
+
+Each zone object has a `role`:
+
+| Role | Allowed fields | Meaning |
+|------|----------------|---------|
+| `static` | `role`, `color` | Fixed slot color |
+| `desktop_indicator` | `role`, `color` | Indicator's full-brightness color |
+| `app_color` | `role`, `color` | Application contribution; stored color is its fallback |
+| `off` | `role` only | Black slot |
+
+No other roles exist. Global lighting accepts all four. Application lighting
+accepts only `static` and `off`; applications cannot replace the global
+workspace layout.
+
+A **workspace layout** is active precisely when global mode is `direct` and
+the five global slots contain at least one `desktop_indicator` or `app_color`.
+There is no extra enable flag. Roles stored under Wave/Cycle/Breathing/Off
+stay dormant until Direct is selected again.
+
+Existing valid schema-2 lighting keeps its user-visible colors until the user
+explicitly chooses workspace roles. Merely loading the file does not rewrite
+it or take over the device.
+
+### Workspace composition
+
+Resolution order:
+
+1. Session override (temporary color, Lights Off, Device Default).
+2. Active global workspace layout, which owns all five slots.
+3. Ordinary lighting: application preset, else global preset.
+
+Desktop indicators are numbered 1…K in physical order. Indicator N represents
+desktop ordinal N. The current represented desktop uses the configured color;
+an existing inactive desktop uses `floor(channel / 5)` (20% brightness); a
+missing ordinal is black. More desktops than K show the first K only. If the
+current ordinal is greater than K, every represented desktop is inactive and
+the UI reports that the current desktop is not represented. There is no
+cycling, paging, or hidden overflow encoding.
+
+`app_color` slots use the existing application matcher. Direct-with-zones
+contributes that slot's static/off color; Direct-with-base or Breathing
+contributes the base color (Breathing default `#7c3aed` when unset); Off is
+black; Untouched/Wave/Cycle and unmatched identity use the global fallback
+color. Wave and Cycle are not sampled into a fabricated static color.
+
+When a workspace layout is active and workspace state is Unknown, the desired
+mode is `untouched` (release to the recorded device default). Before takeover
+that writes nothing; after takeover the existing RGB client requests its
+recorded restore mode and releases control. Restoration is not claimed if
+transport is unavailable. Bridge loss alone does not invalidate a valid
+desktop snapshot: indicators keep working and app slots use fallback colors.
+
+Composition yields five RGB values, then a concrete Direct preset. Unresolved
+dynamic roles never reach context-free color conversion. If all five computed
+workspace colors are black, the device mode is `Off` while the preview stays
+five blacks. That exception exists because the RGB client refuses all-black
+Direct frames; it does not reinterpret migrated legacy presets.
+
+The default explicit layout is four desktop indicators plus one application
+slot. Creating an application override from global lighting copies concrete
+fallback/static colors and never copies dynamic roles.
+
+Zone-accent for mapped keys remains specified with an explicit control-to-zone
+table. Every entry ships `verified: false` until the IRL probe fills
+`docs/hardware/g213-zone-map.md`. While unverified, accent writes to hardware
+are inert; the UI may show a labelled preview. No physical key-to-zone fact
+is claimed without measurement.
 
 Default is **non-destructive**: until the user expresses intent, ContextDeck
 does not touch the device. The honest lighting label remains
@@ -139,20 +213,13 @@ Hero must not paint `untouched` as solid black; black means `off`. Untouched
 zones are hollow/dashed placeholders with a badge such as
 `Device default (Wave)`.
 
-Resolver lighting: application preset wins; otherwise global preset; otherwise
-`untouched`. An unidentified or stale context resolves to the global preset.
 A temporary override (session, not a document field) outranks the resolved
 preset, expires on the next *external* application-identity change, and is
-never expired by opening this application's UI.
+never expired by opening this application's UI or by changing only the
+virtual desktop.
 
 `Restore device default` returns the device to the recorded `restore_mode`
 (assumed `wave` when unknown) and stops touching it.
-
-Zone-accent for mapped keys is specified with an explicit control-to-zone
-table. Every entry ships `verified: false` until the IRL probe fills
-`docs/hardware/g213-zone-map.md`. While unverified, accent writes to hardware
-are inert; the UI may show a labelled preview. No physical key-to-zone fact
-is claimed without measurement.
 
 ## Context conditions and fallbacks
 
@@ -160,8 +227,9 @@ is claimed without measurement.
 |-----------|--------------------|
 | Identified app with profile | Application overrides, else global, else pass-through |
 | Identified app without profile | Global, else pass-through |
-| Unknown, stale, or missing identity | Global profile; lighting stays on the global preset, never forced to off |
-| Bridge lost (three missed 5 s heartbeats) | Same as unknown identity, with one bounded warning |
+| Unknown, stale, or missing identity | Global profile; lighting stays on the global preset, never forced to off. With an active workspace layout, app slots use their fallback colors. |
+| Bridge lost (three missed 5 s heartbeats) | Same as unknown identity, with one bounded warning. A valid desktop snapshot is **not** discarded. |
+| Workspace snapshot unknown or paused | Active workspace layout resolves to `untouched` / recorded device default. Indicators are not shown as current. |
 | ContextDeck settings / unsuitable shell surface | Neutral / pass-through; does not expire a temporary lighting override |
 
 ## Power actions
@@ -177,12 +245,14 @@ Never `/sys/power/state`, never `systemctl`, never `QProcess`.
 
 ## Explicit non-goals
 
-- No input interception of any kind (no libevdev, uinput, `/dev/input`, HID
-  claims, grabbing, filtering, replay, or injection).
+- M3 does not open keyboard devices, grab input, start the broker, or change
+  host policy. The parked M2 broker remains a separate whole.
 - No per-key RGB.
 - No macros, shell strings, or executable configuration.
 - No other keyboards, operating systems, or generic remappers.
 - No plugins, telemetry, cloud, or web UI.
+- No desktop creation, persistent desktop IDs, or per-desktop profile database.
+- No M4 session management, remapping, deck layer, or M5 autostart.
 
 Chord recording, when present in the settings window, captures keys only while
 its own control has focus inside that window. That is not input interception.
@@ -213,6 +283,39 @@ well as on window events, so an application restart recovers identity without
 a focus change. The receiver treats a repeated identical identity as a refresh:
 it does not bump `PolicyRevision`, does not emit a context-change, and does
 not rewrite lighting.
+
+## Virtual desktop observation
+
+The session application observes KWin directly. It does not route desktop
+state through the context bridge.
+
+- Service `org.kde.KWin`, object `/VirtualDesktopManager`, interface
+  `org.kde.KWin.VirtualDesktopManager`.
+- Subscribe to owner changes and to `currentChanged`, `countChanged`,
+  `desktopCreated`, `desktopRemoved`, and `desktopDataChanged` **before**
+  calling `org.freedesktop.DBus.Properties.GetAll`.
+- Authoritative state is a complete snapshot of `count`, `current`, and
+  `desktops`. Partial signal payloads are only invalidations.
+- `desktops` is treated as an array of `(position, id, name)` tuples.
+  Positions may be signed or unsigned 32-bit; other shapes are refused.
+- Accept 1–32 desktops whose count matches the array length. IDs are
+  non-empty, unique, and at most 128 UTF-8 bytes; names are at most 256 UTF-8
+  bytes (empty names display as `Plocha N`); neither may contain control
+  characters. Positions are unique integers from 0 through 32. Retained
+  metadata is capped at 16 KiB. `current` must identify exactly one entry.
+- Sort by position and derive displayed ordinals from that order. IDs are not
+  assumed to be indices or UUIDs.
+- Coalesce invalidations in one event-loop turn. At most one snapshot request
+  is in flight, with one pending-refresh flag. Replies are bound to owner
+  generation and invalidation revision.
+- After 2 seconds without a current valid snapshot, state becomes Unknown.
+  Recovery delays are 1, 2, 4, 8, 16, then 30 seconds, then wait for a new
+  service or signal event. There is no periodic desktop polling.
+- Diagnostics report error classes and counters only. Desktop IDs and names
+  are not logged.
+- Diagnostics **Pozastaviť sledovanie plôch** pauses observation through the
+  normal unavailable path. It is a simulated interruption, not proof of a
+  compositor failure.
 
 The KWin script lives at `kwin/contextdeck-bridge/` as a `KWin/Script` package.
 It uses `workspace.windowActivated`, `windowAdded`, and `windowRemoved`

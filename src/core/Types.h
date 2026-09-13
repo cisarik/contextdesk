@@ -10,7 +10,7 @@
 
 namespace contextdeck {
 
-inline constexpr int kSchemaVersion = 2;
+inline constexpr int kSchemaVersion = 3;
 inline constexpr quint16 kG213VendorId = 0x046d;
 inline constexpr quint16 kG213ProductId = 0xc336;
 inline constexpr const char *kVendorIdText = "046d";
@@ -76,6 +76,30 @@ enum class LightingMode {
     Off,
 };
 
+enum class ZoneRole {
+    Static,
+    DesktopIndicator,
+    AppColor,
+    Off,
+};
+
+enum class WorkspaceAvailability {
+    Unknown,
+    Available,
+};
+
+enum class SlotContribution {
+    None,
+    SessionOverride,
+    Static,
+    DesktopIndicatorCurrent,
+    DesktopIndicatorInactive,
+    DesktopIndicatorAbsent,
+    AppColor,
+    Off,
+    DeviceDefault,
+};
+
 enum class Modifier {
     Ctrl,
     Shift,
@@ -112,6 +136,7 @@ struct Assignment {
 };
 
 struct ZoneValue {
+    ZoneRole role = ZoneRole::Static;
     Rgb color{};
 
     [[nodiscard]] bool operator==(const ZoneValue &other) const = default;
@@ -202,6 +227,70 @@ struct DesiredLighting {
     return desired;
 }
 
+[[nodiscard]] inline bool zoneRoleIsDynamic(ZoneRole role)
+{
+    return role == ZoneRole::DesktopIndicator || role == ZoneRole::AppColor;
+}
+
+[[nodiscard]] inline bool lightingHasWorkspaceRoles(const Lighting &lighting)
+{
+    if (!lighting.zones.has_value()) {
+        return false;
+    }
+    for (const ZoneValue &zone : *lighting.zones) {
+        if (zoneRoleIsDynamic(zone.role)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] inline bool workspaceLayoutIsActive(const Lighting &globalLighting)
+{
+    return globalLighting.mode == LightingMode::Direct && lightingHasWorkspaceRoles(globalLighting);
+}
+
+[[nodiscard]] inline Rgb dimInactiveDesktop(const Rgb &color)
+{
+    return Rgb{static_cast<quint8>(color.r / 5), static_cast<quint8>(color.g / 5),
+               static_cast<quint8>(color.b / 5)};
+}
+
+struct WorkspaceDesktop {
+    int position = 0;
+    int ordinal = 0;
+    QString id;
+    QString displayName;
+
+    [[nodiscard]] bool operator==(const WorkspaceDesktop &other) const = default;
+};
+
+struct WorkspaceState {
+    WorkspaceAvailability availability = WorkspaceAvailability::Unknown;
+    QVector<WorkspaceDesktop> desktops;
+    QString currentId;
+    int currentOrdinal = 0;
+    bool refreshPending = false;
+
+    [[nodiscard]] bool operator==(const WorkspaceState &other) const = default;
+};
+
+struct LightingResolution {
+    Lighting lighting;
+    DesiredLighting desired;
+    std::array<Rgb, kZoneCount> previewColors{};
+    bool workspaceLayoutActive = false;
+    bool workspaceUnavailable = false;
+    bool currentDesktopUnrepresented = false;
+    int indicatorCapacity = 0;
+    int desktopCount = 0;
+    int overflowCount = 0;
+    std::array<SlotContribution, kZoneCount> slotContributions{};
+    std::array<int, kZoneCount> representedOrdinals{};
+
+    [[nodiscard]] bool operator==(const LightingResolution &other) const = default;
+};
+
 struct MatchSpec {
     std::optional<QString> desktopFileName;
     std::optional<QString> resourceClass;
@@ -261,6 +350,7 @@ struct PersistenceError {
 struct LoadOutcome {
     bool ok = false;
     bool missing = false;
+    bool migrationFallback = false;
     ProfileDocument document;
     PersistenceError error;
 };

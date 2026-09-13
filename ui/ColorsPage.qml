@@ -26,6 +26,26 @@ Kirigami.ScrollablePage {
             applicationLevel: false
             speedPercent: app.globalSpeedPercent
             breathingHex: app.globalBreathingColor
+            workspaceLayoutActive: app.workspaceLayoutActive
+            zoneSlots: app.globalZoneSlots
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            Controls.Button {
+                text: "Použiť rozloženie 4 plochy + aplikácia"
+                onClicked: app.useDefaultWorkspaceLayout()
+            }
+            Controls.Button {
+                text: "Použiť pevné zóny"
+                onClicked: app.useStaticZoneLayout()
+            }
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: app.workspaceLayoutActive
+            text: app.workspaceSummary
+            opacity: 0.85
         }
         Kirigami.InlineMessage {
             Layout.fillWidth: true

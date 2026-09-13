@@ -18,4 +18,8 @@ namespace contextdeck {
                                        const ApplicationIdentity &identity,
                                        const std::optional<Lighting> &temporaryOverride);
 
+[[nodiscard]] LightingResolution resolveContextLighting(
+    const ProfileDocument &document, const ApplicationIdentity &identity, const WorkspaceState &workspace,
+    const std::optional<Lighting> &sessionOverride = std::nullopt);
+
 } // namespace contextdeck

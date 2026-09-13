@@ -15,6 +15,7 @@
 namespace contextdeck {
 
 class BrokerIpcClient;
+class WorkspaceReceiver;
 
 enum class SessionLightingMode {
     Automatic,
@@ -57,13 +58,19 @@ class AppController : public QObject
     Q_PROPERTY(QString heroKind READ heroKind NOTIFY presentationChanged)
     Q_PROPERTY(QString heroBadge READ heroBadge NOTIFY presentationChanged)
     Q_PROPERTY(QStringList heroZones READ heroZones NOTIFY presentationChanged)
+    Q_PROPERTY(bool workspaceLayoutActive READ workspaceLayoutActive NOTIFY presentationChanged)
+    Q_PROPERTY(QString workspaceSummary READ workspaceSummary NOTIFY presentationChanged)
+    Q_PROPERTY(bool workspaceObservationPaused READ workspaceObservationPaused NOTIFY diagnosticsChanged)
+    Q_PROPERTY(QVariantList globalZoneSlots READ globalZoneSlots NOTIFY documentChanged)
 
 public:
-    AppController(ContextReceiver *context, OpenRgbClient *rgb, PowerActions *power, QObject *parent = nullptr);
+    AppController(ContextReceiver *context, OpenRgbClient *rgb, PowerActions *power, QObject *parent = nullptr,
+                  QString configRoot = {});
 
     void load();
     void applyLighting();
     void setBrokerIpc(BrokerIpcClient *client);
+    void setWorkspaceReceiver(WorkspaceReceiver *receiver);
 
     [[nodiscard]] QString currentApplication() const;
     [[nodiscard]] QString currentProfile() const;
@@ -92,6 +99,10 @@ public:
     [[nodiscard]] QString heroKind() const;
     [[nodiscard]] QString heroBadge() const;
     [[nodiscard]] QStringList heroZones() const;
+    [[nodiscard]] bool workspaceLayoutActive() const;
+    [[nodiscard]] QString workspaceSummary() const;
+    [[nodiscard]] bool workspaceObservationPaused() const;
+    [[nodiscard]] QVariantList globalZoneSlots() const;
     [[nodiscard]] QVariantList inventory() const;
     [[nodiscard]] QVariantList profiles() const;
     [[nodiscard]] QVariantList controls() const;
@@ -113,6 +124,10 @@ public:
     Q_INVOKABLE void setGlobalLightingMode(const QString &modeName);
     Q_INVOKABLE void setGlobalZoneColor(int index, const QString &hex);
     Q_INVOKABLE void applyGlobalGradient(const QString &startHex, const QString &endHex);
+    Q_INVOKABLE void setGlobalZoneRole(int index, const QString &roleName);
+    Q_INVOKABLE void useDefaultWorkspaceLayout();
+    Q_INVOKABLE void useStaticZoneLayout();
+    Q_INVOKABLE void setWorkspaceObservationPaused(bool paused);
     Q_INVOKABLE void setGlobalSpeed(int percent);
     Q_INVOKABLE void setGlobalBreathingColor(const QString &hex);
     Q_INVOKABLE void setApplicationLightingMode(const QString &id, const QString &modeName);
@@ -142,12 +157,17 @@ signals:
 
 private:
     void onIdentityChanged();
+    void onContextInputsChanged();
     void onInventoryChanged();
     void rememberExternalContext();
     void refreshResolvedProfile();
+    void scheduleRecompute();
+    void recompute();
     [[nodiscard]] bool isOwnSurface(const ApplicationIdentity &identity) const;
     [[nodiscard]] Lighting effectiveLighting() const;
-    void sendLighting(const Lighting &lighting);
+    [[nodiscard]] std::optional<Lighting> sessionOverrideLighting() const;
+    [[nodiscard]] WorkspaceState currentWorkspaceState() const;
+    void sendLighting(const DesiredLighting &desired);
     [[nodiscard]] QString friendlyApplicationName(const ApplicationIdentity &identity) const;
     [[nodiscard]] QString openRgbPhrase() const;
     [[nodiscard]] QString lightsPhrase() const;
@@ -160,6 +180,7 @@ private:
     bool applyBreathingColor(Lighting &lighting, const Rgb &color);
 
     ContextReceiver *m_context = nullptr;
+    WorkspaceReceiver *m_workspace = nullptr;
     OpenRgbClient *m_rgb = nullptr;
     PowerActions *m_power = nullptr;
     BrokerIpcClient *m_brokerIpc = nullptr;
@@ -167,6 +188,11 @@ private:
     ProfileDocument m_document;
     SessionLightingMode m_sessionLighting = SessionLightingMode::Automatic;
     Rgb m_temporaryColor{0x7c, 0x3a, 0xed};
+    LightingResolution m_resolution;
+    DesiredLighting m_lastDesired;
+    bool m_hasLastDesired = false;
+    bool m_recomputeQueued = false;
+    bool m_contextEventQueued = false;
     QString m_resolvedProfileId;
     QString m_saveStatus;
     QString m_lastExternalApplication;

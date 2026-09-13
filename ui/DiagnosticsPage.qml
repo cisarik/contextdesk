@@ -115,6 +115,22 @@ Kirigami.ScrollablePage {
                 text: String(app.diagnostics.lightingUpdates)
             }
             Controls.Label {
+                Kirigami.FormData.label: "workspacePaused"
+                text: String(app.diagnostics.workspacePaused)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceErrorClass"
+                text: String(app.diagnostics.workspaceErrorClass)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceDesktopCount"
+                text: String(app.diagnostics.workspaceDesktopCount)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceCurrentOrdinal"
+                text: String(app.diagnostics.workspaceCurrentOrdinal)
+            }
+            Controls.Label {
                 Kirigami.FormData.label: "inventoryCount"
                 text: String(app.diagnostics.inventoryCount)
             }
@@ -123,6 +139,18 @@ Kirigami.ScrollablePage {
                 text: String(app.diagnostics.lastError)
                 wrapMode: Text.WordWrap
             }
+        }
+
+        Controls.Switch {
+            text: "Pozastaviť sledovanie plôch"
+            checked: app.workspaceObservationPaused
+            onToggled: app.setWorkspaceObservationPaused(checked)
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.8
+            text: "Simulated observation interruption for fallback diagnosis. It does not prove compositor or D-Bus owner loss."
         }
 
         RowLayout {

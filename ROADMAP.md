@@ -23,25 +23,24 @@ COOPERATOR action, separate from any authorized report-file preparation.
   animation speed, 5-zone gradient helper, KWin event-driven context,
   non-destructive startup, and desktop UI. Unrelated gates such as G7 are not
   closed by restating that acceptance.
-- Current whole: **M2 `g213-contextdeck-input-passthrough-safety`** — pass-through
-  input broker. Planning and production implementation are complete enough for
-  deployment. Exact candidate `cb72ae0388307b514182efc6936712e3da42cda4` was
-  installed and verified on the reference host while the broker remained
-  inactive (`deployment-PASS`; META Worker 14, `14_report_00.md`). One
-  independently demonstrated physical slice passed: external recovery proof,
-  explicit authenticated ARM, sampled G213 pass-through, matching-invocation
-  cutoff death, and G213 typing after descriptor close (`acceptance-PASS` for
-  that named slice; META Worker 16, `16_report_00.md`). Worker 19 recorded a
-  second named `acceptance-PASS` for armed watchdog abort with a held modifier
-  on the same runtime candidate. Trace:
+- Current whole: **M3 `g213-contextdeck-workspace-aware-lighting`** —
+  implementation candidate in the product tree (schema 3, session-app
+  VirtualDesktopManager observation, five-slot composition, minimal UI).
+  **Not accepted.** Later IRL steps live in `docs/testing-m3.md`.
+- Parked whole: **M2 `g213-contextdeck-input-passthrough-safety`**. Planning
+  and production implementation are in the repository. Exact candidate
+  `cb72ae0388307b514182efc6936712e3da42cda4` was installed and verified on
+  the reference host while the broker remained inactive (`deployment-PASS`;
+  META Worker 14). Named physical slices from Sessions 16, 19, 22, 23, and 24
+  are recorded as accepted (ARM / pass-through / cutoff / armed watchdog with
+  a held modifier). Trace:
   `projects/contextdesk/00/02-g213-contextdeck-input-passthrough-safety/`.
-  **Full G4 remains open.** Restoring this whole does not restart its first
-  Planner or its acceptance budgets. Remaining work is a separately
-  authorized fresh task for LED return / all-control fidelity, live host
-  suspend/resume acceptance, or production/autostart — not a claim that the
-  next choice is already accepted. A systemd-sleep hook in the tree can stop
-  an active broker before sleep and start it once afterwards, always
-  disarmed; that is not live suspend evidence.
+  **Full G4 remains open.** Independent G3 re-audit of the residual ACL gap
+  stays host-mitigated (`G3-ACL-REPROBE-01`) and is not closed here.
+  Remaining M2 work is a separately authorized fresh task — not granted by
+  M3. A systemd-sleep hook in the tree can stop an active broker before sleep
+  and start it once afterwards, always disarmed; that is not live suspend
+  evidence.
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -76,8 +75,10 @@ done-as-planned.
 | M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
-| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **In progress** — production path in repo including suspend/resume sleep hook; inactive install (`deployment-PASS`); named ARM/pass-through/cutoff and armed-watchdog/held-modifier slices (`acceptance-PASS`); **full G4 open** (live suspend not accepted) |
-| M3 | `g213-contextdeck-workspace-aware-lighting` | Per-virtual-desktop lighting schemes, gradients, animation speeds, slot-role model | M1 | Planned |
+| M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Parked** — production path in repo including suspend/resume sleep hook; inactive install (`deployment-PASS`); named Sessions 16/19/22/23/24 slices (`acceptance-PASS`); **full G4 open**; residual independent G3 gap not closed |
+| M3 | `g213-contextdeck-workspace-aware-lighting` | Opt-in five-slot layout: desktop indicators + application color through existing OpenRGB | M1 | **Implementation-candidate** — not accepted |
+| M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
+| M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
 | M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
 
@@ -230,15 +231,23 @@ Recorded by the ORCHESTRATOR. Classification only — none of this is
 implementation authority, and none of it may appear in a Worker prompt until it
 is routed as its own logical whole.
 
-### Workspace-aware lighting — future whole `g213-contextdeck-workspace-aware-lighting`
+### Workspace-aware lighting — implementation candidate `g213-contextdeck-workspace-aware-lighting`
+
+Opt-in global five-slot layout: desktop indicators plus application color,
+composed into the existing OpenRGB protocol-5 client. Schema 3 stores zone
+roles; valid schema-2 files keep their previous lighting until the user
+explicitly enables roles. Virtual-desktop state is observed from the session
+app (`org.kde.KWin` `/VirtualDesktopManager`), not through the context bridge.
+
+This is an implementation candidate. It is **not** physically accepted and
+does not close M2, G4, independent G3, remapping, the deck layer, M4, or M5.
+Later IRL steps: [docs/testing-m3.md](docs/testing-m3.md).
 
 **Need (COOPERATOR):** read from the keyboard which virtual desktop is active
 and which application is focused — for example four zones tracking the desktop
 and one zone tracking the app, with the global preset itself configurable.
 
-**Classification:** future-logical-whole. Not a blocker, not a risk.
-
-**Verified evidence (ORCHESTRATOR, read-only, this host):**
+**Verified evidence (ORCHESTRATOR, read-only, historical):**
 
 - KWin scripting exposes `currentDesktop`, `desktops`, `desktopChanged`,
   `currentActivity`, and `activityChanged` (symbols present in the installed
@@ -252,28 +261,19 @@ and one zone tracking the app, with the global preset itself configurable.
   application rather than routing desktop state through the KWin bridge, so
   desktop context survives bridge loss and yields a stable position plus name.
 
-**Design sketch (unconfirmed, hardware-truthful):**
+**Implemented contract (candidate, not accepted):**
 
-- Zones become *slots* with roles: `profile_color`, `desktop_indicator`,
-  `app_color`, `static`, `off`, later `mapped_key_accent`. One **global** zone
-  layout; per-application profiles fill the app slot. That keeps per-app presets
-  from fighting over the same five zones.
-- Desktop encoding: position lighting (zone N = desktop N, active bright, others
-  dim) is readable up to four desktops; color-per-desktop scales past that and
-  must degrade honestly when `count` exceeds the available slots.
-- Schema impact: zone entries become objects, so this needs schema version 3
-  with a migration from 2 — the migration mechanism M1/02 builds is what makes
-  that cheap.
+- Slot roles: `static`, `desktop_indicator`, `app_color`, `off`. One global
+  layout; application presets fill `app_color` slots only.
+- Desktop encoding: first K indicators, active at full brightness, inactive at
+  20%, overflow explicit. Default layout is four indicators plus one app slot.
+- Schema 3 with preserving schema-1/2 migration. Explicit save only.
+- Unknown workspace with an active layout releases to the recorded device
+  default. All-black workspace composition uses device Off.
 
-**Hard dependencies:** M1/02 (zone model, non-destructive device behavior) and
-the verified control-to-zone map its IRL probe produces, because "zone 1 =
-desktop 1" is only intuitive once we know which physical keys sit in which zone.
-It does **not** depend on the input broker, so it can be sequenced before or
-after M2 — a COOPERATOR choice when the time comes.
-
-**Stated limits:** five zones is a hard ceiling, so desktop, application, and
-accent roles compete for the same slots; there is no per-key anything; there is
-no readback, so only the COOPERATOR's eyes close a claim.
+The unfilled control-to-zone Results table remains unmeasured and does not
+block ordinary five-slot lighting. M4, remapping, the deck layer, and M5 stay
+separate future wholes.
 
 ### Workspace session manager — future whole `g213-contextdeck-workspace-session-manager`
 
@@ -324,7 +324,7 @@ restoring the full automated context ecosystem without manual steps.
 3. **5 physical zones confirmed working IRL:**
    - Individual zone color control on the Logitech G213 is physically proven!
 
-### M2 input passthrough safety — in progress
+### M2 input passthrough safety — parked
 
 Planner report 01/01 PASS (native Plan Mode, archived in META). Implementation
 in the repository (tree content, not a G4 close):
@@ -349,16 +349,16 @@ in the repository (tree content, not a G4 close):
   `post` only with a valid active-before-sleep marker. Not autostart. Not live
   suspend evidence. ADR 0001.
 
-**G4 remains open.** Worker 16 recorded `acceptance-PASS` for one named slice
-on candidate `cb72ae0`; Worker 19 recorded `acceptance-PASS` for armed
-watchdog abort with a held modifier. Neither closes this whole. A later
-documentation or hook-implementation commit does not rerun that hardware.
-Remaining: LED-return behavior, all-control fidelity, live host
-suspend/resume, input-remapper coexistence beyond those samples, and
-production/autostart readiness. A host may or may not have installed the
-packaging files; that is operations evidence. The broker must stay
-static/inactive with no autostart until those remaining claims are separately
-authorized and accepted.
+**G4 remains open.** Named slices from Sessions 16, 19, 22, 23, and 24 are
+recorded as accepted (ARM / pass-through / cutoff; armed watchdog abort with
+a held modifier). Neither those slices nor later documentation close this
+whole. Independent G3 re-audit of the residual ACL gap remains
+host-mitigated and is not a fresh audit. Remaining: LED-return behavior,
+all-control fidelity, live host suspend/resume, input-remapper coexistence
+beyond those samples, and production/autostart readiness. A host may or may
+not have installed the packaging files; that is operations evidence. The
+broker must stay static/inactive with no autostart until those remaining
+claims are separately authorized and accepted.
 
 For any live G4 grab, an independently verified second physical keyboard or
 SSH from another device is a mandatory safety precondition before the broker

@@ -14,6 +14,8 @@ ColumnLayout {
     property string endHex: "#0000ff"
     property int speedPercent: 50
     property string breathingHex: "#7c3aed"
+    property bool workspaceLayoutActive: false
+    property var zoneSlots: []
     property var displayZones: []
     property var previewBands: []
     property string modeOverride: ""
@@ -268,9 +270,37 @@ ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
             Controls.Label {
-                text: app.zoneNames[index]
+                text: {
+                    const slot = (root.zoneSlots && root.zoneSlots.length === 5) ? root.zoneSlots[index] : null;
+                    const role = slot && slot.role ? slot.role : "static";
+                    if (role === "desktop_indicator") {
+                        const ordinal = slot && slot.ordinal ? slot.ordinal : 0;
+                        return ordinal > 0 ? (app.zoneNames[index] + " · plocha " + ordinal) : (app.zoneNames[index] + " · indikátor");
+                    }
+                    if (role === "app_color") {
+                        return app.zoneNames[index] + " · aplikácia";
+                    }
+                    if (role === "off") {
+                        return app.zoneNames[index] + " · vypnuté";
+                    }
+                    return app.zoneNames[index];
+                }
                 Layout.preferredWidth: 168
                 wrapMode: Text.WordWrap
+            }
+
+            Controls.ComboBox {
+                visible: !root.applicationLevel
+                Layout.preferredWidth: 140
+                model: ["Statická", "Indikátor plochy", "Farba aplikácie", "Vypnuté"]
+                property var roleIds: ["static", "desktop_indicator", "app_color", "off"]
+                currentIndex: {
+                    const slot = (root.zoneSlots && root.zoneSlots.length === 5) ? root.zoneSlots[index] : null;
+                    const role = slot && slot.role ? slot.role : "static";
+                    const found = roleIds.indexOf(role);
+                    return found >= 0 ? found : 0;
+                }
+                onActivated: app.setGlobalZoneRole(index, roleIds[currentIndex])
             }
 
             Rectangle {
@@ -389,6 +419,18 @@ ColumnLayout {
     Controls.Button {
         text: "Použiť gradient"
         onClicked: root.applyGradient()
+    }
+    Controls.Label {
+        visible: !root.applicationLevel && app.workspaceLayoutActive
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        text: "Použitie gradientu nahradí dynamické role pevnými statickými zónami."
+    }
+    Controls.Label {
+        visible: root.applicationLevel && app.workspaceLayoutActive
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        text: "Kým je aktívne workspace rozloženie, tento preset plní len aplikačné sloty. Dynamické globálne role sa sem nekopírujú."
     }
 
     Controls.Label {

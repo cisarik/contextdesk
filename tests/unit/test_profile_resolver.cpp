@@ -49,6 +49,39 @@ ProfileDocument sampleDocument()
     return loaded.document;
 }
 
+Lighting workspaceLayout()
+{
+    Lighting lighting;
+    lighting.mode = LightingMode::Direct;
+    lighting.baseColor = kDefaultEffectColor;
+    std::array<ZoneValue, kZoneCount> zones{};
+    for (int i = 0; i < 4; ++i) {
+        zones[static_cast<size_t>(i)].role = ZoneRole::DesktopIndicator;
+        zones[static_cast<size_t>(i)].color = Rgb{0x32, 0x00, 0x00};
+    }
+    zones[4].role = ZoneRole::AppColor;
+    zones[4].color = Rgb{0x40, 0x40, 0x40};
+    lighting.zones = zones;
+    return lighting;
+}
+
+WorkspaceState availableDesktops(int count, int currentOrdinal)
+{
+    WorkspaceState state;
+    state.availability = WorkspaceAvailability::Available;
+    for (int i = 0; i < count; ++i) {
+        WorkspaceDesktop desktop;
+        desktop.position = i;
+        desktop.ordinal = i + 1;
+        desktop.id = QStringLiteral("d%1").arg(i + 1);
+        desktop.displayName = QStringLiteral("Plocha %1").arg(i + 1);
+        state.desktops.push_back(desktop);
+    }
+    state.currentOrdinal = currentOrdinal;
+    state.currentId = QStringLiteral("d%1").arg(currentOrdinal);
+    return state;
+}
+
 } // namespace
 
 class TestProfileResolver : public QObject
@@ -223,6 +256,110 @@ private slots:
         QVERIFY(zoneMapEntry(ControlId::F1) != nullptr);
         QVERIFY(!zoneMapEntry(ControlId::F1)->verified);
         QCOMPARE(zoneMap().size(), 20);
+    }
+
+    void migratedWorkspaceRolesStayInactiveUntilDirect()
+    {
+        ProfileDocument document;
+        document.globalLighting.mode = LightingMode::Wave;
+        std::array<ZoneValue, kZoneCount> zones{};
+        zones[0].role = ZoneRole::DesktopIndicator;
+        zones[0].color = Rgb{0xff, 0x00, 0x00};
+        document.globalLighting.zones = zones;
+        QVERIFY(!workspaceLayoutIsActive(document.globalLighting));
+        QCOMPARE(resolveLighting(document, ApplicationIdentity{}).mode, LightingMode::Wave);
+    }
+
+    void unknownWorkspaceReleasesToDeviceDefault()
+    {
+        ProfileDocument document;
+        document.globalLighting = workspaceLayout();
+        const LightingResolution resolution =
+            resolveContextLighting(document, ApplicationIdentity{}, WorkspaceState{});
+        QVERIFY(resolution.workspaceLayoutActive);
+        QVERIFY(resolution.workspaceUnavailable);
+        QCOMPARE(resolution.lighting.mode, LightingMode::Untouched);
+        QCOMPARE(resolution.slotContributions[0], SlotContribution::DeviceDefault);
+    }
+
+    void indicatorBrightnessAndOverflow()
+    {
+        ProfileDocument document;
+        document.globalLighting = workspaceLayout();
+        LightingResolution current = resolveContextLighting(document, ApplicationIdentity{}, availableDesktops(2, 1));
+        QCOMPARE(current.previewColors[0].r, quint8(0x32));
+        QCOMPARE(current.previewColors[1].r, quint8(0x32 / 5));
+        QCOMPARE(current.previewColors[2].r, quint8(0));
+        QCOMPARE(current.slotContributions[2], SlotContribution::DesktopIndicatorAbsent);
+        QVERIFY(!current.currentDesktopUnrepresented);
+
+        LightingResolution overflow = resolveContextLighting(document, ApplicationIdentity{}, availableDesktops(6, 5));
+        QCOMPARE(overflow.overflowCount, 2);
+        QVERIFY(overflow.currentDesktopUnrepresented);
+        QCOMPARE(overflow.previewColors[0].r, quint8(0x32 / 5));
+        QCOMPARE(overflow.slotContributions[0], SlotContribution::DesktopIndicatorInactive);
+    }
+
+    void applicationContributionTable()
+    {
+        ProfileDocument document;
+        document.globalLighting = workspaceLayout();
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("app");
+        profile.displayName = QStringLiteral("App");
+        profile.match.resourceClass = QStringLiteral("Foo");
+        Lighting appLighting;
+        appLighting.mode = LightingMode::Direct;
+        appLighting.baseColor = Rgb{0x10, 0x20, 0x30};
+        profile.lighting = appLighting;
+        document.applications.push_back(profile);
+
+        ApplicationIdentity identity;
+        identity.resourceClass = QStringLiteral("Foo");
+        LightingResolution directBase =
+            resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(directBase.previewColors[4].r, quint8(0x10));
+
+        appLighting.mode = LightingMode::Wave;
+        document.applications[0].lighting = appLighting;
+        LightingResolution wave = resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(wave.previewColors[4].r, quint8(0x40));
+
+        appLighting.mode = LightingMode::Off;
+        document.applications[0].lighting = appLighting;
+        LightingResolution off = resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(off.previewColors[4].r, quint8(0));
+
+        LightingResolution unmatched =
+            resolveContextLighting(document, ApplicationIdentity{}, availableDesktops(1, 1));
+        QCOMPARE(unmatched.previewColors[4].r, quint8(0x40));
+    }
+
+    void allBlackWorkspaceUsesOff()
+    {
+        ProfileDocument document;
+        document.globalLighting.mode = LightingMode::Direct;
+        std::array<ZoneValue, kZoneCount> zones{};
+        for (ZoneValue &zone : zones) {
+            zone.role = ZoneRole::DesktopIndicator;
+            zone.color = Rgb{};
+        }
+        document.globalLighting.zones = zones;
+        const LightingResolution resolution =
+            resolveContextLighting(document, ApplicationIdentity{}, availableDesktops(1, 1));
+        QVERIFY(resolution.workspaceLayoutActive);
+        QCOMPARE(resolution.lighting.mode, LightingMode::Off);
+        QCOMPARE(resolution.desired.mode, LightingMode::Off);
+        QCOMPARE(resolution.previewColors[0].r, quint8(0));
+    }
+
+    void ordinaryResolveDoesNotMaterializeDynamicRoles()
+    {
+        ProfileDocument document;
+        document.globalLighting = workspaceLayout();
+        const Lighting lighting = resolveLighting(document, ApplicationIdentity{});
+        QCOMPARE(lighting.mode, LightingMode::Untouched);
+        QVERIFY(workspaceLayoutIsActive(document.globalLighting));
     }
 };
 

@@ -6,12 +6,14 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 > **Status: early development.** Five-zone lighting and application context
 > (M1) are implemented and recorded as accepted on hardware. The input broker
 > (M2) exists in this repository and can be installed **inactive**. Named
-> physical slices (explicit ARM, sampled G213 pass-through, invocation-bound
-> cutoff recovery, armed watchdog abort with a held modifier) are recorded as
-> accepted on the reference host; **full G4** remains open, including live
-> host suspend/resume. A systemd-sleep hook can stop an active broker before
-> sleep and start it once afterwards, always disarmed; that path is not live
-> accepted yet. The plan lives in [ROADMAP.md](ROADMAP.md) and the design in
+> physical slices from Sessions 16, 19, 22, 23, and 24 (explicit ARM, sampled
+> G213 pass-through, invocation-bound cutoff recovery, armed watchdog abort
+> with a held modifier) are recorded as accepted on the reference host;
+> **full G4** remains open, including live host suspend/resume, and
+> independent G3 re-audit of the residual ACL gap remains host-mitigated
+> only. Workspace-aware five-zone lighting (M3) is an **implementation
+> candidate** in this tree — not physically accepted. The plan lives in
+> [ROADMAP.md](ROADMAP.md) and the design in
 > [docs/architecture.md](docs/architecture.md).
 
 ## The idea
@@ -26,6 +28,9 @@ does — automatically, quietly, and only where you configured it:
 - **Per-application lighting.** Each app profile gets one base color, applied
   honestly across the G213's **five physical RGB zones**. The G213 has no
   per-key RGB, and this project never pretends otherwise.
+- **Workspace-aware lighting (opt-in).** A global five-slot layout can mix
+  virtual-desktop indicators with application color. Existing presets keep
+  their previous behavior until those roles are configured.
 - **A quiet tray indicator.** Connection state, automatic mode, the current
   app and the active profile at a glance.
 - **Two deck buttons.** Game Mode → Suspend and Backlight → Displays Off —
@@ -50,9 +55,10 @@ enough; device-free tests do not need that path.
 
 | Area | State |
 |------|-------|
-| Plan | Foundation planning accepted; M2 in progress — [ROADMAP.md](ROADMAP.md) |
+| Plan | Foundation planning accepted; M2 parked; M3 implementation-candidate — [ROADMAP.md](ROADMAP.md) |
 | Lighting (M1) | Implemented; recorded as COOPERATOR-accepted IRL (five zones, not per-key) |
-| Input broker (M2) | Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL, suspend/resume sleep hook). Inactive install recorded; named physical slices accepted; **full G4 remains open** (live suspend/resume not accepted) |
+| Workspace lighting (M3) | Schema-3 roles, VirtualDesktopManager observation, five-slot composition in tree. **Not accepted.** Later IRL steps: [docs/testing-m3.md](docs/testing-m3.md) |
+| Input broker (M2) | Parked. Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL, suspend/resume sleep hook). Inactive install recorded; named Sessions 16/19/22/23/24 slices accepted; **full G4 remains open**; residual independent G3 evidence gap is not closed by this whole |
 | Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named ARM/pass-through/cutoff and armed-watchdog/held-modifier slices accepted; LED, all-control, live suspend/resume, and production autostart still open |
 | Build / tests | CMake + Ninja; registered CTest suite owned by [CMakeLists.txt](CMakeLists.txt) |
 | Host install | Packaging files are in the repo. Installed vs not-installed is host evidence — see [docs/operations.md](docs/operations.md). The broker unit has no `[Install]` section and must not autostart |
@@ -65,7 +71,8 @@ enough; device-free tests do not need that path.
 | [docs/architecture.md](docs/architecture.md) | Accepted architecture and boundaries |
 | [docs/adr/](docs/adr/) | Product ADRs (suspend/resume sleep hook: ADR 0001) |
 | [docs/operations.md](docs/operations.md) | Host enablement, G3/S5 install, recovery notes |
-| [docs/testing-m2.md](docs/testing-m2.md) | M2 / G4 test pack (named slice accepted; full G4 not passed) |
+| [docs/testing-m2.md](docs/testing-m2.md) | M2 / G4 test pack (named slices accepted; full G4 not passed) |
+| [docs/testing-m3.md](docs/testing-m3.md) | M3 IRL checklist (later acceptance; no host mutation) |
 | [handout.md](handout.md) | Original bootstrap brief (historical) |
 | [LICENSE](LICENSE) | MIT file; the final product licensing decision is still pending |
 

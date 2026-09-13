@@ -31,6 +31,7 @@ target_link_libraries(contextdeck_core PUBLIC Qt6::Core)
 
 add_library(contextdeck_context STATIC
     src/context/ContextReceiver.cpp
+    src/context/WorkspaceReceiver.cpp
 )
 target_include_directories(contextdeck_context PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_context PUBLIC contextdeck_core Qt6::DBus)
@@ -192,6 +193,37 @@ add_executable(test_udev_policy tests/unit/test_udev_policy.cpp)
 target_compile_definitions(test_udev_policy PRIVATE CONTEXTDECK_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 set_target_properties(test_udev_policy PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 add_test(NAME test_udev_policy COMMAND test_udev_policy)
+
+find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
+add_executable(test_workspace_receiver tests/unit/test_workspace_receiver.cpp)
+target_link_libraries(test_workspace_receiver PRIVATE contextdeck_context Qt6::Test Qt6::DBus)
+add_test(NAME test_workspace_receiver
+         COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- $<TARGET_FILE:test_workspace_receiver>)
+set_tests_properties(test_workspace_receiver PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_DISABLE_SESSION_MANAGER=1")
+
+add_executable(test_workspace_lighting
+    tests/unit/test_workspace_lighting.cpp
+    src/app/AppController.cpp
+    src/app/BrokerIpcClient.cpp
+)
+target_include_directories(test_workspace_lighting PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/app")
+target_link_libraries(test_workspace_lighting PRIVATE
+    contextdeck_core
+    contextdeck_context
+    contextdeck_rgb
+    contextdeck_actions
+    contextdeck_ipc
+    Qt6::Test
+    Qt6::DBus
+    Qt6::Network
+    Qt6::Gui
+    KF6::ScreenDpms
+)
+add_test(NAME test_workspace_lighting
+         COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- $<TARGET_FILE:test_workspace_lighting>)
+set_tests_properties(test_workspace_lighting PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_DISABLE_SESSION_MANAGER=1")
 
 add_test(NAME test_udev_verify
          COMMAND udevadm verify --resolve-names=never

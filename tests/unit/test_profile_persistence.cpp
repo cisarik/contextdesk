@@ -89,7 +89,7 @@ private slots:
         QVERIFY(dir.isValid());
         ProfileStore store(dir.path());
         QByteArray json = validJson();
-        json.replace(R"("schema_version": 1)", R"("schema_version": 3)");
+        json.replace(R"("schema_version": 1)", R"("schema_version": 4)");
         QVERIFY(writeBytes(store.documentPath(), json));
         const QByteArray before = json;
         const LoadOutcome loaded = store.load();
@@ -196,7 +196,7 @@ private slots:
         QVERIFY(writeBytes(store.documentPath(), v1));
         const LoadOutcome loaded = store.load();
         QVERIFY2(loaded.ok, qPrintable(loaded.error.reason));
-        QCOMPARE(loaded.document.schemaVersion, 2);
+        QCOMPARE(loaded.document.schemaVersion, 3);
         QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Untouched);
         QVERIFY(loaded.document.globalLighting.baseColor.has_value());
         QCOMPARE(loaded.document.globalLighting.baseColor->r, quint8(0x11));
@@ -296,9 +296,16 @@ private slots:
         QVERIFY(parsed.document.globalLighting.zones.has_value());
         QCOMPARE((*parsed.document.globalLighting.zones)[4].color.r, quint8(0x55));
         QVERIFY(store.save(parsed.document).ok);
+        QFile originalFile(store.documentPath());
+        QVERIFY(originalFile.open(QIODevice::ReadOnly));
+        const QByteArray savedBytes = originalFile.readAll();
+        originalFile.close();
+        QVERIFY(savedBytes.contains(R"("schema_version": 3)"));
+        QVERIFY(savedBytes.contains(R"("role": "static")"));
         const LoadOutcome loaded = store.load();
         QVERIFY(loaded.ok);
-        QCOMPARE(loaded.document.schemaVersion, 2);
+        QCOMPARE(loaded.document.schemaVersion, 3);
+        QCOMPARE((*loaded.document.globalLighting.zones)[0].role, ZoneRole::Static);
         QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Direct);
         QCOMPARE((*loaded.document.globalLighting.zones)[0].color.r, quint8(0x11));
         QCOMPARE(loaded.document.globalLighting.baseColor->r, quint8(0xff));
@@ -335,7 +342,7 @@ private slots:
         QVERIFY(loaded.document.globalLighting.speed.has_value());
         QCOMPARE(*loaded.document.globalLighting.speed, quint32(80));
         QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Breathing);
-        QCOMPARE(loaded.document.globalLighting.baseColor->b, quint8(0xed));
+        QCOMPARE(loaded.document.schemaVersion, 3);
     }
 
     void schema2AbsentSpeedRemainsUnset()
@@ -361,6 +368,173 @@ private slots:
         QVERIFY(!loaded.ok);
         QVERIFY(loaded.error.reason.contains(QStringLiteral("speed")));
         QVERIFY(loaded.error.preserved);
+    }
+
+    void schema2ReadDoesNotRewriteBytes()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        const QByteArray json = R"({
+            "schema_version": 2,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "direct", "base_color": "#112233", "zones": ["#111111", "#222222", "#333333", "#444444", "#555555"]}}
+        })";
+        QVERIFY(writeBytes(store.documentPath(), json));
+        const LoadOutcome loaded = store.load();
+        QVERIFY(loaded.ok);
+        QCOMPARE((*loaded.document.globalLighting.zones)[2].role, ZoneRole::Static);
+        QVERIFY(!workspaceLayoutIsActive(loaded.document.globalLighting));
+        QFile file(store.documentPath());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), json);
+    }
+
+    void schema3RoundTripAndRoleValidation()
+    {
+        const QByteArray json = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {
+                "lighting": {
+                    "mode": "direct",
+                    "restore_mode": "wave",
+                    "base_color": "#7c3aed",
+                    "zones": [
+                        {"role": "desktop_indicator", "color": "#7c3aed"},
+                        {"role": "desktop_indicator", "color": "#7c3aed"},
+                        {"role": "desktop_indicator", "color": "#7c3aed"},
+                        {"role": "desktop_indicator", "color": "#7c3aed"},
+                        {"role": "app_color", "color": "#404040"}
+                    ]
+                }
+            }
+        })";
+        const LoadOutcome loaded = ProfileStore::parseDocument(json);
+        QVERIFY2(loaded.ok, qPrintable(loaded.error.reason));
+        QVERIFY(workspaceLayoutIsActive(loaded.document.globalLighting));
+        QCOMPARE((*loaded.document.globalLighting.zones)[4].role, ZoneRole::AppColor);
+
+        QTemporaryDir dir;
+        ProfileStore store(dir.path());
+        QVERIFY(store.save(loaded.document).ok);
+        const LoadOutcome roundTrip = store.load();
+        QVERIFY(roundTrip.ok);
+        QCOMPARE(roundTrip.document.schemaVersion, 3);
+        QCOMPARE((*roundTrip.document.globalLighting.zones)[4].color.r, quint8(0x40));
+    }
+
+    void schema3RejectsWrongCountUnknownRoleAndApplicationDynamicRoles()
+    {
+        const QByteArray wrongCount = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "direct", "base_color": "#112233", "zones": [{"role": "static", "color": "#112233"}]}}
+        })";
+        QVERIFY(!ProfileStore::parseDocument(wrongCount).ok);
+
+        const QByteArray unknownRole = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "direct", "base_color": "#112233", "zones": [
+                {"role": "mapped_key_accent", "color": "#112233"},
+                {"role": "static", "color": "#112233"},
+                {"role": "static", "color": "#112233"},
+                {"role": "static", "color": "#112233"},
+                {"role": "static", "color": "#112233"}
+            ]}}
+        })";
+        QVERIFY(!ProfileStore::parseDocument(unknownRole).ok);
+
+        const QByteArray offWithColor = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "direct", "base_color": "#112233", "zones": [
+                {"role": "off", "color": "#112233"},
+                {"role": "static", "color": "#112233"},
+                {"role": "static", "color": "#112233"},
+                {"role": "static", "color": "#112233"},
+                {"role": "static", "color": "#112233"}
+            ]}}
+        })";
+        QVERIFY(!ProfileStore::parseDocument(offWithColor).ok);
+
+        const QByteArray appDynamic = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "direct", "base_color": "#112233", "zones": [
+                {"role": "static", "color": "#111111"},
+                {"role": "static", "color": "#222222"},
+                {"role": "static", "color": "#333333"},
+                {"role": "static", "color": "#444444"},
+                {"role": "static", "color": "#555555"}
+            ]}},
+            "applications": [{
+                "id": "editor",
+                "display_name": "Editor",
+                "match": {"resource_class": "Foo"},
+                "lighting": {"mode": "direct", "base_color": "#ff8000", "zones": [
+                    {"role": "desktop_indicator", "color": "#ff8000"},
+                    {"role": "static", "color": "#ff8000"},
+                    {"role": "static", "color": "#ff8000"},
+                    {"role": "static", "color": "#ff8000"},
+                    {"role": "static", "color": "#ff8000"}
+                ]}
+            }]
+        })";
+        const LoadOutcome loaded = ProfileStore::parseDocument(appDynamic);
+        QVERIFY(!loaded.ok);
+        QVERIFY(loaded.error.reason.contains(QStringLiteral("static or off")));
+    }
+
+    void schema3RejectsUnknownFieldAndFutureSchema()
+    {
+        const QByteArray unknown = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null, "plugin": true}}
+        })";
+        QVERIFY(!ProfileStore::parseDocument(unknown).ok);
+
+        const QByteArray future = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}}
+        })";
+        const LoadOutcome loaded = ProfileStore::parseDocument(future);
+        QVERIFY(!loaded.ok);
+        QVERIFY(loaded.error.reason.contains(QStringLiteral("future schema_version")));
+    }
+
+    void refuseOverwriteOfInvalidAndFallbackDocuments()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        const QByteArray invalid = R"({ "schema_version": 4, "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"}, "global": {"lighting": {"mode": "wave"}} })";
+        QVERIFY(writeBytes(store.documentPath(), invalid));
+        ProfileDocument valid;
+        valid.globalLighting.mode = LightingMode::Wave;
+        const SaveOutcome refused = store.save(valid);
+        QVERIFY(!refused.ok);
+        QFile file(store.documentPath());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), invalid);
+
+        const QByteArray fallback = R"({
+            "schema_version": 1,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "not-a-mode", "base_color": "#112233"}}
+        })";
+        QVERIFY(writeBytes(store.documentPath(), fallback));
+        const LoadOutcome loaded = store.load();
+        QVERIFY(loaded.ok);
+        QVERIFY(loaded.migrationFallback);
+        const SaveOutcome refusedFallback = store.save(loaded.document);
+        QVERIFY(!refusedFallback.ok);
+        QFile again(store.documentPath());
+        QVERIFY(again.open(QIODevice::ReadOnly));
+        QCOMPARE(again.readAll(), fallback);
     }
 };
 
