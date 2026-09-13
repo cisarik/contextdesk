@@ -319,20 +319,128 @@ private slots:
         LightingResolution directBase =
             resolveContextLighting(document, identity, availableDesktops(1, 1));
         QCOMPARE(directBase.previewColors[4].r, quint8(0x10));
+        QCOMPARE(directBase.previewColors[4].g, quint8(0x20));
+        QCOMPARE(directBase.slotContributions[4], SlotContribution::AppColor);
+        QCOMPARE(directBase.previewColors[0].r, quint8(0x32));
+
+        std::array<ZoneValue, kZoneCount> zoned{};
+        zoned[0].role = ZoneRole::Static;
+        zoned[0].color = Rgb{0xaa, 0x00, 0x00};
+        zoned[1].role = ZoneRole::Off;
+        zoned[2].role = ZoneRole::Static;
+        zoned[2].color = Rgb{0x00, 0xbb, 0x00};
+        zoned[3].role = ZoneRole::Static;
+        zoned[3].color = Rgb{0x00, 0x00, 0xcc};
+        zoned[4].role = ZoneRole::Static;
+        zoned[4].color = Rgb{0xdd, 0xee, 0xff};
+        appLighting.mode = LightingMode::Direct;
+        appLighting.baseColor.reset();
+        appLighting.zones = zoned;
+        document.applications[0].lighting = appLighting;
+        LightingResolution directZones =
+            resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(directZones.previewColors[4].r, quint8(0xdd));
+        QCOMPARE(directZones.previewColors[4].g, quint8(0xee));
+        QCOMPARE(directZones.previewColors[4].b, quint8(0xff));
+
+        appLighting.zones.reset();
+        appLighting.mode = LightingMode::Breathing;
+        appLighting.baseColor = Rgb{0x01, 0x02, 0x03};
+        document.applications[0].lighting = appLighting;
+        LightingResolution breathingExplicit =
+            resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(breathingExplicit.previewColors[4].r, quint8(0x01));
+        QCOMPARE(breathingExplicit.previewColors[4].g, quint8(0x02));
+        QCOMPARE(breathingExplicit.previewColors[4].b, quint8(0x03));
+
+        appLighting.baseColor.reset();
+        document.applications[0].lighting = appLighting;
+        LightingResolution breathingDefault =
+            resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(breathingDefault.previewColors[4].r, kDefaultEffectColor.r);
+        QCOMPARE(breathingDefault.previewColors[4].g, kDefaultEffectColor.g);
+        QCOMPARE(breathingDefault.previewColors[4].b, kDefaultEffectColor.b);
+
+        appLighting.mode = LightingMode::Off;
+        document.applications[0].lighting = appLighting;
+        LightingResolution off = resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(off.previewColors[4].r, quint8(0));
+        QCOMPARE(off.previewColors[4].g, quint8(0));
+        QCOMPARE(off.previewColors[4].b, quint8(0));
+
+        appLighting.mode = LightingMode::Untouched;
+        document.applications[0].lighting = appLighting;
+        LightingResolution untouched = resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(untouched.previewColors[4].r, quint8(0x40));
 
         appLighting.mode = LightingMode::Wave;
         document.applications[0].lighting = appLighting;
         LightingResolution wave = resolveContextLighting(document, identity, availableDesktops(1, 1));
         QCOMPARE(wave.previewColors[4].r, quint8(0x40));
 
-        appLighting.mode = LightingMode::Off;
+        appLighting.mode = LightingMode::Cycle;
         document.applications[0].lighting = appLighting;
-        LightingResolution off = resolveContextLighting(document, identity, availableDesktops(1, 1));
-        QCOMPARE(off.previewColors[4].r, quint8(0));
+        LightingResolution cycle = resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(cycle.previewColors[4].r, quint8(0x40));
+
+        document.applications[0].lighting.reset();
+        LightingResolution matchedWithoutLighting =
+            resolveContextLighting(document, identity, availableDesktops(1, 1));
+        QCOMPARE(matchedWithoutLighting.previewColors[4].r, quint8(0x40));
+        QCOMPARE(matchedWithoutLighting.previewColors[0].r, quint8(0x32));
 
         LightingResolution unmatched =
             resolveContextLighting(document, ApplicationIdentity{}, availableDesktops(1, 1));
         QCOMPARE(unmatched.previewColors[4].r, quint8(0x40));
+        QCOMPARE(unmatched.previewColors[0].r, quint8(0x32));
+        QCOMPARE(unmatched.slotContributions[0], SlotContribution::DesktopIndicatorCurrent);
+
+        ProfileDocument ordinary;
+        ordinary.globalLighting.mode = LightingMode::Wave;
+        QCOMPARE(resolveLighting(ordinary, identity).mode, LightingMode::Wave);
+        ApplicationProfile ordinaryApp;
+        ordinaryApp.id = QStringLiteral("app");
+        ordinaryApp.displayName = QStringLiteral("App");
+        ordinaryApp.match.resourceClass = QStringLiteral("Foo");
+        Lighting ordinaryLighting;
+        ordinaryLighting.mode = LightingMode::Cycle;
+        ordinaryApp.lighting = ordinaryLighting;
+        ordinary.applications.push_back(ordinaryApp);
+        QCOMPARE(resolveLighting(ordinary, identity).mode, LightingMode::Cycle);
+        QCOMPARE(resolveLighting(ordinary, ApplicationIdentity{}).mode, LightingMode::Wave);
+    }
+
+    void identityLossKeepsWorkspaceIndicators()
+    {
+        ProfileDocument document;
+        document.globalLighting = workspaceLayout();
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("app");
+        profile.displayName = QStringLiteral("App");
+        profile.match.resourceClass = QStringLiteral("Foo");
+        Lighting appLighting;
+        appLighting.mode = LightingMode::Direct;
+        appLighting.baseColor = Rgb{0xaa, 0xbb, 0xcc};
+        profile.lighting = appLighting;
+        document.applications.push_back(profile);
+
+        ApplicationIdentity identity;
+        identity.resourceClass = QStringLiteral("Foo");
+        LightingResolution matched = resolveContextLighting(document, identity, availableDesktops(2, 1));
+        QCOMPARE(matched.previewColors[4].r, quint8(0xaa));
+        QCOMPARE(matched.previewColors[0].r, quint8(0x32));
+        QCOMPARE(matched.previewColors[1].r, quint8(0x32 / 5));
+
+        LightingResolution lostIdentity =
+            resolveContextLighting(document, ApplicationIdentity{}, availableDesktops(2, 1));
+        QVERIFY(lostIdentity.workspaceLayoutActive);
+        QVERIFY(!lostIdentity.workspaceUnavailable);
+        QCOMPARE(lostIdentity.previewColors[0].r, quint8(0x32));
+        QCOMPARE(lostIdentity.previewColors[1].r, quint8(0x32 / 5));
+        QCOMPARE(lostIdentity.slotContributions[0], SlotContribution::DesktopIndicatorCurrent);
+        QCOMPARE(lostIdentity.slotContributions[1], SlotContribution::DesktopIndicatorInactive);
+        QCOMPARE(lostIdentity.previewColors[4].r, quint8(0x40));
+        QCOMPARE(lostIdentity.slotContributions[4], SlotContribution::AppColor);
     }
 
     void allBlackWorkspaceUsesOff()

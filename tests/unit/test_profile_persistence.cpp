@@ -38,6 +38,37 @@ bool writeBytes(const QString &path, const QByteArray &bytes)
     return file.write(bytes) == bytes.size();
 }
 
+QByteArray schema3LightingDocument(const QByteArray &lighting)
+{
+    QByteArray json = QByteArrayLiteral(
+        "{\"schema_version\": 3, \"device\": {\"vendor_id\": \"046d\", \"product_id\": \"c336\", \"model\": \"logitech-g213-prodigy\"}, \"global\": {\"lighting\": ");
+    json += lighting;
+    json += QByteArrayLiteral("}}");
+    return json;
+}
+
+QByteArray schema3FiveStaticZones(const QByteArray &firstZone)
+{
+    QByteArray json = QByteArrayLiteral("{\"mode\": \"direct\", \"base_color\": \"#112233\", \"zones\": [");
+    json += firstZone;
+    json += QByteArrayLiteral(
+        ", {\"role\": \"static\", \"color\": \"#222222\"}, {\"role\": \"static\", \"color\": \"#333333\"},");
+    json += QByteArrayLiteral(
+        " {\"role\": \"static\", \"color\": \"#444444\"}, {\"role\": \"static\", \"color\": \"#555555\"}]}");
+    return json;
+}
+
+const QByteArray kSchema2Device =
+    QByteArrayLiteral("\"device\": {\"vendor_id\": \"046d\", \"product_id\": \"c336\", \"model\": \"logitech-g213-prodigy\"}");
+
+QByteArray schema2Document(const QByteArray &restAfterDeviceComma)
+{
+    QByteArray json = QByteArrayLiteral("{\"schema_version\": 2, ");
+    json += kSchema2Device;
+    json += restAfterDeviceComma;
+    return json;
+}
+
 } // namespace
 
 class TestProfilePersistence : public QObject
@@ -535,6 +566,153 @@ private slots:
         QFile again(store.documentPath());
         QVERIFY(again.open(QIODevice::ReadOnly));
         QCOMPARE(again.readAll(), fallback);
+    }
+
+    void schema3InvalidColorsTypesZonesAndSpeedBounds()
+    {
+        const LoadOutcome badHex = ProfileStore::parseDocument(
+            schema3LightingDocument(schema3FiveStaticZones(QByteArrayLiteral("{\"role\": \"static\", \"color\": \"#gg0000\"}"))));
+        QVERIFY(!badHex.ok);
+        QVERIFY(badHex.error.reason.contains(QStringLiteral("color")));
+
+        const LoadOutcome shortHex = ProfileStore::parseDocument(
+            schema3LightingDocument(schema3FiveStaticZones(QByteArrayLiteral("{\"role\": \"static\", \"color\": \"#fff\"}"))));
+        QVERIFY(!shortHex.ok);
+        QVERIFY(shortHex.error.reason.contains(QStringLiteral("color")));
+
+        const LoadOutcome numericColor = ProfileStore::parseDocument(
+            schema3LightingDocument(schema3FiveStaticZones(QByteArrayLiteral("{\"role\": \"static\", \"color\": 123}"))));
+        QVERIFY(!numericColor.ok);
+        QVERIFY(numericColor.error.reason.contains(QStringLiteral("color")));
+
+        const LoadOutcome boolColor = ProfileStore::parseDocument(
+            schema3LightingDocument(schema3FiveStaticZones(QByteArrayLiteral("{\"role\": \"static\", \"color\": true}"))));
+        QVERIFY(!boolColor.ok);
+        QVERIFY(boolColor.error.reason.contains(QStringLiteral("color")));
+
+        const LoadOutcome nonObjectZones = ProfileStore::parseDocument(schema3LightingDocument(QByteArrayLiteral(
+            "{\"mode\": \"direct\", \"base_color\": \"#112233\", \"zones\": [\"#111111\", \"#222222\", \"#333333\", \"#444444\", \"#555555\"]}")));
+        QVERIFY(!nonObjectZones.ok);
+        QVERIFY(nonObjectZones.error.reason.contains(QStringLiteral("objects")));
+
+        const LoadOutcome nullZone =
+            ProfileStore::parseDocument(schema3LightingDocument(schema3FiveStaticZones(QByteArrayLiteral("null"))));
+        QVERIFY(!nullZone.ok);
+        QVERIFY(nullZone.error.reason.contains(QStringLiteral("objects")));
+
+        const LoadOutcome staticMissingColor = ProfileStore::parseDocument(
+            schema3LightingDocument(schema3FiveStaticZones(QByteArrayLiteral("{\"role\": \"static\"}"))));
+        QVERIFY(!staticMissingColor.ok);
+        QVERIFY(staticMissingColor.error.reason.contains(QStringLiteral("color")));
+
+        const LoadOutcome extraZoneField = ProfileStore::parseDocument(schema3LightingDocument(
+            schema3FiveStaticZones(QByteArrayLiteral("{\"role\": \"static\", \"color\": \"#112233\", \"intensity\": 1}"))));
+        QVERIFY(!extraZoneField.ok);
+
+        const LoadOutcome offWithColor = ProfileStore::parseDocument(schema3LightingDocument(QByteArrayLiteral(
+            "{\"mode\": \"direct\", \"base_color\": \"#112233\", \"zones\": [{\"role\": \"off\", \"color\": \"#112233\"}, {\"role\": \"static\", \"color\": \"#222222\"}, {\"role\": \"static\", \"color\": \"#333333\"}, {\"role\": \"static\", \"color\": \"#444444\"}, {\"role\": \"static\", \"color\": \"#555555\"}]}")));
+        QVERIFY(!offWithColor.ok);
+        QVERIFY(offWithColor.error.reason.contains(QStringLiteral("off"))
+                || offWithColor.error.reason.contains(QStringLiteral("unknown"))
+                || offWithColor.error.reason.contains(QStringLiteral("color")));
+
+        const LoadOutcome negativeSpeed = ProfileStore::parseDocument(
+            schema3LightingDocument(QByteArrayLiteral("{\"mode\": \"cycle\", \"zones\": null, \"speed\": -1}")));
+        QVERIFY(!negativeSpeed.ok);
+        QVERIFY(negativeSpeed.error.reason.contains(QStringLiteral("speed")));
+
+        const LoadOutcome fractionalSpeed = ProfileStore::parseDocument(
+            schema3LightingDocument(QByteArrayLiteral("{\"mode\": \"cycle\", \"zones\": null, \"speed\": 1.5}")));
+        QVERIFY(!fractionalSpeed.ok);
+        QVERIFY(fractionalSpeed.error.reason.contains(QStringLiteral("speed")));
+
+        const LoadOutcome stringSpeed = ProfileStore::parseDocument(
+            schema3LightingDocument(QByteArrayLiteral("{\"mode\": \"cycle\", \"zones\": null, \"speed\": \"fast\"}")));
+        QVERIFY(!stringSpeed.ok);
+        QVERIFY(stringSpeed.error.reason.contains(QStringLiteral("speed")));
+
+        const LoadOutcome overBoundSpeed = ProfileStore::parseDocument(
+            schema3LightingDocument(QByteArrayLiteral("{\"mode\": \"cycle\", \"zones\": null, \"speed\": 2147483648}")));
+        QVERIFY(!overBoundSpeed.ok);
+        QVERIFY(overBoundSpeed.error.reason.contains(QStringLiteral("speed")));
+    }
+
+    void schema2SuccessFormsPreserveFieldsAndReadBytes()
+    {
+        const QByteArray directAbsentZones = schema2Document(QByteArrayLiteral(
+            ", \"global\": {\"keys\": {\"F1\": {\"action\": \"disabled\"}}, \"lighting\": {\"mode\": \"direct\", \"restore_mode\": \"wave\", \"base_color\": \"#aabbcc\"}}, \"applications\": [{\"id\": \"first\", \"display_name\": \"First\", \"match\": {\"resource_class\": \"Foo\"}, \"keys\": {\"F2\": {\"action\": \"pass_through\"}}}, {\"id\": \"second\", \"display_name\": \"Second\", \"match\": {\"desktop_file_name\": \"bar.desktop\"}}], \"preferences\": {\"automatic_enabled\": false, \"tray_notifications\": true}}"));
+        const LoadOutcome direct = ProfileStore::parseDocument(directAbsentZones);
+        QVERIFY2(direct.ok, qPrintable(direct.error.reason));
+        QCOMPARE(direct.document.globalLighting.mode, LightingMode::Direct);
+        QVERIFY(direct.document.globalLighting.baseColor.has_value());
+        QCOMPARE(direct.document.globalLighting.baseColor->r, quint8(0xaa));
+        QVERIFY(!direct.document.globalLighting.zones.has_value());
+        QCOMPARE(direct.document.globalLighting.restoreMode, LightingMode::Wave);
+        QCOMPARE(direct.document.globalKeys.value(ControlId::F1).action, ActionType::Disabled);
+        QCOMPARE(direct.document.applications.size(), 2);
+        QCOMPARE(direct.document.applications.at(0).id, QStringLiteral("first"));
+        QCOMPARE(direct.document.applications.at(1).id, QStringLiteral("second"));
+        QCOMPARE(direct.document.applications.at(0).match.resourceClass.value(), QStringLiteral("Foo"));
+        QCOMPARE(direct.document.applications.at(1).match.desktopFileName.value(), QStringLiteral("bar.desktop"));
+        QCOMPARE(direct.document.applications.at(0).keys.value(ControlId::F2).action, ActionType::PassThrough);
+        QCOMPARE(direct.document.preferences.automaticEnabled, false);
+        QCOMPARE(direct.document.preferences.trayNotifications, true);
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        QVERIFY(writeBytes(store.documentPath(), directAbsentZones));
+        const LoadOutcome loadedDirect = store.load();
+        QVERIFY(loadedDirect.ok);
+        QFile directFile(store.documentPath());
+        QVERIFY(directFile.open(QIODevice::ReadOnly));
+        QCOMPARE(directFile.readAll(), directAbsentZones);
+
+        const QByteArray cycle = schema2Document(QByteArrayLiteral(
+            ", \"global\": {\"keys\": {\"F3\": {\"action\": \"pass_through\"}}, \"lighting\": {\"mode\": \"cycle\", \"restore_mode\": \"breathing\", \"base_color\": \"#010203\", \"zones\": null, \"speed\": 40}}, \"applications\": [{\"id\": \"alpha\", \"display_name\": \"Alpha\", \"match\": {\"resource_name\": \"alpha\"}}, {\"id\": \"beta\", \"display_name\": \"Beta\", \"match\": {\"resource_class\": \"Beta\"}}], \"preferences\": {\"automatic_enabled\": true, \"tray_notifications\": false}}"));
+        QVERIFY(writeBytes(store.documentPath(), cycle));
+        const LoadOutcome loadedCycle = store.load();
+        QVERIFY2(loadedCycle.ok, qPrintable(loadedCycle.error.reason));
+        QCOMPARE(loadedCycle.document.globalLighting.mode, LightingMode::Cycle);
+        QCOMPARE(loadedCycle.document.globalLighting.restoreMode, LightingMode::Breathing);
+        QCOMPARE(loadedCycle.document.globalLighting.baseColor->b, quint8(0x03));
+        QVERIFY(!loadedCycle.document.globalLighting.zones.has_value());
+        QCOMPARE(*loadedCycle.document.globalLighting.speed, quint32(40));
+        QCOMPARE(loadedCycle.document.globalKeys.value(ControlId::F3).action, ActionType::PassThrough);
+        QCOMPARE(loadedCycle.document.applications.at(0).id, QStringLiteral("alpha"));
+        QCOMPARE(loadedCycle.document.applications.at(1).id, QStringLiteral("beta"));
+        QCOMPARE(loadedCycle.document.applications.at(0).match.resourceName.value(), QStringLiteral("alpha"));
+        QCOMPARE(loadedCycle.document.preferences.automaticEnabled, true);
+        QFile cycleFile(store.documentPath());
+        QVERIFY(cycleFile.open(QIODevice::ReadOnly));
+        QCOMPARE(cycleFile.readAll(), cycle);
+
+        const QByteArray off = schema2Document(QByteArrayLiteral(
+            ", \"global\": {\"keys\": {\"F4\": {\"action\": \"disabled\"}}, \"lighting\": {\"mode\": \"off\", \"restore_mode\": \"wave\", \"zones\": null}}, \"applications\": [{\"id\": \"only\", \"display_name\": \"Only\", \"match\": {\"resource_class\": \"Only\"}}], \"preferences\": {\"automatic_enabled\": false, \"tray_notifications\": true}}"));
+        QVERIFY(writeBytes(store.documentPath(), off));
+        const LoadOutcome loadedOff = store.load();
+        QVERIFY2(loadedOff.ok, qPrintable(loadedOff.error.reason));
+        QCOMPARE(loadedOff.document.globalLighting.mode, LightingMode::Off);
+        QCOMPARE(loadedOff.document.globalLighting.restoreMode, LightingMode::Wave);
+        QVERIFY(!loadedOff.document.globalLighting.zones.has_value());
+        QCOMPARE(loadedOff.document.globalKeys.value(ControlId::F4).action, ActionType::Disabled);
+        QCOMPARE(loadedOff.document.applications.at(0).id, QStringLiteral("only"));
+        QCOMPARE(loadedOff.document.preferences.trayNotifications, true);
+        QFile offFile(store.documentPath());
+        QVERIFY(offFile.open(QIODevice::ReadOnly));
+        QCOMPARE(offFile.readAll(), off);
+
+        const QByteArray schema2Zones = schema2Document(QByteArrayLiteral(
+            ", \"global\": {\"lighting\": {\"mode\": \"direct\", \"base_color\": \"#112233\", \"zones\": [\"#111111\", \"#222222\", \"#333333\", \"#444444\", \"#555555\"]}}}"));
+        QVERIFY(writeBytes(store.documentPath(), schema2Zones));
+        const LoadOutcome loadedZones = store.load();
+        QVERIFY(loadedZones.ok);
+        QCOMPARE((*loadedZones.document.globalLighting.zones)[0].role, ZoneRole::Static);
+        QCOMPARE((*loadedZones.document.globalLighting.zones)[4].role, ZoneRole::Static);
+        QVERIFY(!workspaceLayoutIsActive(loadedZones.document.globalLighting));
+        QFile zonesFile(store.documentPath());
+        QVERIFY(zonesFile.open(QIODevice::ReadOnly));
+        QCOMPARE(zonesFile.readAll(), schema2Zones);
     }
 };
 

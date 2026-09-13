@@ -57,6 +57,8 @@ public:
     [[nodiscard]] quint64 rejectedReplyCount() const { return m_rejectedReplyCount; }
     [[nodiscard]] quint64 invalidationCount() const { return m_invalidationCount; }
     [[nodiscard]] quint64 notificationCount() const { return m_notificationCount; }
+    [[nodiscard]] quint64 logicalRequestCount() const { return m_logicalRequestCount; }
+    [[nodiscard]] quint64 activeLogicalRequestId() const { return m_activeRequestId; }
     [[nodiscard]] int recoveryAttempt() const { return m_recoveryAttempt; }
 
     void setTimingForTest(int deadlineMs, const QVector<int> &recoveryDelaysMs);
@@ -82,6 +84,7 @@ private:
     void requestSnapshot();
     void becomeUnknown(const QString &errorClass);
     void applyValidatedState(WorkspaceState &&next);
+    void abandonCurrentRequest();
     void startDeadline();
     void stopDeadline();
     void scheduleRecovery();
@@ -97,7 +100,6 @@ private:
     bool m_started = false;
     bool m_paused = false;
     bool m_subscribed = false;
-    bool m_inFlight = false;
     bool m_pendingRefresh = false;
     bool m_coalesceQueued = false;
     QString m_uniqueOwner;
@@ -105,6 +107,8 @@ private:
     quint64 m_invalidationRevision = 0;
     quint64 m_requestGeneration = 0;
     quint64 m_requestRevision = 0;
+    quint64 m_activeRequestId = 0;
+    quint64 m_logicalRequestCount = 0;
     int m_deadlineMs = 2000;
     QVector<int> m_recoveryDelaysMs{1000, 2000, 4000, 8000, 16000, 30000};
     int m_recoveryAttempt = 0;

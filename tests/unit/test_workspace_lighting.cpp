@@ -115,6 +115,7 @@ public:
 
     void setDelayMs(int delayMs) { m_delayMs = delayMs; }
     void setCurrent(const QString &id) { m_current = id; }
+    void setName(int index, const QString &name) { m_desktops[index].name = name; }
 
     void emitCurrentChanged()
     {
@@ -122,6 +123,15 @@ public:
                                                          QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                                          QStringLiteral("currentChanged"));
         signal << m_current;
+        m_connection.send(signal);
+    }
+
+    void emitDesktopDataChanged()
+    {
+        QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
+                                                         QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                                         QStringLiteral("desktopDataChanged"));
+        signal << QStringLiteral("one");
         m_connection.send(signal);
     }
 
@@ -302,6 +312,41 @@ private slots:
         controller.setTemporaryColor(QStringLiteral("#010203"));
         QTRY_COMPARE(controller.sessionLighting(), QStringLiteral("temporary"));
         QCOMPARE(rgb.desiredState().colors[0].r, quint8(0x01));
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void metadataOnlyNameChangeDoesNotSubmitLighting()
+    {
+        QVERIFY(QDBusConnection::sessionBus().isConnected());
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        QVERIFY(registerLightingFake(bus, &fake));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ContextReceiver context;
+        OpenRgbClient rgb;
+        PowerActions power;
+        AppController controller(&context, &rgb, &power, nullptr, dir.path());
+        QDBusConnection client = makeLightingClientBus();
+        WorkspaceReceiver workspace(client);
+        workspace.setTimingForTest(200, {20, 40});
+        controller.setWorkspaceReceiver(&workspace);
+        QVERIFY(workspace.start());
+        QTRY_COMPARE(workspace.state().availability, WorkspaceAvailability::Available);
+        controller.useDefaultWorkspaceLayout();
+        QCoreApplication::processEvents();
+        QVERIFY(controller.workspaceLayoutActive());
+        const quint64 lightingUpdates =
+            controller.diagnostics().value(QStringLiteral("lightingUpdates")).toULongLong();
+        QSignalSpy presentation(&controller, &AppController::presentationChanged);
+        fake.setName(0, QStringLiteral("Renamed"));
+        fake.emitDesktopDataChanged();
+        QTRY_COMPARE(workspace.state().desktops.at(0).displayName, QStringLiteral("Renamed"));
+        QTRY_VERIFY(presentation.count() >= 1);
+        QCOMPARE(controller.diagnostics().value(QStringLiteral("lightingUpdates")).toULongLong(), lightingUpdates);
+        QCOMPARE(workspace.state().currentOrdinal, 1);
         bus.unregisterService(QStringLiteral("org.kde.KWin"));
         bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
     }

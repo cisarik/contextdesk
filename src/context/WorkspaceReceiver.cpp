@@ -141,6 +141,35 @@ QVariant unwrapDbusVariant(QVariant value)
     return value;
 }
 
+bool decodeGetAllProperties(const QVariant &first, QVariantMap &properties)
+{
+    const QVariant unwrapped = unwrapDbusVariant(first);
+    if (unwrapped.metaType() == QMetaType::fromType<QDBusArgument>()
+        || unwrapped.canConvert<QDBusArgument>()) {
+        const QDBusArgument argument = qvariant_cast<QDBusArgument>(unwrapped);
+        if (argument.currentType() != QDBusArgument::MapType) {
+            argument >> properties;
+            return true;
+        }
+        argument.beginMap();
+        while (!argument.atEnd()) {
+            argument.beginMapEntry();
+            QString key;
+            QDBusVariant dbusValue;
+            argument >> key >> dbusValue;
+            argument.endMapEntry();
+            properties.insert(key, dbusValue.variant());
+        }
+        argument.endMap();
+        return true;
+    }
+    if (unwrapped.metaType() == QMetaType::fromType<QVariantMap>() || unwrapped.canConvert<QVariantMap>()) {
+        properties = unwrapped.toMap();
+        return true;
+    }
+    return false;
+}
+
 bool decodeCount(const QVariant &value, int &count)
 {
     bool ok = false;
@@ -226,7 +255,9 @@ bool WorkspaceReceiver::start()
         emit diagnosticsChanged();
         return true;
     }
-    invalidate(QStringLiteral("initial"), false);
+    m_errorClass = QStringLiteral("initial");
+    m_state.refreshPending = true;
+    emit diagnosticsChanged();
     requestSnapshot();
     return true;
 }
@@ -235,10 +266,13 @@ void WorkspaceReceiver::stop()
 {
     unsubscribe();
     m_started = false;
-    m_inFlight = false;
+    abandonCurrentRequest();
     m_pendingRefresh = false;
     m_coalesceQueued = false;
     m_uniqueOwner.clear();
+    if (m_coalesceTimer != nullptr) {
+        m_coalesceTimer->stop();
+    }
     stopDeadline();
     stopRecovery();
 }
@@ -327,14 +361,22 @@ void WorkspaceReceiver::onServiceOwnerChanged(const QString &service, const QStr
         return;
     }
     ++m_ownerGeneration;
-    m_inFlight = false;
+    abandonCurrentRequest();
+    m_pendingRefresh = false;
+    m_coalesceQueued = false;
+    if (m_coalesceTimer != nullptr) {
+        m_coalesceTimer->stop();
+    }
+    stopRecovery();
     m_uniqueOwner = newOwner;
     if (newOwner.isEmpty()) {
+        stopDeadline();
         becomeUnknown(QStringLiteral("service-lost"));
         emit diagnosticsChanged();
         return;
     }
-    invalidate(QStringLiteral("owner-replaced"), true);
+    becomeUnknown(QStringLiteral("owner-replaced"));
+    m_state.refreshPending = true;
     requestSnapshot();
     emit diagnosticsChanged();
 }
@@ -380,20 +422,23 @@ void WorkspaceReceiver::requestSnapshot()
     if (!m_started || m_paused || m_uniqueOwner.isEmpty() || !m_connection.isConnected()) {
         return;
     }
-    if (m_inFlight) {
+    if (m_activeRequestId != 0) {
         m_pendingRefresh = true;
         return;
     }
     m_pendingRefresh = false;
-    m_inFlight = true;
+    ++m_logicalRequestCount;
+    m_activeRequestId = m_logicalRequestCount;
     m_requestGeneration = m_ownerGeneration;
     m_requestRevision = m_invalidationRevision;
+    stopDeadline();
     startDeadline();
 
     QDBusMessage call = QDBusMessage::createMethodCall(m_uniqueOwner, kManagerPath, kPropertiesInterface,
                                                        QStringLiteral("GetAll"));
     call << kManagerInterface;
     auto *watcher = new QDBusPendingCallWatcher(m_connection.asyncCall(call), this);
+    watcher->setProperty("requestId", QVariant::fromValue(m_activeRequestId));
     watcher->setProperty("generation", QVariant::fromValue(m_requestGeneration));
     watcher->setProperty("revision", QVariant::fromValue(m_requestRevision));
     connect(watcher, &QDBusPendingCallWatcher::finished, this, &WorkspaceReceiver::onSnapshotReply);
@@ -402,10 +447,17 @@ void WorkspaceReceiver::requestSnapshot()
 void WorkspaceReceiver::onSnapshotReply(QDBusPendingCallWatcher *watcher)
 {
     watcher->deleteLater();
+    const quint64 requestId = watcher->property("requestId").toULongLong();
     const quint64 generation = watcher->property("generation").toULongLong();
     const quint64 revision = watcher->property("revision").toULongLong();
+    if (requestId != m_activeRequestId) {
+        ++m_rejectedReplyCount;
+        emit diagnosticsChanged();
+        return;
+    }
+
+    m_activeRequestId = 0;
     const bool stale = generation != m_ownerGeneration || revision != m_invalidationRevision || !m_started || m_paused;
-    m_inFlight = false;
     if (stale) {
         ++m_rejectedReplyCount;
         emit diagnosticsChanged();
@@ -427,13 +479,7 @@ void WorkspaceReceiver::onSnapshotReply(QDBusPendingCallWatcher *watcher)
         scheduleRecovery();
         return;
     }
-    const QVariant first = unwrapDbusVariant(message.arguments().constFirst());
-    if (first.canConvert<QVariantMap>()) {
-        properties = first.toMap();
-    } else if (first.metaType() == QMetaType::fromType<QDBusArgument>() || first.canConvert<QDBusArgument>()) {
-        const QDBusArgument argument = qvariant_cast<QDBusArgument>(first);
-        argument >> properties;
-    } else {
+    if (!decodeGetAllProperties(message.arguments().constFirst(), properties)) {
         ++m_rejectedReplyCount;
         becomeUnknown(QStringLiteral("snapshot-type"));
         emit diagnosticsChanged();
@@ -511,12 +557,18 @@ std::optional<WorkspaceState> WorkspaceReceiver::decodeSnapshot(const QVariantMa
         return std::nullopt;
     }
 
-    QVector<WorkspaceDesktop> desktops;
-    QSet<QString> ids;
-    QSet<int> positions;
-    qsizetype metadataBytes = 0;
-    auto consumeRow = [&](int position, const QString &id, const QString &name) -> bool {
-        if (id.isEmpty() || !boundedUtf8(id, kMaxDesktopIdBytes) || hasControlCharacters(id) || ids.contains(id)) {
+    struct RawDesktop {
+        int position = 0;
+        QString id;
+        QString name;
+    };
+    QVector<RawDesktop> raw;
+    auto appendRaw = [&](int position, const QString &id, const QString &name) -> bool {
+        if (position < 0 || position > kMaxPosition) {
+            errorClass = QStringLiteral("position-invalid");
+            return false;
+        }
+        if (id.isEmpty() || !boundedUtf8(id, kMaxDesktopIdBytes) || hasControlCharacters(id)) {
             errorClass = QStringLiteral("desktop-id-invalid");
             return false;
         }
@@ -524,45 +576,26 @@ std::optional<WorkspaceState> WorkspaceReceiver::decodeSnapshot(const QVariantMa
             errorClass = QStringLiteral("desktop-name-invalid");
             return false;
         }
-        if (positions.contains(position)) {
-            errorClass = QStringLiteral("position-duplicate");
-            return false;
-        }
-        ids.insert(id);
-        positions.insert(position);
-        metadataBytes += id.toUtf8().size() + name.toUtf8().size();
-        if (metadataBytes > kMaxMetadataBytes) {
-            errorClass = QStringLiteral("metadata-limit");
-            return false;
-        }
-        WorkspaceDesktop desktop;
-        desktop.position = position;
-        desktop.id = id;
-        desktop.displayName = name;
-        desktops.push_back(std::move(desktop));
+        raw.push_back(RawDesktop{position, id, name});
         return true;
     };
 
     const QVariant desktopsValue = unwrapDbusVariant(properties.value(QStringLiteral("desktops")));
-    if (desktopsValue.canConvert<QList<VirtualDesktopDBus>>()) {
-        const auto rows = qvariant_cast<QList<VirtualDesktopDBus>>(desktopsValue);
+    if (desktopsValue.metaType() == QMetaType::fromType<QList<VirtualDesktopDBus>>()) {
+        const auto rows = desktopsValue.value<QList<VirtualDesktopDBus>>();
         for (const VirtualDesktopDBus &row : rows) {
-            if (row.position < 0 || row.position > kMaxPosition) {
-                errorClass = QStringLiteral("position-invalid");
-                return std::nullopt;
-            }
-            if (!consumeRow(row.position, row.id, row.name)) {
+            if (!appendRaw(row.position, row.id, row.name)) {
                 return std::nullopt;
             }
         }
-    } else if (desktopsValue.canConvert<QList<VirtualDesktopDBusUnsigned>>()) {
-        const auto rows = qvariant_cast<QList<VirtualDesktopDBusUnsigned>>(desktopsValue);
+    } else if (desktopsValue.metaType() == QMetaType::fromType<QList<VirtualDesktopDBusUnsigned>>()) {
+        const auto rows = desktopsValue.value<QList<VirtualDesktopDBusUnsigned>>();
         for (const VirtualDesktopDBusUnsigned &row : rows) {
             if (row.position > static_cast<quint32>(kMaxPosition)) {
                 errorClass = QStringLiteral("position-invalid");
                 return std::nullopt;
             }
-            if (!consumeRow(static_cast<int>(row.position), row.id, row.name)) {
+            if (!appendRaw(static_cast<int>(row.position), row.id, row.name)) {
                 return std::nullopt;
             }
         }
@@ -575,23 +608,74 @@ std::optional<WorkspaceState> WorkspaceReceiver::decodeSnapshot(const QVariantMa
         }
         arg.beginArray();
         while (!arg.atEnd()) {
+            if (arg.currentType() != QDBusArgument::StructureType) {
+                errorClass = QStringLiteral("desktop-shape");
+                return std::nullopt;
+            }
             int position = 0;
             QString id;
             QString name;
             if (!decodeDesktopStructure(arg, position, id, name)) {
-                errorClass = arg.currentType() == QDBusArgument::StructureType
-                    ? QStringLiteral("position-invalid")
-                    : QStringLiteral("desktop-shape");
+                errorClass = QStringLiteral("position-invalid");
                 return std::nullopt;
             }
-            if (!consumeRow(position, id, name)) {
+            if (!appendRaw(position, id, name)) {
                 return std::nullopt;
             }
         }
         arg.endArray();
+    } else if (desktopsValue.canConvert<QList<VirtualDesktopDBus>>()) {
+        const auto rows = qvariant_cast<QList<VirtualDesktopDBus>>(desktopsValue);
+        for (const VirtualDesktopDBus &row : rows) {
+            if (!appendRaw(row.position, row.id, row.name)) {
+                return std::nullopt;
+            }
+        }
+    } else if (desktopsValue.canConvert<QList<VirtualDesktopDBusUnsigned>>()) {
+        const auto rows = qvariant_cast<QList<VirtualDesktopDBusUnsigned>>(desktopsValue);
+        for (const VirtualDesktopDBusUnsigned &row : rows) {
+            if (row.position > static_cast<quint32>(kMaxPosition)) {
+                errorClass = QStringLiteral("position-invalid");
+                return std::nullopt;
+            }
+            if (!appendRaw(static_cast<int>(row.position), row.id, row.name)) {
+                return std::nullopt;
+            }
+        }
     } else {
         errorClass = QStringLiteral("desktops-type");
         return std::nullopt;
+    }
+
+    qsizetype metadataBytes = 0;
+    for (const RawDesktop &row : raw) {
+        metadataBytes += row.id.toUtf8().size() + row.name.toUtf8().size();
+        if (metadataBytes > kMaxMetadataBytes) {
+            errorClass = QStringLiteral("metadata-limit");
+            return std::nullopt;
+        }
+    }
+
+    QVector<WorkspaceDesktop> desktops;
+    QSet<QString> ids;
+    QSet<int> positions;
+    desktops.reserve(raw.size());
+    for (const RawDesktop &row : raw) {
+        if (ids.contains(row.id)) {
+            errorClass = QStringLiteral("desktop-id-invalid");
+            return std::nullopt;
+        }
+        if (positions.contains(row.position)) {
+            errorClass = QStringLiteral("position-duplicate");
+            return std::nullopt;
+        }
+        ids.insert(row.id);
+        positions.insert(row.position);
+        WorkspaceDesktop desktop;
+        desktop.position = row.position;
+        desktop.id = row.id;
+        desktop.displayName = row.name;
+        desktops.push_back(std::move(desktop));
     }
 
     if (desktops.size() != count) {
@@ -656,13 +740,19 @@ void WorkspaceReceiver::stopRecovery()
     m_recoveryAttempt = 0;
 }
 
+void WorkspaceReceiver::abandonCurrentRequest()
+{
+    m_activeRequestId = 0;
+}
+
 void WorkspaceReceiver::onDeadline()
 {
     if (!m_started || m_paused) {
         return;
     }
     ++m_invalidationRevision;
-    m_inFlight = false;
+    abandonCurrentRequest();
+    m_pendingRefresh = false;
     becomeUnknown(QStringLiteral("refresh-deadline"));
     emit diagnosticsChanged();
     scheduleRecovery();
