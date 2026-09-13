@@ -197,7 +197,8 @@ add_test(NAME test_udev_verify
          COMMAND udevadm verify --resolve-names=never
                  "${CMAKE_SOURCE_DIR}/packaging/udev/61-contextdeck-input-guard.rules"
                  "${CMAKE_SOURCE_DIR}/packaging/udev/62-contextdeck-broker.rules"
-                 "${CMAKE_SOURCE_DIR}/packaging/udev/99-contextdeck-broker-uinput.rules")
+                 "${CMAKE_SOURCE_DIR}/packaging/udev/99-contextdeck-broker-uinput.rules"
+                 "${CMAKE_SOURCE_DIR}/packaging/udev/99-contextdeck-input-acl-guard.rules")
 
 add_test(NAME test_trial_cutoff
          COMMAND bash "${CMAKE_SOURCE_DIR}/tests/unit/test_trial_cutoff.sh"

@@ -160,12 +160,17 @@ true, and further. `60-openrgb.rules` applies `TAG+="uaccess"` broadly, so
 | `/dev/input/event7`, `event8` (G213) | `SUBSYSTEMS=="usb\|hidraw"` + `046d:c336` — `SUBSYSTEMS` walks the parent chain, so the rule also matches the keyboard's **input** devices | any process running as the session user can read raw G213 keystrokes |
 | `/dev/hidraw2`, `hidraw3` (G213) | same rule, intended target | required for RGB; granted as `uaccess`, **not** `MODE=0666` |
 
-COOPERATOR decision (M1): **narrow revert**. A host-local
-`/etc/udev/rules.d/61-contextdeck-input-guard.rules` removes `uaccess` from the
-G213 input devices, `/dev/port`, and `/dev/i2c-*`, and leaves the hidraw grant
-intact so keyboard lighting keeps working. Consequences accepted: OpenRGB loses
-motherboard/GPU RGB control on this host, and the guard file is host-local until
-packaging owns it.
+COOPERATOR decision (M1): **narrow revert**. Packaging
+`61-contextdeck-input-guard.rules` removes the `uaccess` **tag** from the G213
+input devices, `/dev/port`, and `/dev/i2c-*`, and leaves the hidraw grant
+intact so keyboard lighting keeps working. Tag removal does not delete an
+already materialized POSIX ACL; a later add/change re-probe can restore a
+session ACL even when `CURRENT_TAGS` lacks `uaccess`.
+`99-contextdeck-input-acl-guard.rules` therefore strips extended ACLs with
+`setfacl -b` on those same three classes after `73-seat-late.rules`, without
+matching hidraw or `/dev/uinput` and without setting `OWNER`/`GROUP`/`MODE`.
+That source model is not host-install proof. Consequences accepted: OpenRGB
+loses motherboard/GPU RGB control on a host that applies the guard.
 
 Durable rules for this project:
 

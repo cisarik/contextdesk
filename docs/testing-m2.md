@@ -43,16 +43,20 @@ ctest --test-dir build --output-on-failure
 `test_udev_policy` and `test_udev_verify` check (no G213, no `/dev/uinput`,
 no live udev mutation):
 
-- Guard/grant/uinput rule files keep the G213 event, hidraw, `/dev/port`, and
-  `/dev/i2c-*` policy.
+- Guard/grant/uinput/ACL-guard rule files keep the G213 event, hidraw,
+  `/dev/port`, and `/dev/i2c-*` policy.
 - The G213 event grant stays in `62-contextdeck-broker.rules` with no `OWNER`
   and no uinput `RUN`.
 - The broker uinput ACL is only in `99-contextdeck-broker-uinput.rules`,
   matching the misc `uinput` node, adding `u:contextdeck-broker:rw` via
   `setfacl`, and not setting `OWNER`/`GROUP`/`MODE`.
-- That `99-` filename sorts after `73-seat-late.rules` (the file that queues
+- `99-contextdeck-input-acl-guard.rules` matches only G213 `event*` by USB
+  ancestry, `/dev/port`, and `/dev/i2c-*`; runs on add/change with
+  `/usr/bin/setfacl -b %N`; does not match hidraw or `/dev/uinput`; and does
+  not set `OWNER`/`GROUP`/`MODE` or a session user.
+- Both `99-` filenames sort after `73-seat-late.rules` (the file that queues
   the `uaccess` builtin).
-- `udevadm verify --resolve-names=never` accepts all three rule files.
+- `udevadm verify --resolve-names=never` accepts all four rule files.
 
 `test_broker_production` checks (no G213, no `/dev/uinput`, no live udev
 scan):

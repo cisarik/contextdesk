@@ -87,22 +87,28 @@ int main()
     const std::filesystem::path guardPath = udevDir / "61-contextdeck-input-guard.rules";
     const std::filesystem::path grantPath = udevDir / "62-contextdeck-broker.rules";
     const std::filesystem::path uinputPath = udevDir / "99-contextdeck-broker-uinput.rules";
+    const std::filesystem::path aclGuardPath = udevDir / "99-contextdeck-input-acl-guard.rules";
 
     EXPECT(std::filesystem::is_regular_file(guardPath));
     EXPECT(std::filesystem::is_regular_file(grantPath));
     EXPECT(std::filesystem::is_regular_file(uinputPath));
+    EXPECT(std::filesystem::is_regular_file(aclGuardPath));
     EXPECT(uinputPath.filename().string() > std::string("73-seat-late.rules"));
+    EXPECT(aclGuardPath.filename().string() > std::string("73-seat-late.rules"));
 
     const std::string guardText = readFile(guardPath);
     const std::string grantText = readFile(grantPath);
     const std::string uinputText = readFile(uinputPath);
+    const std::string aclGuardText = readFile(aclGuardPath);
     const auto guard = ruleLines(guardText);
     const auto grant = ruleLines(grantText);
     const auto uinput = ruleLines(uinputText);
+    const auto aclGuard = ruleLines(aclGuardText);
 
     EXPECT(guard.size() == 3);
     EXPECT(grant.size() == 1);
     EXPECT(uinput.size() == 1);
+    EXPECT(aclGuard.size() == 3);
 
     EXPECT(guard[0] == R"(SUBSYSTEM=="input", SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c336", TAG-="uaccess")");
     EXPECT(guard[1] == R"(KERNEL=="port", TAG-="uaccess")");
@@ -131,6 +137,27 @@ int main()
     EXPECT(!anyLineContains(uinput, R"(KERNEL=="port")"));
     EXPECT(!anyLineContains(uinput, "i2c"));
     EXPECT(!contains(uinput[0], "uaccess"));
+
+    EXPECT(aclGuard[0] == R"(ACTION=="add|change", SUBSYSTEM=="input", SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c336", KERNEL=="event*", RUN+="/usr/bin/setfacl -b %N")");
+    EXPECT(aclGuard[1] == R"(ACTION=="add|change", KERNEL=="port", RUN+="/usr/bin/setfacl -b %N")");
+    EXPECT(aclGuard[2] == R"(ACTION=="add|change", KERNEL=="i2c-[0-9]*", RUN+="/usr/bin/setfacl -b %N")");
+    EXPECT(!anyLineContains(aclGuard, "hidraw"));
+    EXPECT(!anyLineContains(aclGuard, "uinput"));
+    EXPECT(!anyLineContains(aclGuard, "/dev/uinput"));
+    EXPECT(!anyLineContains(aclGuard, "OWNER"));
+    EXPECT(!anyLineContains(aclGuard, "GROUP="));
+    EXPECT(!anyLineContains(aclGuard, "MODE="));
+    EXPECT(!anyLineContains(aclGuard, R"(TAG+="uaccess")"));
+    EXPECT(!anyLineContains(aclGuard, R"(TAG-="uaccess")"));
+    EXPECT(!anyLineContains(aclGuard, "contextdeck-broker"));
+    EXPECT(!anyLineContains(aclGuard, "setfacl -m"));
+    EXPECT(!anyLineContains(aclGuard, "/dev/%k"));
+    EXPECT(anyLineContains(aclGuard, R"(KERNEL=="event*)"));
+    EXPECT(anyLineContains(aclGuard, R"(KERNEL=="port")"));
+    EXPECT(anyLineContains(aclGuard, R"(KERNEL=="i2c-[0-9]*")"));
+    EXPECT(!anyLineContains(uinput, "setfacl -b"));
+    EXPECT(!anyLineContains(guard, "setfacl"));
+    EXPECT(!anyLineContains(grant, "setfacl"));
 
     if (g_failures != 0) {
         std::fprintf(stderr, "test_udev_policy: %d failure(s)\n", g_failures);

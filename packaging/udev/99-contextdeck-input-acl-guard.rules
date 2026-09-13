@@ -1,0 +1,12 @@
+# Strip leftover session POSIX ACLs after 73-seat-late.rules queues RUN{builtin}+="uaccess".
+# 61-contextdeck-input-guard.rules removes the uaccess tag so the builtin does not grant a
+# new session ACL, but a tag removal does not delete an already materialized POSIX ACL.
+# A later add/change re-probe can therefore leave a session ACL even when CURRENT_TAGS
+# does not contain uaccess. setfacl -b removes extended ACL entries only; it does not
+# assign a user or change the base owner, group, or mode.
+# Do not match G213 hidraw (RGB must keep the session ACL) or /dev/uinput (the additive
+# broker grant lives in 99-contextdeck-broker-uinput.rules and must stay intact).
+# %N is the device node path; /dev/%k is wrong for event* (that would be /dev/eventN).
+ACTION=="add|change", SUBSYSTEM=="input", SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c336", KERNEL=="event*", RUN+="/usr/bin/setfacl -b %N"
+ACTION=="add|change", KERNEL=="port", RUN+="/usr/bin/setfacl -b %N"
+ACTION=="add|change", KERNEL=="i2c-[0-9]*", RUN+="/usr/bin/setfacl -b %N"

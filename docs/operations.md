@@ -202,15 +202,28 @@ Do not `systemctl` mask/unmask sleep targets. Do not write `/sys/power/state`.
 Authors the system identity, udev guard/grant, and the **system** unit
 `contextdeck-broker.service`. **Do not enable. Do not start.** The broker
 stays disarmed until an authenticated session lease arms it (S4). Real
-pass-through IRL is S5. This install also closes the measured OpenRGB `uaccess` keylogging
-hole on G213 **input** nodes, `/dev/port`, and `/dev/i2c-*`. HID RGB
-(`hidraw`) must keep working. The broker's `/dev/uinput` grant is an
-**additive named-user ACL** from `99-contextdeck-broker-uinput.rules`, queued
-after the seat `uaccess` builtin so it is not overwritten.
+pass-through IRL is S5. This install is meant to keep session `uaccess` off
+G213 **input** nodes, `/dev/port`, and `/dev/i2c-*`. HID RGB (`hidraw`) must
+keep working. The broker's `/dev/uinput` grant is an **additive named-user
+ACL** from `99-contextdeck-broker-uinput.rules`, queued after the seat
+`uaccess` builtin so it is not overwritten.
+
+`61-contextdeck-input-guard.rules` only removes the `uaccess` **tag**. That
+does not delete an already materialized POSIX ACL, so a later add/change
+re-probe can restore a session ACL even when `CURRENT_TAGS` lacks `uaccess`.
+`99-contextdeck-input-acl-guard.rules` therefore runs on add/change after
+`73-seat-late.rules` and uses `/usr/bin/setfacl -b` on G213 `event*` nodes,
+`/dev/port`, and `/dev/i2c-*` only. That strips extended ACL entries and
+leaves the base owner, group, and mode unchanged. It does not match hidraw
+or `/dev/uinput`, and it does not set `OWNER`, `GROUP`, `MODE`, or a session
+user. Installing these files is not by itself proof that a given host is
+secure; verify the table below after install, and treat G3 as a separate
+readback/re-audit claim.
 
 If these udev files are already installed from an earlier G3 run, re-run the
 udev `install` / `reload-rules` / `trigger` commands below so the late uinput
-rule replaces the old `62-` `setfacl` RUN line.
+rule and the late input ACL guard are present. The documented triggers are
+not a substitute for that late `setfacl -b` rule.
 
 Run every command from the repository root. Adjust nothing to a private
 home path in public notes.
@@ -229,6 +242,8 @@ sudo install -m 0644 packaging/udev/62-contextdeck-broker.rules \
   /etc/udev/rules.d/62-contextdeck-broker.rules
 sudo install -m 0644 packaging/udev/99-contextdeck-broker-uinput.rules \
   /etc/udev/rules.d/99-contextdeck-broker-uinput.rules
+sudo install -m 0644 packaging/udev/99-contextdeck-input-acl-guard.rules \
+  /etc/udev/rules.d/99-contextdeck-input-acl-guard.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=input
 sudo udevadm trigger --subsystem-match=i2c-dev
@@ -282,7 +297,9 @@ copy node numbers into public notes.
 If hidraw lost the session ACL, rollback immediately — lighting would break
 and this install over-reached. If `/dev/uinput` lost the session-user ACL or
 never gained `user:contextdeck-broker:rw-`, rollback the uinput rule and
-re-check before any broker start.
+re-check before any broker start. If G213 event nodes, `/dev/port`, or
+`/dev/i2c-*` still show a session-user ACL after reload and trigger, the
+late ACL guard did not take effect; do not treat G3 as restored.
 
 ### Rollback
 
@@ -295,6 +312,7 @@ packaged OpenRGB may restore session `uaccess` on G213 event nodes,
 sudo rm -f /etc/udev/rules.d/61-contextdeck-input-guard.rules \
            /etc/udev/rules.d/62-contextdeck-broker.rules \
            /etc/udev/rules.d/99-contextdeck-broker-uinput.rules \
+           /etc/udev/rules.d/99-contextdeck-input-acl-guard.rules \
            /etc/systemd/system/contextdeck-broker.service \
            /usr/lib/systemd/system-sleep/contextdeck-broker \
            /usr/lib/sysusers.d/contextdeck-broker.conf
