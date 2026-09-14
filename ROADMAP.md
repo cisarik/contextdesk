@@ -28,14 +28,16 @@ COOPERATOR action, separate from any authorized report-file preparation.
   deferred by explicit COOPERATOR decision. M3 is not closed, and code
   acceptance is not physical acceptance. Later IRL steps live in
   `docs/testing-m3.md`.
-- Current whole: **M4 `g213-contextdeck-workspace-session-manager`** — Slice B
-  implementation candidate in the product tree (schema 4 named
-  sessions/assignments, `rows`/wrapping observation, pure dry-run
-  `WorkspacePlan`, explicit Apply with a user-local checkpoint/revert,
-  `DesktopMutator`, typed `ApplicationLauncher`, `PlacementResolver`, the
-  `Plochy` editor, and bridge `PlacementHint`). **Not accepted and not
-  live-verified; nothing mutates without the user's Apply and no launch happens
-  at login.** Later IRL steps live in `docs/testing-m4.md`.
+- Current whole: **M4 `g213-contextdeck-workspace-session-manager`** — Slice A
+  (schema 4 named sessions/assignments, `rows`/wrapping observation, pure dry-run
+  `WorkspacePlan`, `Plochy` editor) is code-accepted on `aca6c68`; Slice B
+  (fail-closed `DesktopMutator` with user-local checkpoint/revert, typed
+  `ApplicationLauncher`, `PlacementResolver` + bridge `PlacementHint`, opt-in
+  non-logging title fallback) is code-accepted on `db9ddc1`. **The live IRL run
+  in `docs/testing-m4.md` is deferred by explicit COOPERATOR decision; M4 is not
+  closed, and code acceptance is not live or physical acceptance.** Nothing
+  mutates without the user's explicit Apply and no launch happens at Plasma
+  login.
 - Parked whole: **M2 `g213-contextdeck-input-passthrough-safety`**. Planning
   and production implementation are in the repository. Exact candidate
   `cb72ae0388307b514182efc6936712e3da42cda4` was installed and verified on
@@ -85,8 +87,8 @@ done-as-planned.
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
 | M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Parked** — production path in repo including suspend/resume sleep hook; inactive install (`deployment-PASS`); named Sessions 16/19/22/23/24 slices (`acceptance-PASS`); **full G4 open**; residual independent G3 gap not closed |
-| M3 | `g213-contextdeck-workspace-aware-lighting` | Opt-in five-slot layout: desktop indicators + application color through existing OpenRGB | M1 | **Implementation-candidate** — not accepted |
-| M4 | `g213-contextdeck-workspace-session-manager` | In-session workspace orchestrator: named sessions, app assignment to virtual desktops, explicit-apply / in-transaction launch (never at Plasma login), placement, opt-in title fallback | M3 | **Slice B implementation-candidate** — not accepted |
+| M3 | `g213-contextdeck-workspace-aware-lighting` | Opt-in five-slot layout: desktop indicators + application color through existing OpenRGB | M1 | **Code-accepted** (`502ae75`); physical IRL deferred — not closed |
+| M4 | `g213-contextdeck-workspace-session-manager` | In-session workspace orchestrator: named sessions, app assignment to virtual desktops, explicit-apply / in-transaction launch (never at Plasma login), placement, opt-in title fallback | M3 | **Slice A + Slice B code-accepted** (`aca6c68`, `db9ddc1`); **live IRL deferred** — not closed |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
 
 Dependency order: P2 confirmed five-zone lighting; M1 → M2 (input safety) OR
@@ -270,7 +272,7 @@ and one zone tracking the app, with the global preset itself configurable.
   application rather than routing desktop state through the KWin bridge, so
   desktop context survives bridge loss and yields a stable position plus name.
 
-**Implemented contract (candidate, not accepted):**
+**Implemented contract (code-accepted on `502ae75`; physical IRL deferred):**
 
 - Slot roles: `static`, `desktop_indicator`, `app_color`, `off`. One global
   layout; application presets fill `app_color` slots only.
@@ -284,7 +286,7 @@ The unfilled control-to-zone Results table remains unmeasured and does not
 block ordinary five-slot lighting. M4 is now its own current whole; remapping,
 the deck layer, and M5 stay separate future wholes.
 
-### Workspace session manager — current whole, Slice B implementation candidate `g213-contextdeck-workspace-session-manager`
+### Workspace session manager — current whole, code-accepted, live IRL deferred `g213-contextdeck-workspace-session-manager`
 
 **Need (COOPERATOR):** transform ContextDesk into a true KDE Plasma Context &
 Workspace Manager:
@@ -294,12 +296,13 @@ Workspace Manager:
    maximize them to their respective virtual desktops.
 4. Window-title-based matching as a fallback when an unassigned window has focus.
 
-**Classification:** current logical whole (milestone M4). Slice B is an
-implementation candidate, not acceptance and not live-verified. All live
-desktop mutation, launch, and bridge reload remain separately granted
-COOPERATOR operations. Nothing here grants host or desktop mutation.
+**Classification:** current logical whole (milestone M4). Slice A and Slice B
+are code-accepted; the live IRL run is deferred by explicit COOPERATOR decision
+and M4 is not closed. All live desktop mutation, launch, and bridge reload remain
+separately granted COOPERATOR operations. Nothing here grants host or desktop
+mutation.
 
-**Implemented Slice B contract (candidate, not accepted):**
+**Implemented Slice B contract (code-accepted on `db9ddc1`; live IRL deferred):**
 - Schema 4: `workspace_sessions[]` ordinal layouts plus per-application
   `workspace` assignment; preserving schema-1/2/3 migration; explicit save only.
 - `WorkspaceReceiver` additionally decodes `rows` and
@@ -324,10 +327,24 @@ COOPERATOR operations. Nothing here grants host or desktop mutation.
 - `Plochy` editor and per-profile assignment fields; Apply/revert are explicit.
 - Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md).
 
-**Slice history (recorded):** Slice A (schema 4, observation, dry-run,
-editor) was implemented and corrected to accepted candidate `aca6c68`; its
-code acceptance is superseded as the base for Slice B and is not live
-behavior evidence.
+**Slice history (recorded):** Slice A (schema 4, observation, dry-run, editor)
+was implemented, corrected, and code-accepted on `aca6c68` (`05_report_00.md`).
+Slice B was implemented (`5087277`), corrected (`db9ddc1`) after an independent
+PARTIAL (`08_report_00.md`), and code-accepted by a full-fresh re-acceptance
+(`10_report_00.md`). Code acceptance is not live behavior evidence; the M4 live
+IRL run remains deferred.
+
+**Deferred live IRL (COOPERATOR decision, 2026-09-14):** the `docs/testing-m4.md`
+run (explicit Apply, checkpoint revert, launch-on-apply, placement/maximize,
+opt-in title fallback) is deferred. M4 stays not closed and no live desktop,
+launch, placement, or compositor behavior is claimed. When run, it needs
+explicit mutation-class authority, a named checkpoint, and one demonstrated
+recovery route. Non-blocking ledger candidates carried for later work: ADR
+0002/0004 status phrasing; the `.desktop` id predicate accepting trivially short
+forms; `KApplicationTrader` named only in the specification; the
+late-`desktopCreated` checkpoint-disclosure gap; QML runtime validated only at
+build time; and a possible orphaned old-path checkpoint from the never-accepted
+parent candidate.
 
 **Route corrections measured during M4 planning (supersede the old notes):**
 - `window.desktops` is writable in the installed KWin script API;
