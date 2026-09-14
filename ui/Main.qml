@@ -32,6 +32,9 @@ Kirigami.ApplicationWindow {
         case "apps":
             url = Qt.resolvedUrl("ApplicationsPage.qml");
             break;
+        case "workspace":
+            url = Qt.resolvedUrl("WorkspacePage.qml");
+            break;
         case "diagnostics":
             url = Qt.resolvedUrl("DiagnosticsPage.qml");
             break;
@@ -72,6 +75,13 @@ Kirigami.ApplicationWindow {
                 checkable: true
                 checked: root.currentSection === "apps"
                 onTriggered: root.showSection("apps")
+            },
+            Kirigami.Action {
+                text: "Plochy"
+                icon.name: "virtual-desktops"
+                checkable: true
+                checked: root.currentSection === "workspace"
+                onTriggered: root.showSection("workspace")
             },
             Kirigami.Action {
                 text: "Diagnostika"

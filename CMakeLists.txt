@@ -25,6 +25,7 @@ add_library(contextdeck_core STATIC
     src/core/Resolver.cpp
     src/core/Persistence.cpp
     src/core/ZoneMap.cpp
+    src/workspace/WorkspacePlan.cpp
 )
 target_include_directories(contextdeck_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_core PUBLIC Qt6::Core)
@@ -91,6 +92,7 @@ qt_add_qml_module(contextdeck
         ui/ZoneHero.qml
         ui/ColorsPage.qml
         ui/ApplicationsPage.qml
+        ui/WorkspacePage.qml
         ui/ControlsPage.qml
         ui/DiagnosticsPage.qml
         ui/LightingPresetEditor.qml
@@ -149,6 +151,10 @@ add_test(NAME test_profile_resolver COMMAND test_profile_resolver)
 add_executable(test_profile_persistence tests/unit/test_profile_persistence.cpp)
 target_link_libraries(test_profile_persistence PRIVATE contextdeck_core Qt6::Test)
 add_test(NAME test_profile_persistence COMMAND test_profile_persistence)
+
+add_executable(test_workspace_plan tests/unit/test_workspace_plan.cpp)
+target_link_libraries(test_workspace_plan PRIVATE contextdeck_core Qt6::Test)
+add_test(NAME test_workspace_plan COMMAND test_workspace_plan)
 
 add_executable(test_openrgb_protocol tests/unit/test_openrgb_protocol.cpp)
 target_link_libraries(test_openrgb_protocol PRIVATE contextdeck_rgb Qt6::Test)

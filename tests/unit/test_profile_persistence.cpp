@@ -120,7 +120,7 @@ private slots:
         QVERIFY(dir.isValid());
         ProfileStore store(dir.path());
         QByteArray json = validJson();
-        json.replace(R"("schema_version": 1)", R"("schema_version": 4)");
+        json.replace(R"("schema_version": 1)", R"("schema_version": 5)");
         QVERIFY(writeBytes(store.documentPath(), json));
         const QByteArray before = json;
         const LoadOutcome loaded = store.load();
@@ -227,7 +227,7 @@ private slots:
         QVERIFY(writeBytes(store.documentPath(), v1));
         const LoadOutcome loaded = store.load();
         QVERIFY2(loaded.ok, qPrintable(loaded.error.reason));
-        QCOMPARE(loaded.document.schemaVersion, 3);
+        QCOMPARE(loaded.document.schemaVersion, kSchemaVersion);
         QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Untouched);
         QVERIFY(loaded.document.globalLighting.baseColor.has_value());
         QCOMPARE(loaded.document.globalLighting.baseColor->r, quint8(0x11));
@@ -331,11 +331,11 @@ private slots:
         QVERIFY(originalFile.open(QIODevice::ReadOnly));
         const QByteArray savedBytes = originalFile.readAll();
         originalFile.close();
-        QVERIFY(savedBytes.contains(R"("schema_version": 3)"));
+        QVERIFY(savedBytes.contains(R"("schema_version": 4)"));
         QVERIFY(savedBytes.contains(R"("role": "static")"));
         const LoadOutcome loaded = store.load();
         QVERIFY(loaded.ok);
-        QCOMPARE(loaded.document.schemaVersion, 3);
+        QCOMPARE(loaded.document.schemaVersion, kSchemaVersion);
         QCOMPARE((*loaded.document.globalLighting.zones)[0].role, ZoneRole::Static);
         QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Direct);
         QCOMPARE((*loaded.document.globalLighting.zones)[0].color.r, quint8(0x11));
@@ -373,7 +373,7 @@ private slots:
         QVERIFY(loaded.document.globalLighting.speed.has_value());
         QCOMPARE(*loaded.document.globalLighting.speed, quint32(80));
         QCOMPARE(loaded.document.globalLighting.mode, LightingMode::Breathing);
-        QCOMPARE(loaded.document.schemaVersion, 3);
+        QCOMPARE(loaded.document.schemaVersion, kSchemaVersion);
     }
 
     void schema2AbsentSpeedRemainsUnset()
@@ -451,7 +451,7 @@ private slots:
         QVERIFY(store.save(loaded.document).ok);
         const LoadOutcome roundTrip = store.load();
         QVERIFY(roundTrip.ok);
-        QCOMPARE(roundTrip.document.schemaVersion, 3);
+        QCOMPARE(roundTrip.document.schemaVersion, kSchemaVersion);
         QCOMPARE((*roundTrip.document.globalLighting.zones)[4].color.r, quint8(0x40));
     }
 
@@ -528,7 +528,7 @@ private slots:
         QVERIFY(!ProfileStore::parseDocument(unknown).ok);
 
         const QByteArray future = R"({
-            "schema_version": 4,
+            "schema_version": 5,
             "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
             "global": {"lighting": {"mode": "wave", "zones": null}}
         })";
@@ -542,7 +542,7 @@ private slots:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         ProfileStore store(dir.path());
-        const QByteArray invalid = R"({ "schema_version": 4, "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"}, "global": {"lighting": {"mode": "wave"}} })";
+        const QByteArray invalid = R"({ "schema_version": 5, "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"}, "global": {"lighting": {"mode": "wave"}} })";
         QVERIFY(writeBytes(store.documentPath(), invalid));
         ProfileDocument valid;
         valid.globalLighting.mode = LightingMode::Wave;
@@ -713,6 +713,384 @@ private slots:
         QFile zonesFile(store.documentPath());
         QVERIFY(zonesFile.open(QIODevice::ReadOnly));
         QCOMPARE(zonesFile.readAll(), schema2Zones);
+    }
+
+    void schema4RoundTripStoresSessionsAndAssignments()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        const QByteArray json = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"keys": {"F1": {"action": "pass_through"}}, "lighting": {"mode": "wave", "zones": null}},
+            "preferences": {
+                "automatic_enabled": true,
+                "tray_notifications": false,
+                "workspace_management_enabled": true,
+                "title_fallback_enabled": true,
+                "active_workspace_session_id": "coding"
+            },
+            "workspace_sessions": [{
+                "id": "coding",
+                "display_name": "Coding",
+                "rows": 1,
+                "navigation_wrapping": true,
+                "desktops": [
+                    {"ordinal": 1, "name": "Build"},
+                    {"ordinal": 2, "name": "Browse"}
+                ]
+            }],
+            "applications": [{
+                "id": "org.kde.dolphin.desktop",
+                "display_name": "Dolphin",
+                "match": {"desktop_file_name": "org.kde.dolphin.desktop"},
+                "workspace": {
+                    "session_id": "coding",
+                    "desktop_ordinal": 2,
+                    "launch": true,
+                    "maximize": true,
+                    "launch_desktop_file": "org.kde.dolphin.desktop",
+                    "title_fallback": {"enabled": true, "mode": "contains", "pattern": "Downloads"}
+                }
+            }]
+        })";
+        const LoadOutcome parsed = ProfileStore::parseDocument(json);
+        QVERIFY2(parsed.ok, qPrintable(parsed.error.reason));
+        QCOMPARE(parsed.document.schemaVersion, kSchemaVersion);
+        QCOMPARE(parsed.document.workspaceSessions.size(), 1);
+        QCOMPARE(parsed.document.workspaceSessions.at(0).rows.value(), 1);
+        QCOMPARE(parsed.document.workspaceSessions.at(0).navigationWrapping.value(), true);
+        QCOMPARE(parsed.document.workspaceSessions.at(0).desktops.size(), 2);
+        QVERIFY(parsed.document.preferences.workspaceManagementEnabled);
+        QVERIFY(parsed.document.preferences.titleFallbackEnabled);
+        QCOMPARE(parsed.document.preferences.activeWorkspaceSessionId.value(), QStringLiteral("coding"));
+        QVERIFY(parsed.document.applications.at(0).workspace.has_value());
+        const WorkspaceAssignment &workspace = *parsed.document.applications.at(0).workspace;
+        QCOMPARE(workspace.desktopOrdinal, 2);
+        QVERIFY(workspace.launch);
+        QVERIFY(workspace.maximize);
+        QVERIFY(workspace.titleFallback.has_value());
+        QCOMPARE(workspace.titleFallback->mode, TitleMatchMode::Contains);
+        QCOMPARE(workspace.titleFallback->pattern, QStringLiteral("Downloads"));
+
+        const SaveOutcome saved = store.save(parsed.document);
+        QVERIFY2(saved.ok, qPrintable(saved.error.reason));
+        const LoadOutcome loaded = store.load();
+        QVERIFY2(loaded.ok, qPrintable(loaded.error.reason));
+        QCOMPARE(loaded.document.workspaceSessions.at(0).displayName, QStringLiteral("Coding"));
+        QCOMPARE(loaded.document.workspaceSessions.at(0).desktops.at(1).name, QStringLiteral("Browse"));
+        QCOMPARE(loaded.document.applications.at(0).workspace->sessionId, QStringLiteral("coding"));
+        QCOMPARE(loaded.document.applications.at(0).workspace->desktopOrdinal, 2);
+        QCOMPARE(loaded.document.applications.at(0).workspace->titleFallback->mode, TitleMatchMode::Contains);
+        QCOMPARE(loaded.document.applications.at(0).workspace->titleFallback->pattern, QStringLiteral("Downloads"));
+    }
+
+    void schema3MigratesToSchema4WithoutWorkspaceAndKeepsBytes()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        const QByteArray json = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {
+                "keys": {"F2": {"action": "disabled"}},
+                "lighting": {
+                    "mode": "direct",
+                    "restore_mode": "wave",
+                    "base_color": "#7c3aed",
+                    "zones": [
+                        {"role": "desktop_indicator", "color": "#7c3aed"},
+                        {"role": "static", "color": "#222222"},
+                        {"role": "static", "color": "#333333"},
+                        {"role": "static", "color": "#444444"},
+                        {"role": "app_color", "color": "#404040"}
+                    ]
+                }
+            },
+            "applications": [{"id": "app", "display_name": "App", "match": {"resource_class": "Foo"}}],
+            "preferences": {"automatic_enabled": false, "tray_notifications": true}
+        })";
+        QVERIFY(writeBytes(store.documentPath(), json));
+        const LoadOutcome loaded = store.load();
+        QVERIFY2(loaded.ok, qPrintable(loaded.error.reason));
+        QCOMPARE(loaded.document.schemaVersion, kSchemaVersion);
+        QVERIFY(workspaceLayoutIsActive(loaded.document.globalLighting));
+        QCOMPARE(loaded.document.globalKeys.value(ControlId::F2).action, ActionType::Disabled);
+        QCOMPARE(loaded.document.applications.size(), 1);
+        QVERIFY(loaded.document.workspaceSessions.isEmpty());
+        QVERIFY(!loaded.document.preferences.workspaceManagementEnabled);
+        QVERIFY(!loaded.document.preferences.titleFallbackEnabled);
+        QVERIFY(!loaded.document.preferences.activeWorkspaceSessionId.has_value());
+        QVERIFY(!loaded.document.applications.at(0).workspace.has_value());
+        QFile file(store.documentPath());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), json);
+    }
+
+    void schema1And2MigrationLeavesWorkspaceUnset()
+    {
+        const LoadOutcome v1 = ProfileStore::parseDocument(validJson());
+        QVERIFY(v1.ok);
+        QCOMPARE(v1.document.schemaVersion, kSchemaVersion);
+        QVERIFY(v1.document.workspaceSessions.isEmpty());
+        QVERIFY(!v1.document.preferences.workspaceManagementEnabled);
+        QVERIFY(!v1.document.preferences.titleFallbackEnabled);
+
+        const QByteArray v2 = schema2Document(QByteArrayLiteral(
+            ", \"global\": {\"lighting\": {\"mode\": \"wave\", \"zones\": null}}, \"applications\": [{\"id\": \"a\", \"display_name\": \"A\", \"match\": {\"resource_class\": \"A\"}}]}"));
+        const LoadOutcome loaded = ProfileStore::parseDocument(v2);
+        QVERIFY2(loaded.ok, qPrintable(loaded.error.reason));
+        QCOMPARE(loaded.document.schemaVersion, kSchemaVersion);
+        QVERIFY(loaded.document.workspaceSessions.isEmpty());
+        QVERIFY(!loaded.document.applications.at(0).workspace.has_value());
+    }
+
+    void schema4RejectsNewFieldsUnderLegacySchema()
+    {
+        const QByteArray workspaceSessionsOnV3 = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": []
+        })";
+        const LoadOutcome loaded = ProfileStore::parseDocument(workspaceSessionsOnV3);
+        QVERIFY(!loaded.ok);
+        QVERIFY(loaded.error.reason.contains(QStringLiteral("unknown semantic field")));
+        QVERIFY(loaded.error.jsonPath.contains(QStringLiteral("workspace_sessions")));
+
+        const QByteArray workspaceOnV3 = R"({
+            "schema_version": 3,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "applications": [{"id": "a", "display_name": "A", "match": {"resource_class": "A"},
+                              "workspace": {"session_id": "s", "desktop_ordinal": 1}}]
+        })";
+        QVERIFY(!ProfileStore::parseDocument(workspaceOnV3).ok);
+    }
+
+    void schema4RejectsCaptionAndUnknownWorkspaceKeys()
+    {
+        const QByteArray caption = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "applications": [{"id": "a", "display_name": "A",
+                              "match": {"caption": "Secret", "resource_class": "A"}}]
+        })";
+        const LoadOutcome captioned = ProfileStore::parseDocument(caption);
+        QVERIFY(!captioned.ok);
+        QVERIFY(captioned.error.jsonPath.contains(QStringLiteral("caption")));
+
+        const QByteArray unknownWorkspace = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [{"id": "s", "display_name": "S", "desktops": [{"ordinal": 1, "name": "One"}]}],
+            "applications": [{"id": "a", "display_name": "A", "match": {"resource_class": "A"},
+                              "workspace": {"session_id": "s", "desktop_ordinal": 1, "plugin": true}}]
+        })";
+        const LoadOutcome unknown = ProfileStore::parseDocument(unknownWorkspace);
+        QVERIFY(!unknown.ok);
+        QVERIFY(unknown.error.reason.contains(QStringLiteral("unknown semantic field")));
+        QVERIFY(unknown.error.jsonPath.contains(QStringLiteral("plugin")));
+
+        const QByteArray unknownSessionKey = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [{"id": "s", "display_name": "S", "plugin": true,
+                                    "desktops": [{"ordinal": 1, "name": "One"}]}]
+        })";
+        QVERIFY(!ProfileStore::parseDocument(unknownSessionKey).ok);
+    }
+
+    void schema4RejectsSessionAndAssignmentBounds()
+    {
+        const QByteArray duplicateSessions = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [
+                {"id": "s", "display_name": "S", "desktops": [{"ordinal": 1, "name": "One"}]},
+                {"id": "s", "display_name": "T", "desktops": [{"ordinal": 1, "name": "One"}]}
+            ]
+        })";
+        const LoadOutcome duplicates = ProfileStore::parseDocument(duplicateSessions);
+        QVERIFY(!duplicates.ok);
+        QVERIFY(duplicates.error.reason.contains(QStringLiteral("duplicate")));
+
+        const QByteArray nonContiguous = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [{"id": "s", "display_name": "S",
+                                    "desktops": [{"ordinal": 1, "name": "One"}, {"ordinal": 3, "name": "Three"}]}]
+        })";
+        QVERIFY(!ProfileStore::parseDocument(nonContiguous).ok);
+
+        const QByteArray badRows = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [{"id": "s", "display_name": "S", "rows": 0,
+                                    "desktops": [{"ordinal": 1, "name": "One"}]}]
+        })";
+        QVERIFY(!ProfileStore::parseDocument(badRows).ok);
+
+        const QByteArray emptyDesktops = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [{"id": "s", "display_name": "S", "desktops": []}]
+        })";
+        QVERIFY(!ProfileStore::parseDocument(emptyDesktops).ok);
+
+        const QByteArray unknownSession = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [{"id": "s", "display_name": "S", "desktops": [{"ordinal": 1, "name": "One"}]}],
+            "applications": [{"id": "a", "display_name": "A", "match": {"resource_class": "A"},
+                              "workspace": {"session_id": "missing", "desktop_ordinal": 1}}]
+        })";
+        const LoadOutcome unknown = ProfileStore::parseDocument(unknownSession);
+        QVERIFY(!unknown.ok);
+        QVERIFY(unknown.error.reason.contains(QStringLiteral("session")));
+
+        const QByteArray ordinalBeyondSession = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "workspace_sessions": [{"id": "s", "display_name": "S", "desktops": [{"ordinal": 1, "name": "One"}]}],
+            "applications": [{"id": "a", "display_name": "A", "match": {"resource_class": "A"},
+                              "workspace": {"session_id": "s", "desktop_ordinal": 2}}]
+        })";
+        QVERIFY(!ProfileStore::parseDocument(ordinalBeyondSession).ok);
+
+        const QByteArray danglingActive = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "preferences": {"active_workspace_session_id": "missing"}
+        })";
+        const LoadOutcome dangling = ProfileStore::parseDocument(danglingActive);
+        QVERIFY(!dangling.ok);
+        QVERIFY(dangling.error.jsonPath.contains(QStringLiteral("active_workspace_session_id")));
+
+        ProfileDocument longIdDocument;
+        WorkspaceSession longIdSession;
+        longIdSession.id = QString(129, QLatin1Char('s'));
+        longIdSession.displayName = QStringLiteral("S");
+        longIdSession.desktops.push_back(WorkspaceDesktopEntry{1, QStringLiteral("One")});
+        longIdDocument.workspaceSessions.push_back(longIdSession);
+        const PersistenceError longIdError = ProfileStore::validate(longIdDocument);
+        QVERIFY(!longIdError.reason.isEmpty());
+        QVERIFY(longIdError.jsonPath.contains(QStringLiteral("id")));
+
+        ProfileDocument maxIdDocument;
+        WorkspaceSession maxIdSession;
+        maxIdSession.id = QString(128, QLatin1Char('s'));
+        maxIdSession.displayName = QStringLiteral("S");
+        maxIdSession.desktops.push_back(WorkspaceDesktopEntry{1, QStringLiteral("One")});
+        maxIdDocument.workspaceSessions.push_back(maxIdSession);
+        QVERIFY(ProfileStore::validate(maxIdDocument).reason.isEmpty());
+    }
+
+    void schema4RejectsTitleFallbackAndDesktopFileValues()
+    {
+        auto documentWithWorkspace = [](const QByteArray &workspace) {
+            QByteArray json = QByteArrayLiteral(R"({
+                "schema_version": 4,
+                "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+                "global": {"lighting": {"mode": "wave", "zones": null}},
+                "workspace_sessions": [{"id": "s", "display_name": "S", "desktops": [{"ordinal": 1, "name": "One"}]}],
+                "applications": [{"id": "a", "display_name": "A", "match": {"resource_class": "A"}, "workspace": )");
+            json += workspace;
+            json += QByteArrayLiteral("}]}");
+            return json;
+        };
+
+        const QByteArray longPattern = QByteArrayLiteral(
+            "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"title_fallback\": {\"enabled\": true, \"mode\": \"contains\", \"pattern\": \"")
+            + QByteArray(129, 'p') + QByteArrayLiteral("\"}}");
+        const LoadOutcome longPatternLoaded = ProfileStore::parseDocument(documentWithWorkspace(longPattern));
+        QVERIFY(!longPatternLoaded.ok);
+        QVERIFY(longPatternLoaded.error.reason.contains(QStringLiteral("pattern")));
+
+        const QByteArray maxPattern = QByteArrayLiteral(
+            "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"title_fallback\": {\"enabled\": true, \"mode\": \"prefix\", \"pattern\": \"")
+            + QByteArray(128, 'p') + QByteArrayLiteral("\"}}");
+        const LoadOutcome maxPatternLoaded = ProfileStore::parseDocument(documentWithWorkspace(maxPattern));
+        QVERIFY2(maxPatternLoaded.ok, qPrintable(maxPatternLoaded.error.reason));
+
+        const LoadOutcome controlPattern = ProfileStore::parseDocument(
+            documentWithWorkspace(QByteArrayLiteral(
+                "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"title_fallback\": {\"enabled\": true, \"mode\": \"exact\", \"pattern\": \"a\\u0001b\"}}")));
+        QVERIFY(!controlPattern.ok);
+
+        const LoadOutcome unknownMode = ProfileStore::parseDocument(
+            documentWithWorkspace(QByteArrayLiteral(
+                "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"title_fallback\": {\"enabled\": true, \"mode\": \"glob\", \"pattern\": \"x\"}}")));
+        QVERIFY(!unknownMode.ok);
+        QVERIFY(unknownMode.error.reason.contains(QStringLiteral("title match mode")));
+
+        const LoadOutcome badFile = ProfileStore::parseDocument(
+            documentWithWorkspace(QByteArrayLiteral(
+                "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"launch_desktop_file\": \"/usr/bin/firefox\"}")));
+        QVERIFY(!badFile.ok);
+        QVERIFY(badFile.error.reason.contains(QStringLiteral("desktop id")));
+
+        const LoadOutcome shellFile = ProfileStore::parseDocument(
+            documentWithWorkspace(QByteArrayLiteral(
+                "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"launch_desktop_file\": \"firefox;rm -rf /\"}")));
+        QVERIFY(!shellFile.ok);
+
+        const LoadOutcome bareName = ProfileStore::parseDocument(
+            documentWithWorkspace(QByteArrayLiteral(
+                "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"launch_desktop_file\": \"firefox\"}")));
+        QVERIFY(!bareName.ok);
+
+        const LoadOutcome reverseDns = ProfileStore::parseDocument(
+            documentWithWorkspace(QByteArrayLiteral(
+                "{\"session_id\": \"s\", \"desktop_ordinal\": 1, \"launch_desktop_file\": \"org.kde.dolphin\"}")));
+        QVERIFY2(reverseDns.ok, qPrintable(reverseDns.error.reason));
+    }
+
+    void schema4ReadDoesNotRewriteBytes()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        const QByteArray json = R"({
+            "schema_version": 4,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}},
+            "preferences": {"workspace_management_enabled": true},
+            "workspace_sessions": [{"id": "s", "display_name": "S", "desktops": [{"ordinal": 1, "name": "One"}]}]
+        })";
+        QVERIFY(writeBytes(store.documentPath(), json));
+        const LoadOutcome loaded = store.load();
+        QVERIFY(loaded.ok);
+        QVERIFY(loaded.document.preferences.workspaceManagementEnabled);
+        QVERIFY(!QFile::exists(store.backupPath()));
+        QFile file(store.documentPath());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), json);
+    }
+
+    void schema5IsRefused()
+    {
+        const QByteArray future = R"({
+            "schema_version": 5,
+            "device": {"vendor_id": "046d", "product_id": "c336", "model": "logitech-g213-prodigy"},
+            "global": {"lighting": {"mode": "wave", "zones": null}}
+        })";
+        const LoadOutcome loaded = ProfileStore::parseDocument(future);
+        QVERIFY(!loaded.ok);
+        QVERIFY(loaded.error.reason.contains(QStringLiteral("future schema_version")));
+        QVERIFY(loaded.error.preserved);
     }
 };
 

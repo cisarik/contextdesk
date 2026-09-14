@@ -23,10 +23,18 @@ COOPERATOR action, separate from any authorized report-file preparation.
   animation speed, 5-zone gradient helper, KWin event-driven context,
   non-destructive startup, and desktop UI. Unrelated gates such as G7 are not
   closed by restating that acceptance.
-- Current whole: **M3 `g213-contextdeck-workspace-aware-lighting`** —
-  implementation candidate in the product tree (schema 3, session-app
-  VirtualDesktopManager observation, five-slot composition, minimal UI).
-  **Not accepted.** Later IRL steps live in `docs/testing-m3.md`.
+- M3 `g213-contextdeck-workspace-aware-lighting`: M3 workspace-aware lighting
+  is code-accepted on `502ae75...`; its physical five-zone IRL observation is
+  deferred by explicit COOPERATOR decision. M3 is not closed, and code
+  acceptance is not physical acceptance. Later IRL steps live in
+  `docs/testing-m3.md`.
+- Current whole: **M4 `g213-contextdeck-workspace-session-manager`** — Slice A
+  implementation candidate in the product tree (schema 4 named
+  sessions/assignments, `rows`/wrapping observation, pure dry-run
+  `WorkspacePlan`, `Plochy` editor, Apply hidden/disabled). **Not accepted; no
+  live desktop mutation and no application launch in Slice A.** Later IRL
+  steps live in `docs/testing-m4.md`; a separately authorized Slice B owns
+  live desktop mutation, typed in-session launch, and placement.
 - Parked whole: **M2 `g213-contextdeck-input-passthrough-safety`**. Planning
   and production implementation are in the repository. Exact candidate
   `cb72ae0388307b514182efc6936712e3da42cda4` was installed and verified on
@@ -77,9 +85,7 @@ done-as-planned.
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
 | M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Parked** — production path in repo including suspend/resume sleep hook; inactive install (`deployment-PASS`); named Sessions 16/19/22/23/24 slices (`acceptance-PASS`); **full G4 open**; residual independent G3 gap not closed |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Opt-in five-slot layout: desktop indicators + application color through existing OpenRGB | M1 | **Implementation-candidate** — not accepted |
-| M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
-| M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
-| M4 | `g213-contextdeck-workspace-session-manager` | Plasma workspace orchestrator: app assignment to virtual desktops, launch on session start, auto-maximize, title-based fallback | M3 | Planned |
+| M4 | `g213-contextdeck-workspace-session-manager` | In-session workspace orchestrator: named sessions, app assignment to virtual desktops, explicit-apply / in-transaction launch (never at Plasma login), placement, opt-in title fallback | M3 | **Slice A implementation-candidate** — not accepted |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
 
 Dependency order: P2 confirmed five-zone lighting; M1 → M2 (input safety) OR
@@ -231,7 +237,7 @@ Recorded by the ORCHESTRATOR. Classification only — none of this is
 implementation authority, and none of it may appear in a Worker prompt until it
 is routed as its own logical whole.
 
-### Workspace-aware lighting — implementation candidate `g213-contextdeck-workspace-aware-lighting`
+### Workspace-aware lighting — code-accepted, physical observation deferred `g213-contextdeck-workspace-aware-lighting`
 
 Opt-in global five-slot layout: desktop indicators plus application color,
 composed into the existing OpenRGB protocol-5 client. Schema 3 stores zone
@@ -239,9 +245,11 @@ roles; valid schema-2 files keep their previous lighting until the user
 explicitly enables roles. Virtual-desktop state is observed from the session
 app (`org.kde.KWin` `/VirtualDesktopManager`), not through the context bridge.
 
-This is an implementation candidate. It is **not** physically accepted and
-does not close M2, G4, independent G3, remapping, the deck layer, M4, or M5.
-Later IRL steps: [docs/testing-m3.md](docs/testing-m3.md).
+M3 workspace-aware lighting is code-accepted on `502ae75...`; its physical
+five-zone IRL observation is deferred by explicit COOPERATOR decision. M3 is
+not closed, and code acceptance is not physical acceptance. It does not close
+M2, G4, independent G3, remapping, the deck layer, M4, or M5. Later IRL steps:
+[docs/testing-m3.md](docs/testing-m3.md).
 
 **Need (COOPERATOR):** read from the keyboard which virtual desktop is active
 and which application is focused — for example four zones tracking the desktop
@@ -272,32 +280,48 @@ and one zone tracking the app, with the global preset itself configurable.
   default. All-black workspace composition uses device Off.
 
 The unfilled control-to-zone Results table remains unmeasured and does not
-block ordinary five-slot lighting. M4, remapping, the deck layer, and M5 stay
-separate future wholes.
+block ordinary five-slot lighting. M4 is now its own current whole; remapping,
+the deck layer, and M5 stay separate future wholes.
 
-### Workspace session manager — future whole `g213-contextdeck-workspace-session-manager`
+### Workspace session manager — current whole, Slice A implementation candidate `g213-contextdeck-workspace-session-manager`
 
 **Need (COOPERATOR):** transform ContextDesk into a true KDE Plasma Context &
 Workspace Manager:
 1. Configure and manage virtual desktops (count, names, custom sessions).
 2. Assign specific applications to specific virtual desktops.
-3. Automatically launch assigned applications on desktop initialization and
+3. Launch assigned applications on in-session session-management events and
    maximize them to their respective virtual desktops.
 4. Window-title-based matching as a fallback when an unassigned window has focus.
 
-**Classification:** future-logical-whole (milestone M4). Not immediate implementation authority.
+**Classification:** current logical whole (milestone M4). Slice A is an
+observational implementation candidate, not acceptance; live desktop mutation,
+launch, and placement belong to a separately authorized Slice B. Nothing here
+grants host or desktop mutation.
 
-**Technical feasibility & route (ORCHESTRATOR verified):**
-- **Virtual desktop management:** `org.kde.KWin.VirtualDesktopManager` exposes
-  `createDesktop(position, name)` and `removeDesktop(id)`.
-- **Window placement & maximization:** KWin Scripting API exposes
-  `window.desktops = [desktop]` and `window.maximized = ...`, while KDE Plasma
-  native Window Rules (`kwinrulesrc`) provide persistent, compositor-enforced
-  placement without polling.
-- **Application launching:** Systemd user transient scopes (`systemd-run --user`)
-  or XDG application launchers (`KRun`/`Gio`) ensure clean cgroups and lifecycles.
-- **Window-title fallback:** KWin bridge already tracks windows; adding title
-  inspection strictly as fallback preserves privacy invariants.
+**Implemented Slice A contract (candidate, not accepted):**
+- Schema 4: `workspace_sessions[]` ordinal layouts plus per-application
+  `workspace` assignment; preserving schema-1/2/3 migration; explicit save only.
+- `WorkspaceReceiver` additionally decodes `rows` and
+  `navigationWrappingAround` and subscribes the two extra invalidation signals.
+- Pure `WorkspacePlan` dry-run: create/rename/rows/wrapping diff, drift and
+  extra-desktop indicator, launch intent
+  (`would_launch`/`already_running`/`missing_desktop_file`/`disabled`), launch
+  debounce and trigger classification. No D-Bus/KIO/mutation.
+- `Plochy` editor and per-profile assignment fields; Apply hidden/disabled.
+- Opt-in title fallback: user-authored pattern compared in memory for one
+  call; captions never stored, logged, or added to `MatchSpec`.
+- Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md).
+
+**Route corrections measured during M4 planning (supersede the old notes):**
+- `window.desktops` is writable in the installed KWin script API;
+  `window.maximized` is **not** — scripts must call
+  `window.setMaximize(true, true)`. Persistent `kwinrulesrc` writes are
+  **rejected** by the product (ADR 0002).
+- Application launch is typed through `KIO::ApplicationLauncherJob` in the
+  later mutation slice; `systemd-run --user`, `kstart`, and shell/`Exec=`
+  wrapping are rejected (ADR 0004). Launch is never at Plasma login.
+- Title fallback is opt-in and event-driven, never polling and never default
+  identity.
 
 ### KDE Plasma autostart & full lifecycle — future whole `g213-contextdeck-system-integration-and-autostart`
 

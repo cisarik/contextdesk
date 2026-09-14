@@ -121,6 +121,53 @@ const ApplicationProfile *matchApplication(const ProfileDocument &document,
     return best;
 }
 
+bool applicationMatches(const ApplicationProfile &profile, const ApplicationIdentity &identity)
+{
+    return matchAgrees(profile.match, identity);
+}
+
+bool titleFallbackMatches(const TitleFallback &fallback, const QString &caption)
+{
+    if (fallback.pattern.isEmpty()) {
+        return false;
+    }
+    switch (fallback.mode) {
+    case TitleMatchMode::Exact:
+        return caption == fallback.pattern;
+    case TitleMatchMode::Contains:
+        return caption.contains(fallback.pattern);
+    case TitleMatchMode::Prefix:
+        return caption.startsWith(fallback.pattern);
+    }
+    return false;
+}
+
+WorkspaceResolution resolveWorkspaceAssignment(const ProfileDocument &document, const ApplicationIdentity &identity,
+                                               const QString &caption)
+{
+    WorkspaceResolution resolution;
+    const ApplicationProfile *profile = matchApplication(document, identity);
+    if (profile == nullptr && document.preferences.titleFallbackEnabled && !caption.isEmpty()) {
+        for (const ApplicationProfile &candidate : document.applications) {
+            if (!candidate.workspace || !candidate.workspace->titleFallback) {
+                continue;
+            }
+            const TitleFallback &fallback = *candidate.workspace->titleFallback;
+            if (!fallback.enabled) {
+                continue;
+            }
+            if (titleFallbackMatches(fallback, caption)) {
+                profile = &candidate;
+                resolution.matchedByTitleFallback = true;
+                break;
+            }
+        }
+    }
+    resolution.profile = profile;
+    resolution.assignment = (profile != nullptr && profile->workspace) ? &*profile->workspace : nullptr;
+    return resolution;
+}
+
 Assignment resolveAssignment(const ProfileDocument &document,
                              const ApplicationIdentity &identity,
                              ControlId control)

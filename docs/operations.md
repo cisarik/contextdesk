@@ -633,6 +633,43 @@ Do **not** `systemctl start`. An inactive install of candidate `cb72ae0` is
 separately recorded as `deployment-PASS` (META Worker 14). Remaining IRL G4
 claims are a separate acceptance. This section does not grant a start.
 
+## 10. M4 Slice A workspace sessions — observational only
+
+M4 Slice A adds schema 4 (named sessions, per-application workspace
+assignments) and a read-only `WorkspacePlan` dry-run. It grants **no** host or
+desktop mutation:
+
+- No `createDesktop`, `setDesktopName`, `removeDesktop`, `rows`,
+  `navigationWrappingAround`, or `current` write, and no `kwinrulesrc` write.
+- No application launch. Slice A only reports
+  `would_launch`/`already_running`/`missing_desktop_file`/`disabled` in memory.
+- No broker start, ARM, grab, udev change, package install, or systemd change.
+- KWin observation is read-only through the existing `VirtualDesktopManager`
+  snapshot path. `rows` and `navigationWrappingAround` are decoded and the two
+  extra signals are subscribed as invalidations.
+
+Persistence behavior:
+
+- The first explicit `Uložiť` after this upgrade writes schema 4 and keeps the
+  previous exact bytes in `$XDG_CONFIG_HOME/contextdeck/profiles.json.bak`.
+- Reading or opening the UI never rewrites the file and never creates a
+  backup. Invalid, unsupported, or migration-fallback documents are refused
+  for overwrite and keep their bytes.
+- An older binary refuses a schema-4 file. Keep a COOPERATOR-owned pre-upgrade
+  copy if a downgrade must survive later saves.
+
+Boundaries for later work, so no operator assumes them here:
+
+- Live apply (desktop create/rename/rows/wrapping, optional current switch),
+  typed in-session launch, and placement/maximize belong to a separately
+  authorized later slice with its own checkpoint/revert procedure.
+- Plasma-login autostart, systemd user integration, and production lifecycle
+  remain M5/G8. M4 never launches because the session began.
+
+The M4 IRL checklist for later operational acceptance lives in
+[docs/testing-m4.md](testing-m4.md); that file does not authorize host
+mutation either.
+
 ## Logs to keep private
 
 Never paste ordinary typed keystrokes, window captions, USB serial numbers, or

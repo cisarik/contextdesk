@@ -6,9 +6,11 @@
 #include "core/ControlCatalog.h"
 #include "core/Resolver.h"
 #include "core/ZoneMap.h"
+#include "workspace/WorkspacePlan.h"
 
 #include <QLoggingCategory>
 #include <QMetaObject>
+#include <QSet>
 #include <QStringList>
 
 #include <algorithm>
@@ -160,6 +162,24 @@ bool applyGradient(Lighting &lighting, const Rgb &start, const Rgb &end)
     lighting.baseColor = start;
     lighting.mode = LightingMode::Direct;
     return true;
+}
+
+QString sanitizeDisplayText(const QString &text, qsizetype maxBytes, const QString &fallback)
+{
+    QString cleaned;
+    for (const QChar ch : text) {
+        if (ch.category() != QChar::Other_Control) {
+            cleaned.append(ch);
+        }
+    }
+    cleaned = cleaned.trimmed();
+    while (!cleaned.isEmpty() && cleaned.toUtf8().size() > maxBytes) {
+        cleaned.chop(1);
+    }
+    if (cleaned.isEmpty()) {
+        return fallback;
+    }
+    return cleaned;
 }
 
 } // namespace
@@ -594,6 +614,30 @@ QVariantList AppController::profiles() const
         map.insert(QStringLiteral("zones"), zoneHexList(lighting));
         map.insert(QStringLiteral("speedPercent"), speedToPercent(lighting));
         map.insert(QStringLiteral("breathingColor"), toHex(lighting.baseColor.value_or(kDefaultEffectColor)));
+        if (profile.workspace) {
+            const WorkspaceAssignment &workspace = *profile.workspace;
+            map.insert(QStringLiteral("workspaceSessionId"), workspace.sessionId);
+            map.insert(QStringLiteral("workspaceDesktopOrdinal"), workspace.desktopOrdinal);
+            map.insert(QStringLiteral("workspaceLaunch"), workspace.launch);
+            map.insert(QStringLiteral("workspaceMaximize"), workspace.maximize);
+            map.insert(QStringLiteral("workspaceLaunchDesktopFile"), workspace.launchDesktopFile.value_or(QString()));
+            map.insert(QStringLiteral("workspaceTitleFallbackEnabled"),
+                       workspace.titleFallback.has_value() && workspace.titleFallback->enabled);
+            map.insert(QStringLiteral("workspaceTitleFallbackMode"),
+                       titleMatchModeJsonName(workspace.titleFallback.has_value() ? workspace.titleFallback->mode
+                                                                                 : TitleMatchMode::Contains));
+            map.insert(QStringLiteral("workspaceTitleFallbackPattern"),
+                       workspace.titleFallback.has_value() ? workspace.titleFallback->pattern : QString());
+        } else {
+            map.insert(QStringLiteral("workspaceSessionId"), QString());
+            map.insert(QStringLiteral("workspaceDesktopOrdinal"), 1);
+            map.insert(QStringLiteral("workspaceLaunch"), false);
+            map.insert(QStringLiteral("workspaceMaximize"), false);
+            map.insert(QStringLiteral("workspaceLaunchDesktopFile"), QString());
+            map.insert(QStringLiteral("workspaceTitleFallbackEnabled"), false);
+            map.insert(QStringLiteral("workspaceTitleFallbackMode"), QStringLiteral("contains"));
+            map.insert(QStringLiteral("workspaceTitleFallbackPattern"), QString());
+        }
         list.push_back(map);
     }
     return list;
@@ -662,6 +706,14 @@ QVariantMap AppController::diagnostics() const
     map.insert(QStringLiteral("workspacePaused"), workspaceObservationPaused());
     map.insert(QStringLiteral("workspaceSnapshots"),
                m_workspace != nullptr ? QVariant::fromValue(m_workspace->snapshotCount()) : 0);
+    const QVariantMap workspacePlan = workspacePlanMap();
+    map.insert(QStringLiteral("workspaceManagementEnabled"), workspaceManagementEnabled());
+    map.insert(QStringLiteral("titleFallbackEnabled"), titleFallbackEnabled());
+    map.insert(QStringLiteral("workspaceSessionCount"), static_cast<int>(m_document.workspaceSessions.size()));
+    map.insert(QStringLiteral("workspacePlanSessionFound"), workspacePlan.value(QStringLiteral("sessionFound")));
+    map.insert(QStringLiteral("workspacePlanDrift"), workspacePlan.value(QStringLiteral("drift")));
+    map.insert(QStringLiteral("workspaceObservedRows"), workspaceObserved().value(QStringLiteral("rows")));
+    map.insert(QStringLiteral("workspaceObservedWrapping"), workspaceObserved().value(QStringLiteral("wrapping")));
     return map;
 }
 
@@ -931,6 +983,508 @@ void AppController::setWorkspaceObservationPaused(bool paused)
     m_workspace->setPaused(paused);
     emit diagnosticsChanged();
     recompute();
+}
+
+bool AppController::workspaceManagementEnabled() const
+{
+    return m_document.preferences.workspaceManagementEnabled;
+}
+
+bool AppController::titleFallbackEnabled() const
+{
+    return m_document.preferences.titleFallbackEnabled;
+}
+
+QString AppController::activeWorkspaceSession() const
+{
+    return m_document.preferences.activeWorkspaceSessionId.value_or(QString());
+}
+
+QVariantList AppController::workspaceSessions() const
+{
+    QVariantList list;
+    for (const WorkspaceSession &session : m_document.workspaceSessions) {
+        QVariantMap map;
+        map.insert(QStringLiteral("id"), session.id);
+        map.insert(QStringLiteral("displayName"), session.displayName);
+        map.insert(QStringLiteral("hasRows"), session.rows.has_value());
+        map.insert(QStringLiteral("rows"), session.rows.value_or(0));
+        map.insert(QStringLiteral("hasWrapping"), session.navigationWrapping.has_value());
+        map.insert(QStringLiteral("wrapping"), session.navigationWrapping.value_or(false));
+        map.insert(QStringLiteral("desktopCount"), static_cast<int>(session.desktops.size()));
+        QVariantList desktops;
+        for (const WorkspaceDesktopEntry &desktop : session.desktops) {
+            QVariantMap entry;
+            entry.insert(QStringLiteral("ordinal"), desktop.ordinal);
+            entry.insert(QStringLiteral("name"), desktop.name);
+            desktops.push_back(entry);
+        }
+        map.insert(QStringLiteral("desktops"), desktops);
+        map.insert(QStringLiteral("active"), session.id == activeWorkspaceSession());
+        list.push_back(map);
+    }
+    return list;
+}
+
+QVariantList AppController::workspaceSessionOptions() const
+{
+    QVariantList list;
+    QVariantMap none;
+    none.insert(QStringLiteral("id"), QString());
+    none.insert(QStringLiteral("label"), QStringLiteral("(žiadna)"));
+    list.push_back(none);
+    for (const WorkspaceSession &session : m_document.workspaceSessions) {
+        QVariantMap map;
+        map.insert(QStringLiteral("id"), session.id);
+        map.insert(QStringLiteral("label"), session.displayName);
+        list.push_back(map);
+    }
+    return list;
+}
+
+QVariantList AppController::workspaceDesktopEntries() const
+{
+    QVariantList list;
+    for (const WorkspaceSession &session : m_document.workspaceSessions) {
+        for (const WorkspaceDesktopEntry &desktop : session.desktops) {
+            QVariantMap entry;
+            entry.insert(QStringLiteral("sessionId"), session.id);
+            entry.insert(QStringLiteral("sessionLabel"), session.displayName);
+            entry.insert(QStringLiteral("ordinal"), desktop.ordinal);
+            entry.insert(QStringLiteral("name"), desktop.name);
+            list.push_back(entry);
+        }
+    }
+    return list;
+}
+
+QVariantMap AppController::workspaceObserved() const
+{
+    const WorkspaceState state = currentWorkspaceState();
+    QVariantMap map;
+    map.insert(QStringLiteral("available"), state.availability == WorkspaceAvailability::Available);
+    map.insert(QStringLiteral("refreshPending"), state.refreshPending);
+    map.insert(QStringLiteral("count"), static_cast<int>(state.desktops.size()));
+    map.insert(QStringLiteral("currentOrdinal"), state.currentOrdinal);
+    map.insert(QStringLiteral("rows"), state.rows.has_value() ? QVariant(*state.rows) : QVariant());
+    map.insert(QStringLiteral("wrapping"),
+               state.navigationWrappingAround.has_value() ? QVariant(*state.navigationWrappingAround) : QVariant());
+    map.insert(QStringLiteral("paused"), workspaceObservationPaused());
+    map.insert(QStringLiteral("errorClass"), m_workspace != nullptr ? m_workspace->errorClass() : QString());
+    return map;
+}
+
+QVariantMap AppController::workspacePlanPreview() const
+{
+    return workspacePlanMap();
+}
+
+QVariantMap AppController::workspacePlanMap() const
+{
+    const WorkspacePlan plan =
+        computeWorkspacePlan(m_document, activeWorkspaceSession(), currentWorkspaceState(), openWindowIdentities());
+    QVariantMap map;
+    map.insert(QStringLiteral("sessionId"), plan.sessionId);
+    map.insert(QStringLiteral("sessionFound"), plan.sessionFound);
+    map.insert(QStringLiteral("managementEnabled"), plan.managementEnabled);
+    map.insert(QStringLiteral("observationAvailable"), plan.observationAvailable);
+    map.insert(QStringLiteral("desiredDesktopCount"), plan.desiredDesktopCount);
+    map.insert(QStringLiteral("observedDesktopCount"), plan.observedDesktopCount);
+    map.insert(QStringLiteral("drift"), plan.drift);
+    map.insert(QStringLiteral("extraDesktop"), plan.extraDesktop);
+    map.insert(QStringLiteral("rowsChange"), plan.rowsChange);
+    map.insert(QStringLiteral("wrappingChange"), plan.wrappingChange);
+    map.insert(QStringLiteral("desiredRows"), plan.desiredRows.has_value() ? QVariant(*plan.desiredRows) : QVariant());
+    map.insert(QStringLiteral("observedRows"),
+               plan.observedRows.has_value() ? QVariant(*plan.observedRows) : QVariant());
+    map.insert(QStringLiteral("desiredWrapping"),
+               plan.desiredWrapping.has_value() ? QVariant(*plan.desiredWrapping) : QVariant());
+    map.insert(QStringLiteral("observedWrapping"),
+               plan.observedWrapping.has_value() ? QVariant(*plan.observedWrapping) : QVariant());
+    QVariantList desktops;
+    for (const WorkspaceDesktopPlan &desktop : plan.desktops) {
+        QVariantMap entry;
+        entry.insert(QStringLiteral("ordinal"), desktop.ordinal);
+        entry.insert(QStringLiteral("name"), desktop.name);
+        entry.insert(QStringLiteral("observedName"), desktop.observedName);
+        entry.insert(QStringLiteral("create"), desktop.create);
+        entry.insert(QStringLiteral("rename"), desktop.rename);
+        desktops.push_back(entry);
+    }
+    map.insert(QStringLiteral("desktops"), desktops);
+    QVariantList launches;
+    for (const WorkspaceLaunchPlan &launch : plan.launches) {
+        QVariantMap entry;
+        entry.insert(QStringLiteral("profileId"), launch.profileId);
+        entry.insert(QStringLiteral("displayName"), launch.displayName);
+        entry.insert(QStringLiteral("desktopOrdinal"), launch.desktopOrdinal);
+        entry.insert(QStringLiteral("maximize"), launch.maximize);
+        entry.insert(QStringLiteral("intent"), workspaceLaunchIntentName(launch.intent));
+        launches.push_back(entry);
+    }
+    map.insert(QStringLiteral("launches"), launches);
+    return map;
+}
+
+QVector<ApplicationIdentity> AppController::openWindowIdentities() const
+{
+    QVector<ApplicationIdentity> identities;
+    for (const InventoryEntry &entry : m_context->inventory()) {
+        ApplicationIdentity identity;
+        identity.desktopFileName = entry.desktopFileName;
+        identity.resourceClass = entry.resourceClass;
+        identity.resourceName = entry.resourceName;
+        identities.push_back(identity);
+    }
+    return identities;
+}
+
+bool AppController::workspaceSessionExists(const QString &id) const
+{
+    if (id.isEmpty()) {
+        return false;
+    }
+    for (const WorkspaceSession &session : m_document.workspaceSessions) {
+        if (session.id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int AppController::workspaceSessionDesktopCount(const QString &id) const
+{
+    for (const WorkspaceSession &session : m_document.workspaceSessions) {
+        if (session.id == id) {
+            return static_cast<int>(session.desktops.size());
+        }
+    }
+    return 0;
+}
+
+WorkspaceAssignment *AppController::applicationWorkspace(const QString &id)
+{
+    for (ApplicationProfile &profile : m_document.applications) {
+        if (profile.id != id) {
+            continue;
+        }
+        if (!profile.workspace) {
+            return nullptr;
+        }
+        return &*profile.workspace;
+    }
+    return nullptr;
+}
+
+void AppController::setWorkspaceManagementEnabled(bool enabled)
+{
+    if (m_document.preferences.workspaceManagementEnabled == enabled) {
+        return;
+    }
+    m_document.preferences.workspaceManagementEnabled = enabled;
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::setTitleFallbackEnabled(bool enabled)
+{
+    if (m_document.preferences.titleFallbackEnabled == enabled) {
+        return;
+    }
+    m_document.preferences.titleFallbackEnabled = enabled;
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::setActiveWorkspaceSession(const QString &id)
+{
+    const QString normalized = workspaceSessionExists(id) ? id : QString();
+    if (activeWorkspaceSession() == normalized) {
+        return;
+    }
+    if (normalized.isEmpty()) {
+        m_document.preferences.activeWorkspaceSessionId.reset();
+    } else {
+        m_document.preferences.activeWorkspaceSessionId = normalized;
+    }
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::addWorkspaceSession(const QString &displayName)
+{
+    const QString name = sanitizeDisplayText(displayName, kMaxDisplayNameBytes, QStringLiteral("Session"));
+    int suffix = 1;
+    QString id = QStringLiteral("session-%1").arg(suffix);
+    while (workspaceSessionExists(id)) {
+        ++suffix;
+        id = QStringLiteral("session-%1").arg(suffix);
+    }
+    WorkspaceSession session;
+    session.id = id;
+    session.displayName = name;
+    WorkspaceDesktopEntry desktop;
+    desktop.ordinal = 1;
+    desktop.name = QStringLiteral("Plocha 1");
+    session.desktops.push_back(desktop);
+    m_document.workspaceSessions.push_back(session);
+    if (!m_document.preferences.activeWorkspaceSessionId) {
+        m_document.preferences.activeWorkspaceSessionId = id;
+    }
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::removeWorkspaceSession(const QString &id)
+{
+    for (int i = 0; i < m_document.workspaceSessions.size(); ++i) {
+        if (m_document.workspaceSessions.at(i).id != id) {
+            continue;
+        }
+        m_document.workspaceSessions.removeAt(i);
+        if (activeWorkspaceSession() == id) {
+            m_document.preferences.activeWorkspaceSessionId.reset();
+        }
+        for (ApplicationProfile &profile : m_document.applications) {
+            if (profile.workspace && profile.workspace->sessionId == id) {
+                profile.workspace.reset();
+            }
+        }
+        emit documentChanged();
+        emit presentationChanged();
+        return;
+    }
+}
+
+void AppController::renameWorkspaceSession(const QString &id, const QString &displayName)
+{
+    const QString name = sanitizeDisplayText(displayName, kMaxDisplayNameBytes, QString());
+    if (name.isEmpty()) {
+        return;
+    }
+    for (WorkspaceSession &session : m_document.workspaceSessions) {
+        if (session.id == id) {
+            if (session.displayName == name) {
+                return;
+            }
+            session.displayName = name;
+            emit documentChanged();
+            emit presentationChanged();
+            return;
+        }
+    }
+}
+
+void AppController::setWorkspaceSessionRows(const QString &id, int rows)
+{
+    for (WorkspaceSession &session : m_document.workspaceSessions) {
+        if (session.id != id) {
+            continue;
+        }
+        if (rows <= 0) {
+            if (!session.rows.has_value()) {
+                return;
+            }
+            session.rows.reset();
+        } else {
+            const int clamped = std::clamp(rows, 1, kMaxWorkspaceDesktops);
+            if (session.rows.has_value() && *session.rows == clamped) {
+                return;
+            }
+            session.rows = clamped;
+        }
+        emit documentChanged();
+        emit presentationChanged();
+        return;
+    }
+}
+
+void AppController::setWorkspaceSessionWrapping(const QString &id, bool enabled)
+{
+    for (WorkspaceSession &session : m_document.workspaceSessions) {
+        if (session.id != id) {
+            continue;
+        }
+        if (session.navigationWrapping.has_value() && *session.navigationWrapping == enabled) {
+            return;
+        }
+        session.navigationWrapping = enabled;
+        emit documentChanged();
+        emit presentationChanged();
+        return;
+    }
+}
+
+void AppController::setWorkspaceSessionDesktopCount(const QString &id, int count)
+{
+    for (WorkspaceSession &session : m_document.workspaceSessions) {
+        if (session.id != id) {
+            continue;
+        }
+        const int clamped = std::clamp(count, 1, kMaxWorkspaceDesktops);
+        if (session.desktops.size() == clamped) {
+            return;
+        }
+        if (session.desktops.size() < clamped) {
+            while (session.desktops.size() < clamped) {
+                WorkspaceDesktopEntry desktop;
+                desktop.ordinal = static_cast<int>(session.desktops.size()) + 1;
+                desktop.name = QStringLiteral("Plocha %1").arg(desktop.ordinal);
+                session.desktops.push_back(desktop);
+            }
+        } else {
+            session.desktops.resize(clamped);
+        }
+        for (ApplicationProfile &profile : m_document.applications) {
+            if (profile.workspace && profile.workspace->sessionId == id) {
+                profile.workspace->desktopOrdinal = std::min(profile.workspace->desktopOrdinal, clamped);
+            }
+        }
+        emit documentChanged();
+        emit presentationChanged();
+        return;
+    }
+}
+
+void AppController::setWorkspaceSessionDesktopName(const QString &id, int ordinal, const QString &name)
+{
+    const QString sanitized = sanitizeDisplayText(name, kMaxDisplayNameBytes, QString());
+    if (sanitized.isEmpty()) {
+        return;
+    }
+    for (WorkspaceSession &session : m_document.workspaceSessions) {
+        if (session.id != id) {
+            continue;
+        }
+        for (WorkspaceDesktopEntry &desktop : session.desktops) {
+            if (desktop.ordinal != ordinal) {
+                continue;
+            }
+            if (desktop.name == sanitized) {
+                return;
+            }
+            desktop.name = sanitized;
+            emit documentChanged();
+            emit presentationChanged();
+            return;
+        }
+        return;
+    }
+}
+
+void AppController::setApplicationWorkspaceSession(const QString &id, const QString &sessionId)
+{
+    for (ApplicationProfile &profile : m_document.applications) {
+        if (profile.id != id) {
+            continue;
+        }
+        if (!workspaceSessionExists(sessionId)) {
+            if (profile.workspace) {
+                profile.workspace.reset();
+                emit documentChanged();
+                emit presentationChanged();
+            }
+            return;
+        }
+        if (!profile.workspace) {
+            profile.workspace = WorkspaceAssignment{};
+        }
+        profile.workspace->sessionId = sessionId;
+        const int desktopCount = workspaceSessionDesktopCount(sessionId);
+        profile.workspace->desktopOrdinal = std::clamp(profile.workspace->desktopOrdinal, 1, desktopCount);
+        emit documentChanged();
+        emit presentationChanged();
+        return;
+    }
+}
+
+void AppController::setApplicationWorkspaceDesktop(const QString &id, int ordinal)
+{
+    WorkspaceAssignment *workspace = applicationWorkspace(id);
+    if (workspace == nullptr || !workspaceSessionExists(workspace->sessionId)) {
+        return;
+    }
+    const int clamped = std::clamp(ordinal, 1, workspaceSessionDesktopCount(workspace->sessionId));
+    if (workspace->desktopOrdinal == clamped) {
+        return;
+    }
+    workspace->desktopOrdinal = clamped;
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::setApplicationWorkspaceLaunch(const QString &id, bool launch)
+{
+    WorkspaceAssignment *workspace = applicationWorkspace(id);
+    if (workspace == nullptr || workspace->launch == launch) {
+        return;
+    }
+    workspace->launch = launch;
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::setApplicationWorkspaceMaximize(const QString &id, bool maximize)
+{
+    WorkspaceAssignment *workspace = applicationWorkspace(id);
+    if (workspace == nullptr || workspace->maximize == maximize) {
+        return;
+    }
+    workspace->maximize = maximize;
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::setApplicationWorkspaceLaunchFile(const QString &id, const QString &desktopFile)
+{
+    WorkspaceAssignment *workspace = applicationWorkspace(id);
+    if (workspace == nullptr) {
+        return;
+    }
+    const QString trimmed = desktopFile.trimmed();
+    if (trimmed.isEmpty()) {
+        if (workspace->launchDesktopFile.has_value()) {
+            workspace->launchDesktopFile.reset();
+            emit documentChanged();
+            emit presentationChanged();
+        }
+        return;
+    }
+    if (!workspaceDesktopIdLooksValid(trimmed)) {
+        return;
+    }
+    if (workspace->launchDesktopFile.has_value() && *workspace->launchDesktopFile == trimmed) {
+        return;
+    }
+    workspace->launchDesktopFile = trimmed;
+    emit documentChanged();
+    emit presentationChanged();
+}
+
+void AppController::setApplicationTitleFallback(const QString &id, bool enabled, const QString &mode,
+                                                const QString &pattern)
+{
+    const auto matchMode = titleMatchModeFromJsonName(mode);
+    if (!matchMode) {
+        return;
+    }
+    WorkspaceAssignment *workspace = applicationWorkspace(id);
+    if (workspace == nullptr) {
+        return;
+    }
+    const QString sanitized = sanitizeDisplayText(pattern, kMaxTitlePatternBytes, QString());
+    if (!workspace->titleFallback) {
+        workspace->titleFallback = TitleFallback{};
+    }
+    if (workspace->titleFallback->enabled == enabled && workspace->titleFallback->mode == *matchMode
+        && workspace->titleFallback->pattern == sanitized) {
+        return;
+    }
+    workspace->titleFallback->enabled = enabled;
+    workspace->titleFallback->mode = *matchMode;
+    workspace->titleFallback->pattern = sanitized;
+    emit documentChanged();
+    emit presentationChanged();
 }
 
 void AppController::setGlobalSpeed(int percent)

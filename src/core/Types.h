@@ -10,7 +10,7 @@
 
 namespace contextdeck {
 
-inline constexpr int kSchemaVersion = 3;
+inline constexpr int kSchemaVersion = 4;
 inline constexpr quint16 kG213VendorId = 0x046d;
 inline constexpr quint16 kG213ProductId = 0xc336;
 inline constexpr const char *kVendorIdText = "046d";
@@ -18,6 +18,10 @@ inline constexpr const char *kProductIdText = "c336";
 inline constexpr const char *kDeviceModel = "logitech-g213-prodigy";
 inline constexpr int kZoneCount = 5;
 inline constexpr qsizetype kMaxDocumentBytes = 1024 * 1024;
+inline constexpr qsizetype kMaxIdentifierBytes = 128;
+inline constexpr qsizetype kMaxDisplayNameBytes = 256;
+inline constexpr qsizetype kMaxTitlePatternBytes = 128;
+inline constexpr int kMaxWorkspaceDesktops = 32;
 inline constexpr const char *kZoneNames[kZoneCount] = {
     "Left Area",
     "Middle Area",
@@ -87,6 +91,39 @@ enum class WorkspaceAvailability {
     Unknown,
     Available,
 };
+
+enum class TitleMatchMode {
+    Exact,
+    Contains,
+    Prefix,
+};
+
+[[nodiscard]] inline std::optional<TitleMatchMode> titleMatchModeFromJsonName(QStringView name)
+{
+    if (name == QLatin1String("exact")) {
+        return TitleMatchMode::Exact;
+    }
+    if (name == QLatin1String("contains")) {
+        return TitleMatchMode::Contains;
+    }
+    if (name == QLatin1String("prefix")) {
+        return TitleMatchMode::Prefix;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] inline QString titleMatchModeJsonName(TitleMatchMode mode)
+{
+    switch (mode) {
+    case TitleMatchMode::Exact:
+        return QStringLiteral("exact");
+    case TitleMatchMode::Contains:
+        return QStringLiteral("contains");
+    case TitleMatchMode::Prefix:
+        return QStringLiteral("prefix");
+    }
+    return QStringLiteral("contains");
+}
 
 enum class SlotContribution {
     None,
@@ -166,6 +203,29 @@ struct DesiredLighting {
 [[nodiscard]] inline bool isDeviceLightingMode(LightingMode mode)
 {
     return mode != LightingMode::Untouched;
+}
+
+[[nodiscard]] inline bool workspaceDesktopIdLooksValid(const QString &value)
+{
+    if (value.isEmpty() || value.size() > 256) {
+        return false;
+    }
+    for (const QChar ch : value) {
+        if (ch.category() == QChar::Other_Control) {
+            return false;
+        }
+        if (!(ch.isLetterOrNumber() || ch == QLatin1Char('.') || ch == QLatin1Char('-') || ch == QLatin1Char('_'))) {
+            return false;
+        }
+    }
+    if (value.endsWith(QLatin1String(".desktop"))) {
+        return true;
+    }
+    if (!value.contains(QLatin1Char('.')) || value.startsWith(QLatin1Char('.')) || value.endsWith(QLatin1Char('.'))
+        || value.contains(QLatin1String(".."))) {
+        return false;
+    }
+    return true;
 }
 
 [[nodiscard]] inline Lighting untouchedLighting()
@@ -270,6 +330,8 @@ struct WorkspaceState {
     QVector<WorkspaceDesktop> desktops;
     QString currentId;
     int currentOrdinal = 0;
+    std::optional<int> rows;
+    std::optional<bool> navigationWrappingAround;
     bool refreshPending = false;
 
     [[nodiscard]] bool operator==(const WorkspaceState &other) const = default;
@@ -313,12 +375,49 @@ struct ApplicationIdentity {
     }
 };
 
+struct WorkspaceDesktopEntry {
+    int ordinal = 0;
+    QString name;
+
+    [[nodiscard]] bool operator==(const WorkspaceDesktopEntry &other) const = default;
+};
+
+struct WorkspaceSession {
+    QString id;
+    QString displayName;
+    std::optional<int> rows;
+    std::optional<bool> navigationWrapping;
+    QVector<WorkspaceDesktopEntry> desktops;
+
+    [[nodiscard]] bool operator==(const WorkspaceSession &other) const = default;
+};
+
+struct TitleFallback {
+    bool enabled = false;
+    TitleMatchMode mode = TitleMatchMode::Contains;
+    QString pattern;
+
+    [[nodiscard]] bool operator==(const TitleFallback &other) const = default;
+};
+
+struct WorkspaceAssignment {
+    QString sessionId;
+    int desktopOrdinal = 0;
+    bool launch = false;
+    bool maximize = false;
+    std::optional<QString> launchDesktopFile;
+    std::optional<TitleFallback> titleFallback;
+
+    [[nodiscard]] bool operator==(const WorkspaceAssignment &other) const = default;
+};
+
 struct ApplicationProfile {
     QString id;
     QString displayName;
     MatchSpec match;
     QHash<ControlId, Assignment> keys;
     std::optional<Lighting> lighting;
+    std::optional<WorkspaceAssignment> workspace;
 };
 
 struct DeviceScope {
@@ -330,6 +429,9 @@ struct DeviceScope {
 struct Preferences {
     bool automaticEnabled = true;
     bool trayNotifications = false;
+    bool workspaceManagementEnabled = false;
+    bool titleFallbackEnabled = false;
+    std::optional<QString> activeWorkspaceSessionId;
 };
 
 struct ProfileDocument {
@@ -338,6 +440,7 @@ struct ProfileDocument {
     QHash<ControlId, Assignment> globalKeys;
     Lighting globalLighting;
     QVector<ApplicationProfile> applications;
+    QVector<WorkspaceSession> workspaceSessions;
     Preferences preferences;
 };
 

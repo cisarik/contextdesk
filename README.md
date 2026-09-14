@@ -5,14 +5,18 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 
 > **Status: early development.** Five-zone lighting and application context
 > (M1) are implemented and recorded as accepted on hardware. The input broker
-> (M2) exists in this repository and can be installed **inactive**. Named
-> physical slices from Sessions 16, 19, 22, 23, and 24 (explicit ARM, sampled
-> G213 pass-through, invocation-bound cutoff recovery, armed watchdog abort
-> with a held modifier) are recorded as accepted on the reference host;
-> **full G4** remains open, including live host suspend/resume, and
-> independent G3 re-audit of the residual ACL gap remains host-mitigated
-> only. Workspace-aware five-zone lighting (M3) is an **implementation
-> candidate** in this tree — not physically accepted. The plan lives in
+> (M2) exists in this repository and can be installed **inactive**. The named
+> live G4 slices are accepted, but the M2 logical whole remains open. M2 is
+> parked with G3 host-mitigated on the authorized reference host; the next
+> bounded whole is M4 workspace session manager. **Full G4** remains open,
+> including live host suspend/resume, and independent G3 re-audit of the
+> residual ACL gap remains host-mitigated only. M3 workspace-aware lighting is
+> code-accepted on `502ae75...`; its physical five-zone IRL observation is
+> deferred by explicit COOPERATOR decision. M3 is not closed, and code
+> acceptance is not physical acceptance. M4 workspace sessions Slice A
+> (schema 4, desktop observation, dry-run plan, session editor) is an
+> **implementation candidate** — not accepted and not live: it performs no
+> desktop mutation and launches nothing. The plan lives in
 > [ROADMAP.md](ROADMAP.md) and the design in
 > [docs/architecture.md](docs/architecture.md).
 
@@ -31,6 +35,11 @@ does — automatically, quietly, and only where you configured it:
 - **Workspace-aware lighting (opt-in).** A global five-slot layout can mix
   virtual-desktop indicators with application color. Existing presets keep
   their previous behavior until those roles are configured.
+- **Named workspace sessions (in progress).** M4 Slice A describes named
+  desktop layouts and per-application assignments, observes live desktop
+  state, and previews the intended diff. Live desktop changes and in-session
+  launch arrive in a later, separately authorized slice; Plasma-login
+  autostart stays in M5.
 - **A quiet tray indicator.** Connection state, automatic mode, the current
   app and the active profile at a glance.
 - **Two deck buttons.** Game Mode → Suspend and Backlight → Displays Off —
@@ -55,9 +64,10 @@ enough; device-free tests do not need that path.
 
 | Area | State |
 |------|-------|
-| Plan | Foundation planning accepted; M2 parked; M3 implementation-candidate — [ROADMAP.md](ROADMAP.md) |
+| Plan | Foundation planning accepted; M2 parked; M3 code-accepted with physical observation deferred; M4 Slice A implementation-candidate — [ROADMAP.md](ROADMAP.md) |
 | Lighting (M1) | Implemented; recorded as COOPERATOR-accepted IRL (five zones, not per-key) |
-| Workspace lighting (M3) | Schema-3 roles, VirtualDesktopManager observation, five-slot composition in tree. **Not accepted.** Later IRL steps: [docs/testing-m3.md](docs/testing-m3.md) |
+| Workspace lighting (M3) | M3 workspace-aware lighting is code-accepted on `502ae75...`; its physical five-zone IRL observation is deferred by explicit COOPERATOR decision. M3 is not closed, and code acceptance is not physical acceptance. Later IRL steps: [docs/testing-m3.md](docs/testing-m3.md) |
+| Workspace sessions (M4) | Slice A implementation candidate: schema 4 sessions/assignments, extended desktop observation (`rows`, wrapping), pure dry-run plan, `Plochy` editor, Apply disabled. **Not accepted; no live desktop mutation or application launch.** Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md) |
 | Input broker (M2) | Parked. Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL, suspend/resume sleep hook). Inactive install recorded; named Sessions 16/19/22/23/24 slices accepted; **full G4 remains open**; residual independent G3 evidence gap is not closed by this whole |
 | Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named ARM/pass-through/cutoff and armed-watchdog/held-modifier slices accepted; LED, all-control, live suspend/resume, and production autostart still open |
 | Build / tests | CMake + Ninja; registered CTest suite owned by [CMakeLists.txt](CMakeLists.txt) |
@@ -69,10 +79,11 @@ enough; device-free tests do not need that path.
 |------|---------|
 | [ROADMAP.md](ROADMAP.md) | The plan: milestones, evidence gates, current state |
 | [docs/architecture.md](docs/architecture.md) | Accepted architecture and boundaries |
-| [docs/adr/](docs/adr/) | Product ADRs (suspend/resume sleep hook: ADR 0001) |
+| [docs/adr/](docs/adr/) | Product ADRs 0001–0004 (sleep hook, host mutation authority, schema 4, typed launch) |
 | [docs/operations.md](docs/operations.md) | Host enablement, G3/S5 install, recovery notes |
 | [docs/testing-m2.md](docs/testing-m2.md) | M2 / G4 test pack (named slices accepted; full G4 not passed) |
 | [docs/testing-m3.md](docs/testing-m3.md) | M3 IRL checklist (later acceptance; no host mutation) |
+| [docs/testing-m4.md](docs/testing-m4.md) | M4 workspace sessions IRL checklist (later acceptance; no host mutation) |
 | [handout.md](handout.md) | Original bootstrap brief (historical) |
 | [LICENSE](LICENSE) | MIT file; the final product licensing decision is still pending |
 

@@ -23,7 +23,7 @@ have their own owners.
 
 ## Layering
 
-1. Typed profile document (schema_version 3).
+1. Typed profile document (schema_version 4).
 2. Deterministic resolver: identity + control → assignment, and identity +
    workspace state → lighting preset. No I/O, D-Bus, device access, or GUI.
 3. Context bridge supplies application identity to the session application.
@@ -72,21 +72,93 @@ When several profiles agree with the identity, ranking is:
 Equal rank keeps file order (first wins). An empty identity matches no
 application profile and uses the global profile.
 
+### Workspace assignment resolution (M4)
+
+`MatchSpec` remains the only identity matcher. The M4 assignment resolver is
+pure and in-memory:
+
+1. Identity match through the typed matcher wins. A matched profile contributes
+   its `workspace` assignment when present.
+2. Only when identity matching fails **and both** the global
+   `title_fallback_enabled` preference and the profile's
+   `title_fallback.enabled` are true, the user-authored `pattern` is compared
+   with the profile's `mode` against the focused-window caption. A profile with
+   no workspace assignment or an empty pattern cannot match.
+3. A title match selects that profile's assignment for that one focus event
+   only. The caption is discarded after the call; it is never stored, never
+   logged, and never added to `match` or `MatchSpec`.
+4. When either flag is false, no caption comparison occurs at all.
+
+Modes are `exact`, `contains`, and `prefix`, compared case-sensitively.
+Ordinary lighting resolution is unchanged by M4: it remains temporary override
+→ workspace layout → matching application preset → global preset.
+
 ## schema_version policy
 
-The only activatable schema is integer `3`. A missing, non-integer, or other
-`schema_version` is refused. A **future** version (greater than 3) is refused
+The only activatable schema is integer `4`. A missing, non-integer, or other
+`schema_version` is refused. A **future** version (greater than 4) is refused
 without rewriting the file. Unknown semantic fields are rejected rather than
 silently discarded. Device scope other than vendor `046d`, product `c336`,
 model `logitech-g213-prodigy` is rejected.
 
-A version-1 file is read, migrated in memory to schema 3, and used. It is
+A version-1 file is read, migrated in memory to schema 4, and used. It is
 **never rewritten on disk** unless the user saves. Version-1 `automatic`
 becomes `untouched` (the color is kept as `base_color` for later Direct use);
 `lights_off` becomes `off`; `temporary_color` becomes `direct`. A failed
 version-1 lighting migration preserves the original bytes and yields
 pass-through plus untouched lighting. The same in-memory mapping applies to
-valid schema-2 documents.
+valid schema-2 documents. Valid schema-1/2/3 documents migrate with
+`workspace_sessions` empty and no per-application assignments; lighting, keys,
+matches, application order, and preferences are preserved exactly. New
+schema-4-only keys are rejected as unknown semantic fields under schemas 1–3.
+
+## Workspace sessions and assignments (schema 4)
+
+Root keys are exactly `schema_version`, `device`, `global`, `applications`,
+`preferences`, and `workspace_sessions`.
+
+`preferences` adds `workspace_management_enabled` (default `false`),
+`title_fallback_enabled` (default `false`), and the optional
+`active_workspace_session_id`; existing preference fields are preserved.
+
+`workspace_sessions[]` entries:
+
+| Field | Rule |
+|-------|------|
+| `id` | non-empty, unique, ≤128 UTF-8 bytes, no control characters |
+| `display_name` | non-empty, ≤256 UTF-8 bytes, no control characters |
+| `rows` | optional integer 1–32 |
+| `navigation_wrapping` | optional boolean |
+| `desktops[]` | 1–32 entries of `{ordinal, name}`; `ordinal` is 1-based and contiguous; `name` is non-empty, ≤256 UTF-8 bytes, no control characters |
+
+Per-application `workspace` (optional object):
+
+| Field | Rule |
+|-------|------|
+| `session_id` | required; must reference a defined session |
+| `desktop_ordinal` | required integer 1–32 and ≤ that session's desktop count |
+| `launch` | optional boolean, default `false` |
+| `maximize` | optional boolean, default `false` |
+| `launch_desktop_file` | optional; no shell metacharacters; must look like a desktop id (`*.desktop` or reverse-DNS) |
+| `title_fallback` | optional `{enabled, mode, pattern}`; `mode` ∈ {`exact`, `contains`, `prefix`}; `pattern` ≤128 UTF-8 bytes, no control characters |
+
+A missing per-application `workspace` object means no launch and no placement.
+`launch_desktop_file` defaults at resolve time to `match.desktop_file_name`
+only when that field already looks like a desktop id; it is **never** derived
+from `resource_class`. Captions are never valid in `match`. At least one
+desktop per session is required, so a session with zero desktops is rejected.
+
+Durable sessions are ordinal layouts, not live desktop UUIDs; live UUIDs are
+runtime-only. Desktop names and captions are user-visible on screen but are
+never logged, never persisted in META, and never used as default identity.
+
+Schema 4 is observational in M4 Slice A: the application observes live desktop
+state, computes a dry-run `WorkspacePlan` in memory, and can save named
+sessions and assignments through the explicit `Uložiť` action. Slice A never
+creates, renames, removes, or switches a live desktop, never launches an
+application, and never writes `kwinrulesrc`. Live apply, launch, and placement
+belong to a separately authorized later slice. Plasma-login autostart stays
+out of M4 entirely (M5/G8).
 
 ## Persistence and recovery
 
@@ -99,7 +171,7 @@ valid schema-2 documents.
   the file, never creates a backup, and never enables workspace roles.
 - Replacement is refused when the existing document is unsupported, invalid, or
   only loads through a migration-error fallback. The previous bytes stay.
-- After the first schema-3 save, an older binary refuses the file; keep a
+- After the first schema-4 save, an older binary refuses the file; keep a
   COOPERATOR-owned pre-upgrade copy if a downgrade must survive later saves.
 - Any validation or write failure leaves the previous bytes untouched and
   returns a structured error: reason, JSON path or field, and `preserved`.
@@ -251,8 +323,13 @@ Never `/sys/power/state`, never `systemctl`, never `QProcess`.
 - No macros, shell strings, or executable configuration.
 - No other keyboards, operating systems, or generic remappers.
 - No plugins, telemetry, cloud, or web UI.
-- No desktop creation, persistent desktop IDs, or per-desktop profile database.
-- No M4 session management, remapping, deck layer, or M5 autostart.
+- No durable desktop UUIDs as identity and no per-desktop profile database.
+  Named sessions are ordinal layouts; live UUIDs stay runtime-only.
+- M4 Slice A does not create, rename, remove, or switch live desktops, does not
+  launch or place applications, and does not write `kwinrulesrc`. Those remain
+  separately authorized later work. M5/G8 owns Plasma-login autostart,
+  packaging, and full lifecycle.
+- No remapping or deck layer in M4; those remain separate future wholes.
 
 Chord recording, when present in the settings window, captures keys only while
 its own control has focus inside that window. That is not input interception.
@@ -378,7 +455,8 @@ drawer):
 |---------|---------|
 | **Stav** (Overview) | Five-zone Hero preview, one human-readable status sentence, empty-state CTA |
 | **Farby** | Global lighting preset, visual zone pickers, gradient helper, animation speed, Breathing color |
-| **Aplikácie** | Per-application lighting presets from the KWin inventory |
+| **Aplikácie** | Per-application lighting presets from the KWin inventory, plus named-session assignment fields (observation-only in M4 Slice A) |
+| **Plochy** | Observed desktop count/current/rows/wrapping, named-session editor, dry-run plan preview. Apply hidden/disabled until a later authorized slice |
 | **Diagnostika** | D-Bus names, bridge id, socket/SDK state, counters, power actions |
 | **Pokročilé** | Inactive M2 shortcut catalog and chord recorder |
 

@@ -121,13 +121,44 @@ are unchanged by this whole.
 | System sleep while broker active | Hook stops the unit on `pre` (orderly SIGTERM); after `post` starts it once, always disarmed, only if a valid active-before-sleep marker exists |
 | Session app reconnect after resume | Existing bounded retry; `STATUS` only; no silent `LEASE`/`ARM` |
 
+## Workspace session management (M4 Slice A)
+
+M4 keeps the session application inside an already running Plasma session. It
+adds named desktop sessions and per-application assignments without touching
+live desktop state in Slice A:
+
+- `WorkspaceReceiver` observation is extended with `rows` and
+  `navigationWrappingAround`, decoded from the same `GetAll` snapshot; the two
+  extra signals (`rowsChanged`, `navigationWrappingAroundChanged`) are
+  subscribed as invalidations only. Request ownership, coalescing,
+  one-in-flight, owner generations, and stale-reply rejection are unchanged.
+- Durable sessions are named ordinal layouts stored in schema 4 (see
+  [ADR 0003](adr/0003-workspace-assignment-schema.md)), not live desktop UUIDs.
+  Live UUIDs stay runtime-only; desktop names and captions are never logged.
+- `WorkspacePlan` is a pure component: given a session and an observed
+  workspace snapshot it computes create/rename/rows/wrapping intent, an
+  explicit drift/extra-desktop indicator, and per-assignment launch intent
+  (`would_launch`, `already_running`, `missing_desktop_file`, `disabled`). It
+  performs no D-Bus, KIO, compositor, or mutation call. Launch-attempt debounce
+  and transaction trigger classification are pure in-memory helpers.
+- No live desktop mutation, no application launch, and no `kwinrulesrc` write
+  in Slice A. A later separately authorized slice owns
+  `createDesktop`/`setDesktopName`/`removeDesktop`, typed launch, and
+  placement (see [ADR 0002](adr/0002-host-desktop-mutation-authority.md) and
+  [ADR 0004](adr/0004-typed-application-launch.md)).
+- M5/G8 owns Plasma-login autostart and systemd/session integration. M4 must
+  not start at login and must not add `[Install]`, `graphical-session.target`,
+  or autostart entries.
+
 ## Configuration contract
 
 - One authoritative versioned document:
   `$XDG_CONFIG_HOME/contextdeck/profiles.json`
-  (fallback `$HOME/.config/contextdeck/profiles.json`). Schema 3 is the
-  activatable version. Schema 1 and 2 load in memory with preserving lighting
-  mapping and are not rewritten until explicit save.
+  (fallback `$HOME/.config/contextdeck/profiles.json`). Schema 4 is the
+  activatable version. Schemas 1, 2, and 3 load in memory with preserving
+  lighting and assignment mapping and are not rewritten until explicit save.
+  Schema 4 adds `workspace_sessions` and per-application `workspace`
+  assignments; legacy documents migrate with those empty.
 - Resolution: session override → active workspace layout → application
   preset → global preset. `Inherit Global` (app level) resolves through the
   global profile; it is invalid on the global profile itself. `Disabled` is
@@ -142,6 +173,9 @@ are unchanged by this whole.
   to pass-through plus untouched lighting.
 - Application matcher stores friendly display identity plus technical match
   identity. Unknown semantic fields are rejected, not silently discarded.
+- M4 assignment resolution reuses the typed matcher only. The opt-in title
+  fallback compares a user-authored pattern against a caption in memory for one
+  call; captions are never stored, logged, or added to `MatchSpec`.
 - KConfig may hold window geometry/presentation only — never a second owner of
   profile semantics. No executable config, no shell strings, no scripting.
 

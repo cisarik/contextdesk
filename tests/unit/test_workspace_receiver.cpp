@@ -88,11 +88,15 @@ public:
             "<property name=\"count\" type=\"u\" access=\"read\"/>"
             "<property name=\"current\" type=\"s\" access=\"read\"/>"
             "<property name=\"desktops\" type=\"a(iss)\" access=\"read\"/>"
+            "<property name=\"rows\" type=\"u\" access=\"read\"/>"
+            "<property name=\"navigationWrappingAround\" type=\"b\" access=\"read\"/>"
             "<signal name=\"currentChanged\"><arg type=\"s\"/></signal>"
             "<signal name=\"countChanged\"><arg type=\"u\"/></signal>"
             "<signal name=\"desktopCreated\"><arg type=\"s\"/></signal>"
             "<signal name=\"desktopRemoved\"><arg type=\"s\"/></signal>"
             "<signal name=\"desktopDataChanged\"><arg type=\"s\"/></signal>"
+            "<signal name=\"rowsChanged\"><arg type=\"u\"/></signal>"
+            "<signal name=\"navigationWrappingAroundChanged\"><arg type=\"b\"/></signal>"
             "</interface>");
     }
 
@@ -145,6 +149,10 @@ public:
     void setEmptyName(bool enabled) { m_emptyName = enabled; }
     void setHoldReplies(bool enabled) { m_holdReplies = enabled; }
     void setCountOverride(int count) { m_countOverride = count; }
+    void setRows(int rows) { m_rows = static_cast<uint>(rows); }
+    void setWrapping(bool enabled) { m_wrapping = enabled; }
+    void setMalformedWrapping(bool enabled) { m_malformedWrapping = enabled; }
+    void setExtraKey(bool enabled) { m_extraKey = enabled; }
     void setName(int index, const QString &name) { m_desktops[index].name = name; }
     [[nodiscard]] int getAllCount() const { return m_getAllCount; }
     [[nodiscard]] int desktopCount() const { return static_cast<int>(m_desktops.size()); }
@@ -205,6 +213,24 @@ public:
         m_connection.send(signal);
     }
 
+    void emitRowsChanged()
+    {
+        QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
+                                                         QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                                         QStringLiteral("rowsChanged"));
+        signal << m_rows;
+        m_connection.send(signal);
+    }
+
+    void emitNavigationWrappingChanged()
+    {
+        QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
+                                                         QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                                         QStringLiteral("navigationWrappingAroundChanged"));
+        signal << m_wrapping;
+        m_connection.send(signal);
+    }
+
     bool finishGetAll(const QDBusMessage &message, const QDBusConnection &connection)
     {
         const bool ok = sendAll(message, connection);
@@ -238,7 +264,15 @@ public:
                 current = QStringLiteral("missing");
             }
             put(QStringLiteral("current"), QVariant(current));
-            put(QStringLiteral("rows"), QVariant::fromValue(uint(1)));
+            put(QStringLiteral("rows"), QVariant::fromValue(m_rows));
+            if (m_malformedWrapping) {
+                put(QStringLiteral("navigationWrappingAround"), QVariant(QStringLiteral("yes")));
+            } else {
+                put(QStringLiteral("navigationWrappingAround"), QVariant(m_wrapping));
+            }
+            if (m_extraKey) {
+                put(QStringLiteral("futureProperty"), QVariant(1));
+            }
 
             QDBusArgument desktopsArg;
             if (m_unsigned) {
@@ -286,6 +320,10 @@ private:
     bool m_unsigned = false;
     bool m_emptyName = false;
     bool m_holdReplies = false;
+    bool m_malformedWrapping = false;
+    bool m_extraKey = false;
+    uint m_rows = 1;
+    bool m_wrapping = false;
     int m_delayMs = 0;
     int m_getAllCount = 0;
     int m_outstandingHandlers = 0;
@@ -940,6 +978,98 @@ private slots:
         QCOMPARE(receiver.state().currentOrdinal, 1);
         QCOMPARE(receiver.state().currentId, QStringLiteral("one"));
         QCOMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void rowsAndWrappingAreDecoded()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        fake.setRows(2);
+        fake.setWrapping(true);
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        QCOMPARE(receiver.state().rows.value(), 2);
+        QCOMPARE(receiver.state().navigationWrappingAround.value(), true);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void rowsChangedRequestsFreshSnapshot()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        const quint64 snapshots = receiver.snapshotCount();
+        fake.setRows(3);
+        fake.emitRowsChanged();
+        QTRY_COMPARE(receiver.state().rows.value(), 3);
+        QVERIFY(receiver.snapshotCount() > snapshots);
+        QCOMPARE(receiver.invalidationCount() >= 1, true);
+        QCOMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void navigationWrappingChangedRequestsFreshSnapshot()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        const quint64 snapshots = receiver.snapshotCount();
+        fake.setWrapping(true);
+        fake.emitNavigationWrappingChanged();
+        QTRY_COMPARE(receiver.state().navigationWrappingAround.value(), true);
+        QVERIFY(receiver.snapshotCount() > snapshots);
+        QCOMPARE(receiver.invalidationCount() >= 1, true);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void malformedWrappingBecomesUnknown()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        fake.setMalformedWrapping(true);
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.errorClass(), QStringLiteral("wrapping-invalid"));
+        QCOMPARE(receiver.state().availability, WorkspaceAvailability::Unknown);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void unknownSnapshotKeysAreIgnored()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        fake.setExtraKey(true);
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        QCOMPARE(receiver.state().desktops.size(), 2);
+        QCOMPARE(receiver.errorClass(), QString());
         bus.unregisterService(QStringLiteral("org.kde.KWin"));
         bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
     }

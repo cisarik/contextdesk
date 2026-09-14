@@ -46,6 +46,26 @@ bool checkObjectKeys(const QJsonObject &object, const QStringList &allowed, cons
     return true;
 }
 
+bool hasControlCharacters(const QString &text)
+{
+    for (const QChar ch : text) {
+        if (ch.category() == QChar::Other_Control) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool boundedUtf8(const QString &text, qsizetype maxBytes)
+{
+    return text.toUtf8().size() <= maxBytes;
+}
+
+bool looksLikeDesktopId(const QString &value)
+{
+    return workspaceDesktopIdLooksValid(value);
+}
+
 std::optional<Rgb> parseColor(const QJsonValue &value, const QString &path, PersistenceError &error)
 {
     if (!value.isString()) {
@@ -531,9 +551,231 @@ std::optional<MatchSpec> parseMatch(const QJsonObject &object, const QString &pa
     return match;
 }
 
-std::optional<Preferences> parsePreferences(const QJsonObject &object, const QString &path, PersistenceError &error)
+std::optional<TitleFallback> parseTitleFallback(const QJsonObject &object, const QString &path, PersistenceError &error)
 {
-    static const QStringList allowed{QStringLiteral("automatic_enabled"), QStringLiteral("tray_notifications")};
+    static const QStringList allowed{
+        QStringLiteral("enabled"),
+        QStringLiteral("mode"),
+        QStringLiteral("pattern"),
+    };
+    if (!checkObjectKeys(object, allowed, path, error)) {
+        return std::nullopt;
+    }
+    if (!object.contains(QStringLiteral("enabled")) || !object.value(QStringLiteral("enabled")).isBool()) {
+        error = makeError(QStringLiteral("title_fallback.enabled must be a boolean"), path + QStringLiteral(".enabled"));
+        return std::nullopt;
+    }
+    TitleFallback fallback;
+    fallback.enabled = object.value(QStringLiteral("enabled")).toBool();
+    if (object.contains(QStringLiteral("mode"))) {
+        if (!object.value(QStringLiteral("mode")).isString()) {
+            error = makeError(QStringLiteral("title_fallback.mode must be a string"), path + QStringLiteral(".mode"));
+            return std::nullopt;
+        }
+        const auto mode = titleMatchModeFromJsonName(object.value(QStringLiteral("mode")).toString());
+        if (!mode) {
+            error = makeError(QStringLiteral("unknown title match mode"), path + QStringLiteral(".mode"));
+            return std::nullopt;
+        }
+        fallback.mode = *mode;
+    }
+    if (object.contains(QStringLiteral("pattern"))) {
+        const QJsonValue patternValue = object.value(QStringLiteral("pattern"));
+        if (!patternValue.isString()) {
+            error = makeError(QStringLiteral("title_fallback.pattern must be a string"), path + QStringLiteral(".pattern"));
+            return std::nullopt;
+        }
+        const QString pattern = patternValue.toString();
+        if (!boundedUtf8(pattern, kMaxTitlePatternBytes) || hasControlCharacters(pattern)) {
+            error = makeError(QStringLiteral("title_fallback.pattern is bounded and must be control-free"),
+                              path + QStringLiteral(".pattern"));
+            return std::nullopt;
+        }
+        fallback.pattern = pattern;
+    }
+    return fallback;
+}
+
+std::optional<WorkspaceAssignment> parseWorkspaceAssignment(const QJsonObject &object, const QString &path,
+                                                            PersistenceError &error)
+{
+    static const QStringList allowed{
+        QStringLiteral("session_id"),
+        QStringLiteral("desktop_ordinal"),
+        QStringLiteral("launch"),
+        QStringLiteral("maximize"),
+        QStringLiteral("launch_desktop_file"),
+        QStringLiteral("title_fallback"),
+    };
+    if (!checkObjectKeys(object, allowed, path, error)) {
+        return std::nullopt;
+    }
+    WorkspaceAssignment workspace;
+    if (!object.contains(QStringLiteral("session_id")) || !object.value(QStringLiteral("session_id")).isString()) {
+        error = makeError(QStringLiteral("workspace.session_id must be a string"), path + QStringLiteral(".session_id"));
+        return std::nullopt;
+    }
+    workspace.sessionId = object.value(QStringLiteral("session_id")).toString();
+    if (workspace.sessionId.isEmpty() || !boundedUtf8(workspace.sessionId, kMaxIdentifierBytes)
+        || hasControlCharacters(workspace.sessionId)) {
+        error = makeError(QStringLiteral("workspace.session_id must be non-empty, bounded, and control-free"),
+                          path + QStringLiteral(".session_id"));
+        return std::nullopt;
+    }
+    const QJsonValue ordinalValue = object.value(QStringLiteral("desktop_ordinal"));
+    if (!isInteger(ordinalValue) || ordinalValue.toInt() < 1 || ordinalValue.toInt() > kMaxWorkspaceDesktops) {
+        error = makeError(QStringLiteral("workspace.desktop_ordinal must be an integer in 1..32"),
+                          path + QStringLiteral(".desktop_ordinal"));
+        return std::nullopt;
+    }
+    workspace.desktopOrdinal = ordinalValue.toInt();
+
+    auto takeBool = [&](const QString &key, bool &target) -> bool {
+        if (!object.contains(key)) {
+            return true;
+        }
+        if (!object.value(key).isBool()) {
+            error = makeError(QStringLiteral("workspace field must be a boolean"), path + QLatin1Char('.') + key);
+            return false;
+        }
+        target = object.value(key).toBool();
+        return true;
+    };
+    if (!takeBool(QStringLiteral("launch"), workspace.launch)
+        || !takeBool(QStringLiteral("maximize"), workspace.maximize)) {
+        return std::nullopt;
+    }
+
+    if (object.contains(QStringLiteral("launch_desktop_file"))) {
+        const QJsonValue fileValue = object.value(QStringLiteral("launch_desktop_file"));
+        if (!fileValue.isString() || !looksLikeDesktopId(fileValue.toString())) {
+            error = makeError(QStringLiteral("workspace.launch_desktop_file must look like a desktop id"),
+                              path + QStringLiteral(".launch_desktop_file"));
+            return std::nullopt;
+        }
+        workspace.launchDesktopFile = fileValue.toString();
+    }
+    if (object.contains(QStringLiteral("title_fallback"))) {
+        if (!object.value(QStringLiteral("title_fallback")).isObject()) {
+            error = makeError(QStringLiteral("workspace.title_fallback must be an object"),
+                              path + QStringLiteral(".title_fallback"));
+            return std::nullopt;
+        }
+        const auto fallback = parseTitleFallback(object.value(QStringLiteral("title_fallback")).toObject(),
+                                                 path + QStringLiteral(".title_fallback"), error);
+        if (!fallback) {
+            return std::nullopt;
+        }
+        workspace.titleFallback = *fallback;
+    }
+    return workspace;
+}
+
+std::optional<WorkspaceSession> parseWorkspaceSession(const QJsonObject &object, const QString &path,
+                                                      PersistenceError &error)
+{
+    static const QStringList allowed{
+        QStringLiteral("id"),
+        QStringLiteral("display_name"),
+        QStringLiteral("rows"),
+        QStringLiteral("navigation_wrapping"),
+        QStringLiteral("desktops"),
+    };
+    if (!checkObjectKeys(object, allowed, path, error)) {
+        return std::nullopt;
+    }
+    WorkspaceSession session;
+    if (!object.contains(QStringLiteral("id")) || !object.value(QStringLiteral("id")).isString()) {
+        error = makeError(QStringLiteral("workspace session id must be a string"), path + QStringLiteral(".id"));
+        return std::nullopt;
+    }
+    session.id = object.value(QStringLiteral("id")).toString();
+    if (session.id.isEmpty() || !boundedUtf8(session.id, kMaxIdentifierBytes) || hasControlCharacters(session.id)) {
+        error = makeError(QStringLiteral("workspace session id must be non-empty, bounded, and control-free"),
+                          path + QStringLiteral(".id"));
+        return std::nullopt;
+    }
+    if (!object.contains(QStringLiteral("display_name")) || !object.value(QStringLiteral("display_name")).isString()) {
+        error = makeError(QStringLiteral("workspace session display_name must be a string"),
+                          path + QStringLiteral(".display_name"));
+        return std::nullopt;
+    }
+    session.displayName = object.value(QStringLiteral("display_name")).toString();
+    if (session.displayName.isEmpty() || !boundedUtf8(session.displayName, kMaxDisplayNameBytes)
+        || hasControlCharacters(session.displayName)) {
+        error = makeError(QStringLiteral("workspace session display_name must be non-empty, bounded, and control-free"),
+                          path + QStringLiteral(".display_name"));
+        return std::nullopt;
+    }
+    if (object.contains(QStringLiteral("rows"))) {
+        const QJsonValue rowsValue = object.value(QStringLiteral("rows"));
+        if (!isInteger(rowsValue) || rowsValue.toInt() < 1 || rowsValue.toInt() > kMaxWorkspaceDesktops) {
+            error = makeError(QStringLiteral("workspace session rows must be an integer in 1..32"),
+                              path + QStringLiteral(".rows"));
+            return std::nullopt;
+        }
+        session.rows = rowsValue.toInt();
+    }
+    if (object.contains(QStringLiteral("navigation_wrapping"))) {
+        if (!object.value(QStringLiteral("navigation_wrapping")).isBool()) {
+            error = makeError(QStringLiteral("workspace session navigation_wrapping must be a boolean"),
+                              path + QStringLiteral(".navigation_wrapping"));
+            return std::nullopt;
+        }
+        session.navigationWrapping = object.value(QStringLiteral("navigation_wrapping")).toBool();
+    }
+    if (!object.contains(QStringLiteral("desktops")) || !object.value(QStringLiteral("desktops")).isArray()) {
+        error = makeError(QStringLiteral("workspace session desktops must be an array"), path + QStringLiteral(".desktops"));
+        return std::nullopt;
+    }
+    const QJsonArray desktops = object.value(QStringLiteral("desktops")).toArray();
+    if (desktops.isEmpty() || desktops.size() > kMaxWorkspaceDesktops) {
+        error = makeError(QStringLiteral("workspace session desktops must contain 1..32 entries"),
+                          path + QStringLiteral(".desktops"));
+        return std::nullopt;
+    }
+    for (int i = 0; i < desktops.size(); ++i) {
+        const QString entryPath = path + QStringLiteral(".desktops[%1]").arg(i);
+        if (!desktops.at(i).isObject()) {
+            error = makeError(QStringLiteral("workspace desktop entry must be an object"), entryPath);
+            return std::nullopt;
+        }
+        const QJsonObject entry = desktops.at(i).toObject();
+        static const QStringList desktopAllowed{QStringLiteral("ordinal"), QStringLiteral("name")};
+        if (!checkObjectKeys(entry, desktopAllowed, entryPath, error)) {
+            return std::nullopt;
+        }
+        const QJsonValue ordinalValue = entry.value(QStringLiteral("ordinal"));
+        if (!isInteger(ordinalValue) || ordinalValue.toInt() != i + 1) {
+            error = makeError(QStringLiteral("workspace desktop ordinals must be 1-based and contiguous"),
+                              entryPath + QStringLiteral(".ordinal"));
+            return std::nullopt;
+        }
+        if (!entry.contains(QStringLiteral("name")) || !entry.value(QStringLiteral("name")).isString()) {
+            error = makeError(QStringLiteral("workspace desktop name must be a string"), entryPath + QStringLiteral(".name"));
+            return std::nullopt;
+        }
+        WorkspaceDesktopEntry desktop;
+        desktop.ordinal = ordinalValue.toInt();
+        desktop.name = entry.value(QStringLiteral("name")).toString();
+        if (desktop.name.isEmpty() || !boundedUtf8(desktop.name, kMaxDisplayNameBytes) || hasControlCharacters(desktop.name)) {
+            error = makeError(QStringLiteral("workspace desktop name must be non-empty, bounded, and control-free"),
+                              entryPath + QStringLiteral(".name"));
+            return std::nullopt;
+        }
+        session.desktops.push_back(std::move(desktop));
+    }
+    return session;
+}
+
+std::optional<Preferences> parsePreferences(const QJsonObject &object, const QString &path, int schemaVersion,
+                                            PersistenceError &error)
+{
+    QStringList allowed{QStringLiteral("automatic_enabled"), QStringLiteral("tray_notifications")};
+    if (schemaVersion >= 4) {
+        allowed << QStringLiteral("workspace_management_enabled") << QStringLiteral("title_fallback_enabled")
+                << QStringLiteral("active_workspace_session_id");
+    }
     if (!checkObjectKeys(object, allowed, path, error)) {
         return std::nullopt;
     }
@@ -553,6 +795,23 @@ std::optional<Preferences> parsePreferences(const QJsonObject &object, const QSt
     if (!takeBool(QStringLiteral("automatic_enabled"), preferences.automaticEnabled)
         || !takeBool(QStringLiteral("tray_notifications"), preferences.trayNotifications)) {
         return std::nullopt;
+    }
+    if (schemaVersion >= 4) {
+        if (!takeBool(QStringLiteral("workspace_management_enabled"), preferences.workspaceManagementEnabled)
+            || !takeBool(QStringLiteral("title_fallback_enabled"), preferences.titleFallbackEnabled)) {
+            return std::nullopt;
+        }
+        if (object.contains(QStringLiteral("active_workspace_session_id"))) {
+            const QJsonValue activeValue = object.value(QStringLiteral("active_workspace_session_id"));
+            if (!activeValue.isString() || activeValue.toString().isEmpty()
+                || !boundedUtf8(activeValue.toString(), kMaxIdentifierBytes)
+                || hasControlCharacters(activeValue.toString())) {
+                error = makeError(QStringLiteral("active_workspace_session_id must be a non-empty bounded identifier"),
+                                  path + QStringLiteral(".active_workspace_session_id"));
+                return std::nullopt;
+            }
+            preferences.activeWorkspaceSessionId = activeValue.toString();
+        }
     }
     return preferences;
 }
@@ -616,6 +875,53 @@ QJsonObject lightingToJson(const Lighting &lighting)
     return object;
 }
 
+QJsonObject titleFallbackToJson(const TitleFallback &fallback)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("enabled"), fallback.enabled);
+    object.insert(QStringLiteral("mode"), titleMatchModeJsonName(fallback.mode));
+    object.insert(QStringLiteral("pattern"), fallback.pattern);
+    return object;
+}
+
+QJsonObject workspaceAssignmentToJson(const WorkspaceAssignment &workspace)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("session_id"), workspace.sessionId);
+    object.insert(QStringLiteral("desktop_ordinal"), workspace.desktopOrdinal);
+    object.insert(QStringLiteral("launch"), workspace.launch);
+    object.insert(QStringLiteral("maximize"), workspace.maximize);
+    if (workspace.launchDesktopFile) {
+        object.insert(QStringLiteral("launch_desktop_file"), *workspace.launchDesktopFile);
+    }
+    if (workspace.titleFallback) {
+        object.insert(QStringLiteral("title_fallback"), titleFallbackToJson(*workspace.titleFallback));
+    }
+    return object;
+}
+
+QJsonObject workspaceSessionToJson(const WorkspaceSession &session)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("id"), session.id);
+    object.insert(QStringLiteral("display_name"), session.displayName);
+    if (session.rows) {
+        object.insert(QStringLiteral("rows"), *session.rows);
+    }
+    if (session.navigationWrapping) {
+        object.insert(QStringLiteral("navigation_wrapping"), *session.navigationWrapping);
+    }
+    QJsonArray desktops;
+    for (const WorkspaceDesktopEntry &desktop : session.desktops) {
+        QJsonObject entry;
+        entry.insert(QStringLiteral("ordinal"), desktop.ordinal);
+        entry.insert(QStringLiteral("name"), desktop.name);
+        desktops.append(entry);
+    }
+    object.insert(QStringLiteral("desktops"), desktops);
+    return object;
+}
+
 } // namespace
 
 ProfileStore::ProfileStore(QString configRoot)
@@ -674,18 +980,21 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
         outcome.error = makeError(QStringLiteral("future schema_version is refused"), QStringLiteral("schema_version"));
         return outcome;
     }
-    if (schemaVersion != 1 && schemaVersion != 2 && schemaVersion != kSchemaVersion) {
+    if (schemaVersion < 1) {
         outcome.error = makeError(QStringLiteral("unsupported schema_version"), QStringLiteral("schema_version"));
         return outcome;
     }
 
-    static const QStringList allowed{
+    QStringList allowed{
         QStringLiteral("schema_version"),
         QStringLiteral("device"),
         QStringLiteral("global"),
         QStringLiteral("applications"),
         QStringLiteral("preferences"),
     };
+    if (schemaVersion >= 4) {
+        allowed << QStringLiteral("workspace_sessions");
+    }
     if (!checkObjectKeys(root, allowed, QStringLiteral("$"), outcome.error)) {
         return outcome;
     }
@@ -765,6 +1074,26 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
     }
     document.globalLighting = *lighting;
 
+    if (schemaVersion >= 4 && root.contains(QStringLiteral("workspace_sessions"))) {
+        if (!root.value(QStringLiteral("workspace_sessions")).isArray()) {
+            outcome.error = makeError(QStringLiteral("workspace_sessions must be an array"), QStringLiteral("workspace_sessions"));
+            return outcome;
+        }
+        const QJsonArray sessions = root.value(QStringLiteral("workspace_sessions")).toArray();
+        for (int i = 0; i < sessions.size(); ++i) {
+            const QString path = QStringLiteral("workspace_sessions[%1]").arg(i);
+            if (!sessions.at(i).isObject()) {
+                outcome.error = makeError(QStringLiteral("workspace session must be an object"), path);
+                return outcome;
+            }
+            const auto session = parseWorkspaceSession(sessions.at(i).toObject(), path, outcome.error);
+            if (!session) {
+                return outcome;
+            }
+            document.workspaceSessions.push_back(*session);
+        }
+    }
+
     if (root.contains(QStringLiteral("applications"))) {
         if (!root.value(QStringLiteral("applications")).isArray()) {
             outcome.error = makeError(QStringLiteral("applications must be an array"), QStringLiteral("applications"));
@@ -779,13 +1108,16 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
                 return outcome;
             }
             const QJsonObject object = applications.at(i).toObject();
-            static const QStringList appAllowed{
+            QStringList appAllowed{
                 QStringLiteral("id"),
                 QStringLiteral("display_name"),
                 QStringLiteral("match"),
                 QStringLiteral("keys"),
                 QStringLiteral("lighting"),
             };
+            if (schemaVersion >= 4) {
+                appAllowed << QStringLiteral("workspace");
+            }
             if (!checkObjectKeys(object, appAllowed, path, outcome.error)) {
                 return outcome;
             }
@@ -843,6 +1175,18 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
                 }
                 profile.lighting = *appLighting;
             }
+            if (schemaVersion >= 4 && object.contains(QStringLiteral("workspace"))) {
+                if (!object.value(QStringLiteral("workspace")).isObject()) {
+                    outcome.error = makeError(QStringLiteral("workspace must be an object"), path + QStringLiteral(".workspace"));
+                    return outcome;
+                }
+                const auto workspace = parseWorkspaceAssignment(object.value(QStringLiteral("workspace")).toObject(),
+                                                                path + QStringLiteral(".workspace"), outcome.error);
+                if (!workspace) {
+                    return outcome;
+                }
+                profile.workspace = *workspace;
+            }
             document.applications.push_back(std::move(profile));
         }
     }
@@ -853,7 +1197,7 @@ LoadOutcome ProfileStore::parseDocument(const QByteArray &bytes, const QString &
             return outcome;
         }
         const auto preferences = parsePreferences(root.value(QStringLiteral("preferences")).toObject(),
-                                                  QStringLiteral("preferences"), outcome.error);
+                                                  QStringLiteral("preferences"), schemaVersion, outcome.error);
         if (!preferences) {
             return outcome;
         }
@@ -899,6 +1243,83 @@ PersistenceError ProfileStore::validate(const ProfileDocument &document)
             }
         }
     }
+
+    QSet<QString> sessionIds;
+    QHash<QString, int> sessionDesktopCounts;
+    for (int i = 0; i < document.workspaceSessions.size(); ++i) {
+        const WorkspaceSession &session = document.workspaceSessions.at(i);
+        const QString sessionPath = QStringLiteral("workspace_sessions[%1]").arg(i);
+        if (session.id.isEmpty() || !boundedUtf8(session.id, kMaxIdentifierBytes) || hasControlCharacters(session.id)) {
+            return makeError(QStringLiteral("workspace session id must be non-empty, bounded, and control-free"),
+                             sessionPath + QStringLiteral(".id"));
+        }
+        if (sessionIds.contains(session.id)) {
+            return makeError(QStringLiteral("duplicate workspace session id"), sessionPath + QStringLiteral(".id"));
+        }
+        sessionIds.insert(session.id);
+        if (session.displayName.isEmpty() || !boundedUtf8(session.displayName, kMaxDisplayNameBytes)
+            || hasControlCharacters(session.displayName)) {
+            return makeError(QStringLiteral("workspace session display_name must be non-empty, bounded, and control-free"),
+                             sessionPath + QStringLiteral(".display_name"));
+        }
+        if (session.rows && (*session.rows < 1 || *session.rows > kMaxWorkspaceDesktops)) {
+            return makeError(QStringLiteral("workspace session rows must be an integer in 1..32"),
+                             sessionPath + QStringLiteral(".rows"));
+        }
+        if (session.desktops.isEmpty() || session.desktops.size() > kMaxWorkspaceDesktops) {
+            return makeError(QStringLiteral("workspace session desktops must contain 1..32 entries"),
+                             sessionPath + QStringLiteral(".desktops"));
+        }
+        for (int j = 0; j < session.desktops.size(); ++j) {
+            const WorkspaceDesktopEntry &desktop = session.desktops.at(j);
+            const QString entryPath = sessionPath + QStringLiteral(".desktops[%1]").arg(j);
+            if (desktop.ordinal != j + 1) {
+                return makeError(QStringLiteral("workspace desktop ordinals must be 1-based and contiguous"),
+                                 entryPath + QStringLiteral(".ordinal"));
+            }
+            if (desktop.name.isEmpty() || !boundedUtf8(desktop.name, kMaxDisplayNameBytes)
+                || hasControlCharacters(desktop.name)) {
+                return makeError(QStringLiteral("workspace desktop name must be non-empty, bounded, and control-free"),
+                                 entryPath + QStringLiteral(".name"));
+            }
+        }
+        sessionDesktopCounts.insert(session.id, session.desktops.size());
+    }
+
+    if (document.preferences.activeWorkspaceSessionId
+        && !sessionIds.contains(*document.preferences.activeWorkspaceSessionId)) {
+        return makeError(QStringLiteral("active workspace session does not exist"),
+                         QStringLiteral("preferences.active_workspace_session_id"));
+    }
+
+    for (int i = 0; i < document.applications.size(); ++i) {
+        const ApplicationProfile &profile = document.applications.at(i);
+        if (!profile.workspace) {
+            continue;
+        }
+        const QString workspacePath = QStringLiteral("applications[%1].workspace").arg(i);
+        const WorkspaceAssignment &workspace = *profile.workspace;
+        if (!sessionDesktopCounts.contains(workspace.sessionId)) {
+            return makeError(QStringLiteral("workspace assignment references an unknown session"),
+                             workspacePath + QStringLiteral(".session_id"));
+        }
+        const int desktopCount = sessionDesktopCounts.value(workspace.sessionId);
+        if (workspace.desktopOrdinal < 1 || workspace.desktopOrdinal > desktopCount) {
+            return makeError(QStringLiteral("workspace.desktop_ordinal must be within the session desktop count"),
+                             workspacePath + QStringLiteral(".desktop_ordinal"));
+        }
+        if (workspace.launchDesktopFile && !looksLikeDesktopId(*workspace.launchDesktopFile)) {
+            return makeError(QStringLiteral("workspace.launch_desktop_file must look like a desktop id"),
+                             workspacePath + QStringLiteral(".launch_desktop_file"));
+        }
+        if (workspace.titleFallback) {
+            const TitleFallback &fallback = *workspace.titleFallback;
+            if (!boundedUtf8(fallback.pattern, kMaxTitlePatternBytes) || hasControlCharacters(fallback.pattern)) {
+                return makeError(QStringLiteral("title_fallback.pattern is bounded and must be control-free"),
+                                 workspacePath + QStringLiteral(".title_fallback.pattern"));
+            }
+        }
+    }
     return {};
 }
 
@@ -938,13 +1359,27 @@ QJsonObject ProfileStore::toJson(const ProfileDocument &document)
         if (profile.lighting) {
             object.insert(QStringLiteral("lighting"), lightingToJson(*profile.lighting));
         }
+        if (profile.workspace) {
+            object.insert(QStringLiteral("workspace"), workspaceAssignmentToJson(*profile.workspace));
+        }
         applications.append(object);
     }
     root.insert(QStringLiteral("applications"), applications);
 
+    QJsonArray workspaceSessions;
+    for (const WorkspaceSession &session : document.workspaceSessions) {
+        workspaceSessions.append(workspaceSessionToJson(session));
+    }
+    root.insert(QStringLiteral("workspace_sessions"), workspaceSessions);
+
     QJsonObject preferences;
     preferences.insert(QStringLiteral("automatic_enabled"), document.preferences.automaticEnabled);
     preferences.insert(QStringLiteral("tray_notifications"), document.preferences.trayNotifications);
+    preferences.insert(QStringLiteral("workspace_management_enabled"), document.preferences.workspaceManagementEnabled);
+    preferences.insert(QStringLiteral("title_fallback_enabled"), document.preferences.titleFallbackEnabled);
+    if (document.preferences.activeWorkspaceSessionId) {
+        preferences.insert(QStringLiteral("active_workspace_session_id"), *document.preferences.activeWorkspaceSessionId);
+    }
     root.insert(QStringLiteral("preferences"), preferences);
     return root;
 }

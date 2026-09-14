@@ -469,6 +469,155 @@ private slots:
         QCOMPARE(lighting.mode, LightingMode::Untouched);
         QVERIFY(workspaceLayoutIsActive(document.globalLighting));
     }
+
+    void workspaceAssignmentIdentityBeatsTitleFallback()
+    {
+        ProfileDocument document;
+        document.preferences.titleFallbackEnabled = true;
+
+        ApplicationProfile identityProfile;
+        identityProfile.id = QStringLiteral("identity");
+        identityProfile.displayName = QStringLiteral("Identity");
+        identityProfile.match.desktopFileName = QStringLiteral("editor.desktop");
+        WorkspaceAssignment identityWorkspace;
+        identityWorkspace.sessionId = QStringLiteral("s");
+        identityWorkspace.desktopOrdinal = 1;
+        identityProfile.workspace = identityWorkspace;
+        document.applications.push_back(identityProfile);
+
+        ApplicationProfile fallbackProfile;
+        fallbackProfile.id = QStringLiteral("fallback");
+        fallbackProfile.displayName = QStringLiteral("Fallback");
+        fallbackProfile.match.resourceClass = QStringLiteral("Something");
+        WorkspaceAssignment fallbackWorkspace;
+        fallbackWorkspace.sessionId = QStringLiteral("s");
+        fallbackWorkspace.desktopOrdinal = 2;
+        TitleFallback fallback;
+        fallback.enabled = true;
+        fallback.mode = TitleMatchMode::Contains;
+        fallback.pattern = QStringLiteral("Downloads");
+        fallbackWorkspace.titleFallback = fallback;
+        fallbackProfile.workspace = fallbackWorkspace;
+        document.applications.push_back(fallbackProfile);
+
+        ApplicationIdentity identity;
+        identity.desktopFileName = QStringLiteral("editor.desktop");
+        const WorkspaceResolution resolution = resolveWorkspaceAssignment(document, identity, QStringLiteral("Downloads"));
+        QVERIFY(resolution.profile != nullptr);
+        QCOMPARE(resolution.profile->id, QStringLiteral("identity"));
+        QVERIFY(!resolution.matchedByTitleFallback);
+        QVERIFY(resolution.assignment != nullptr);
+        QCOMPARE(resolution.assignment->desktopOrdinal, 1);
+    }
+
+    void workspaceTitleFallbackRequiresBothFlags()
+    {
+        ProfileDocument document;
+        ApplicationProfile fallbackProfile;
+        fallbackProfile.id = QStringLiteral("fallback");
+        fallbackProfile.displayName = QStringLiteral("Fallback");
+        fallbackProfile.match.resourceClass = QStringLiteral("Something");
+        WorkspaceAssignment workspace;
+        workspace.sessionId = QStringLiteral("s");
+        workspace.desktopOrdinal = 1;
+        TitleFallback fallback;
+        fallback.enabled = true;
+        fallback.mode = TitleMatchMode::Contains;
+        fallback.pattern = QStringLiteral("Downloads");
+        workspace.titleFallback = fallback;
+        fallbackProfile.workspace = workspace;
+        document.applications.push_back(fallbackProfile);
+
+        ApplicationIdentity unmatched;
+        unmatched.resourceClass = QStringLiteral("Other");
+        QVERIFY(resolveWorkspaceAssignment(document, unmatched, QStringLiteral("Downloads")).profile == nullptr);
+
+        document.preferences.titleFallbackEnabled = true;
+        const WorkspaceResolution matched = resolveWorkspaceAssignment(document, unmatched, QStringLiteral("Downloads"));
+        QVERIFY(matched.profile != nullptr);
+        QVERIFY(matched.matchedByTitleFallback);
+        QVERIFY(matched.assignment != nullptr);
+
+        document.applications[0].workspace->titleFallback->enabled = false;
+        QVERIFY(resolveWorkspaceAssignment(document, unmatched, QStringLiteral("Downloads")).profile == nullptr);
+    }
+
+    void workspaceTitleFallbackModes()
+    {
+        TitleFallback exact;
+        exact.enabled = true;
+        exact.mode = TitleMatchMode::Exact;
+        exact.pattern = QStringLiteral("My Window");
+        QVERIFY(titleFallbackMatches(exact, QStringLiteral("My Window")));
+        QVERIFY(!titleFallbackMatches(exact, QStringLiteral("My Window Extra")));
+
+        TitleFallback contains;
+        contains.enabled = true;
+        contains.mode = TitleMatchMode::Contains;
+        contains.pattern = QStringLiteral("Window");
+        QVERIFY(titleFallbackMatches(contains, QStringLiteral("My Window Extra")));
+        QVERIFY(!titleFallbackMatches(contains, QStringLiteral("unrelated")));
+
+        TitleFallback prefix;
+        prefix.enabled = true;
+        prefix.mode = TitleMatchMode::Prefix;
+        prefix.pattern = QStringLiteral("My ");
+        QVERIFY(titleFallbackMatches(prefix, QStringLiteral("My Window")));
+        QVERIFY(!titleFallbackMatches(prefix, QStringLiteral("Not My Window")));
+
+        TitleFallback empty;
+        empty.enabled = true;
+        empty.mode = TitleMatchMode::Contains;
+        QVERIFY(!titleFallbackMatches(empty, QStringLiteral("anything")));
+
+        ApplicationIdentity unmatched;
+        unmatched.resourceClass = QStringLiteral("Other");
+        ProfileDocument document;
+        document.preferences.titleFallbackEnabled = true;
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("fallback");
+        profile.displayName = QStringLiteral("Fallback");
+        profile.match.resourceClass = QStringLiteral("Something");
+        WorkspaceAssignment workspace;
+        workspace.sessionId = QStringLiteral("s");
+        workspace.desktopOrdinal = 1;
+        workspace.titleFallback = exact;
+        profile.workspace = workspace;
+        document.applications.push_back(profile);
+        QVERIFY(resolveWorkspaceAssignment(document, unmatched, QStringLiteral("My Window")).profile != nullptr);
+        QVERIFY(resolveWorkspaceAssignment(document, unmatched, QStringLiteral("Other caption")).profile == nullptr);
+    }
+
+    void workspaceTitleFallbackLeavesMatchSpecUnchanged()
+    {
+        ProfileDocument document;
+        document.preferences.titleFallbackEnabled = true;
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("fallback");
+        profile.displayName = QStringLiteral("Fallback");
+        profile.match.desktopFileName = QStringLiteral("svc.desktop");
+        profile.match.resourceClass = QStringLiteral("Svc");
+        WorkspaceAssignment workspace;
+        workspace.sessionId = QStringLiteral("s");
+        workspace.desktopOrdinal = 1;
+        TitleFallback fallback;
+        fallback.enabled = true;
+        fallback.mode = TitleMatchMode::Contains;
+        fallback.pattern = QStringLiteral("Downloads");
+        workspace.titleFallback = fallback;
+        profile.workspace = workspace;
+        document.applications.push_back(profile);
+
+        const MatchSpec before = document.applications.at(0).match;
+        ApplicationIdentity unmatched;
+        unmatched.resourceClass = QStringLiteral("Other");
+        const WorkspaceResolution resolution = resolveWorkspaceAssignment(document, unmatched, QStringLiteral("Downloads"));
+        QVERIFY(resolution.matchedByTitleFallback);
+        QCOMPARE(document.applications.at(0).match.desktopFileName, before.desktopFileName);
+        QCOMPARE(document.applications.at(0).match.resourceClass, before.resourceClass);
+        QCOMPARE(document.applications.at(0).match.resourceName, before.resourceName);
+        QVERIFY(!document.applications.at(0).match.isEmpty());
+    }
 };
 
 QTEST_MAIN(TestProfileResolver)

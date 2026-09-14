@@ -62,6 +62,15 @@ class AppController : public QObject
     Q_PROPERTY(QString workspaceSummary READ workspaceSummary NOTIFY presentationChanged)
     Q_PROPERTY(bool workspaceObservationPaused READ workspaceObservationPaused NOTIFY diagnosticsChanged)
     Q_PROPERTY(QVariantList globalZoneSlots READ globalZoneSlots NOTIFY documentChanged)
+    Q_PROPERTY(bool workspaceManagementEnabled READ workspaceManagementEnabled NOTIFY documentChanged)
+    Q_PROPERTY(bool titleFallbackEnabled READ titleFallbackEnabled NOTIFY documentChanged)
+    Q_PROPERTY(QString activeWorkspaceSession READ activeWorkspaceSession NOTIFY documentChanged)
+    Q_PROPERTY(QVariantList workspaceSessions READ workspaceSessions NOTIFY documentChanged)
+    Q_PROPERTY(QVariantList workspaceSessionOptions READ workspaceSessionOptions NOTIFY documentChanged)
+    Q_PROPERTY(QVariantList workspaceDesktopEntries READ workspaceDesktopEntries NOTIFY documentChanged)
+    Q_PROPERTY(QVariantMap workspaceObserved READ workspaceObserved NOTIFY presentationChanged)
+    Q_PROPERTY(QVariantMap workspacePlanPreview READ workspacePlanPreview NOTIFY presentationChanged)
+    Q_PROPERTY(bool workspaceApplyAvailable READ workspaceApplyAvailable CONSTANT)
 
 public:
     AppController(ContextReceiver *context, OpenRgbClient *rgb, PowerActions *power, QObject *parent = nullptr,
@@ -103,6 +112,15 @@ public:
     [[nodiscard]] QString workspaceSummary() const;
     [[nodiscard]] bool workspaceObservationPaused() const;
     [[nodiscard]] QVariantList globalZoneSlots() const;
+    [[nodiscard]] bool workspaceManagementEnabled() const;
+    [[nodiscard]] bool titleFallbackEnabled() const;
+    [[nodiscard]] QString activeWorkspaceSession() const;
+    [[nodiscard]] QVariantList workspaceSessions() const;
+    [[nodiscard]] QVariantList workspaceSessionOptions() const;
+    [[nodiscard]] QVariantList workspaceDesktopEntries() const;
+    [[nodiscard]] QVariantMap workspaceObserved() const;
+    [[nodiscard]] QVariantMap workspacePlanPreview() const;
+    [[nodiscard]] bool workspaceApplyAvailable() const { return false; }
     [[nodiscard]] QVariantList inventory() const;
     [[nodiscard]] QVariantList profiles() const;
     [[nodiscard]] QVariantList controls() const;
@@ -128,6 +146,23 @@ public:
     Q_INVOKABLE void useDefaultWorkspaceLayout();
     Q_INVOKABLE void useStaticZoneLayout();
     Q_INVOKABLE void setWorkspaceObservationPaused(bool paused);
+    Q_INVOKABLE void setWorkspaceManagementEnabled(bool enabled);
+    Q_INVOKABLE void setTitleFallbackEnabled(bool enabled);
+    Q_INVOKABLE void setActiveWorkspaceSession(const QString &id);
+    Q_INVOKABLE void addWorkspaceSession(const QString &displayName);
+    Q_INVOKABLE void removeWorkspaceSession(const QString &id);
+    Q_INVOKABLE void renameWorkspaceSession(const QString &id, const QString &displayName);
+    Q_INVOKABLE void setWorkspaceSessionRows(const QString &id, int rows);
+    Q_INVOKABLE void setWorkspaceSessionWrapping(const QString &id, bool enabled);
+    Q_INVOKABLE void setWorkspaceSessionDesktopCount(const QString &id, int count);
+    Q_INVOKABLE void setWorkspaceSessionDesktopName(const QString &id, int ordinal, const QString &name);
+    Q_INVOKABLE void setApplicationWorkspaceSession(const QString &id, const QString &sessionId);
+    Q_INVOKABLE void setApplicationWorkspaceDesktop(const QString &id, int ordinal);
+    Q_INVOKABLE void setApplicationWorkspaceLaunch(const QString &id, bool launch);
+    Q_INVOKABLE void setApplicationWorkspaceMaximize(const QString &id, bool maximize);
+    Q_INVOKABLE void setApplicationWorkspaceLaunchFile(const QString &id, const QString &desktopFile);
+    Q_INVOKABLE void setApplicationTitleFallback(const QString &id, bool enabled, const QString &mode,
+                                                 const QString &pattern);
     Q_INVOKABLE void setGlobalSpeed(int percent);
     Q_INVOKABLE void setGlobalBreathingColor(const QString &hex);
     Q_INVOKABLE void setApplicationLightingMode(const QString &id, const QString &modeName);
@@ -167,6 +202,11 @@ private:
     [[nodiscard]] Lighting effectiveLighting() const;
     [[nodiscard]] std::optional<Lighting> sessionOverrideLighting() const;
     [[nodiscard]] WorkspaceState currentWorkspaceState() const;
+    [[nodiscard]] QVariantMap workspacePlanMap() const;
+    [[nodiscard]] QVector<ApplicationIdentity> openWindowIdentities() const;
+    [[nodiscard]] bool workspaceSessionExists(const QString &id) const;
+    [[nodiscard]] int workspaceSessionDesktopCount(const QString &id) const;
+    [[nodiscard]] WorkspaceAssignment *applicationWorkspace(const QString &id);
     void sendLighting(const DesiredLighting &desired);
     [[nodiscard]] QString friendlyApplicationName(const ApplicationIdentity &identity) const;
     [[nodiscard]] QString openRgbPhrase() const;

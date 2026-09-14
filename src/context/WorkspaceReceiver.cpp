@@ -311,6 +311,8 @@ void WorkspaceReceiver::subscribe()
         QStringLiteral("desktopCreated"),
         QStringLiteral("desktopRemoved"),
         QStringLiteral("desktopDataChanged"),
+        QStringLiteral("rowsChanged"),
+        QStringLiteral("navigationWrappingAroundChanged"),
     };
     for (const QString &name : signalNames) {
         m_connection.connect(kKwinService, kManagerPath, kManagerInterface, name, this,
@@ -330,6 +332,8 @@ void WorkspaceReceiver::unsubscribe()
         QStringLiteral("desktopCreated"),
         QStringLiteral("desktopRemoved"),
         QStringLiteral("desktopDataChanged"),
+        QStringLiteral("rowsChanged"),
+        QStringLiteral("navigationWrappingAroundChanged"),
     };
     for (const QString &name : signalNames) {
         m_connection.disconnect(kKwinService, kManagerPath, kManagerInterface, name, this,
@@ -510,7 +514,8 @@ void WorkspaceReceiver::applyValidatedState(WorkspaceState &&next)
     ++m_snapshotCount;
     next.refreshPending = false;
     const bool duplicate = m_state.availability == WorkspaceAvailability::Available && m_state.desktops == next.desktops
-        && m_state.currentId == next.currentId && m_state.currentOrdinal == next.currentOrdinal;
+        && m_state.currentId == next.currentId && m_state.currentOrdinal == next.currentOrdinal
+        && m_state.rows == next.rows && m_state.navigationWrappingAround == next.navigationWrappingAround;
     m_state = std::move(next);
     m_errorClass.clear();
     m_lastError.clear();
@@ -555,6 +560,27 @@ std::optional<WorkspaceState> WorkspaceReceiver::decodeSnapshot(const QVariantMa
     if (current.isEmpty() || !boundedUtf8(current, kMaxDesktopIdBytes) || hasControlCharacters(current)) {
         errorClass = QStringLiteral("current-invalid");
         return std::nullopt;
+    }
+
+    std::optional<int> rows;
+    if (properties.contains(QStringLiteral("rows"))) {
+        bool ok = false;
+        const qlonglong rowCount = unwrapDbusVariant(properties.value(QStringLiteral("rows"))).toLongLong(&ok);
+        if (!ok || rowCount < 0 || rowCount > kMaxPosition) {
+            errorClass = QStringLiteral("rows-invalid");
+            return std::nullopt;
+        }
+        rows = static_cast<int>(rowCount);
+    }
+
+    std::optional<bool> navigationWrappingAround;
+    if (properties.contains(QStringLiteral("navigationWrappingAround"))) {
+        const QVariant wrapping = unwrapDbusVariant(properties.value(QStringLiteral("navigationWrappingAround")));
+        if (wrapping.metaType().id() != QMetaType::Bool) {
+            errorClass = QStringLiteral("wrapping-invalid");
+            return std::nullopt;
+        }
+        navigationWrappingAround = wrapping.toBool();
     }
 
     struct RawDesktop {
@@ -707,6 +733,8 @@ std::optional<WorkspaceState> WorkspaceReceiver::decodeSnapshot(const QVariantMa
     state.desktops = std::move(desktops);
     state.currentId = current;
     state.currentOrdinal = currentOrdinal;
+    state.rows = rows;
+    state.navigationWrappingAround = navigationWrappingAround;
     return state;
 }
 
