@@ -202,7 +202,10 @@ checkpoint is never the profile document, never META, and never logged.
 
 Revert removes exactly the UUIDs this Apply created — never a desktop it did not
 create, including user-created extras — and restores names, `rows`, and
-wrapping from the checkpoint. The `current` restore runs only when the
+wrapping from the checkpoint. If KWin delivers `desktopCreated` only after the
+transaction has ended, a desktop created by this Apply can be missing from the
+checkpoint; revert then leaves that desktop in place and still reports success
+(under-removal, never over-removal). The `current` restore runs only when the
 checkpoint UUID still exists; otherwise it is skipped and reported as a bounded
 residual. The checkpoint is retained until a successful revert or the next
 Apply, and deleted after a successful revert. Revert is
@@ -211,7 +214,7 @@ already-open window is not moved back.
 
 ### Typed launch triggers and error classes
 
-Launch uses `KService`/`KApplicationTrader` and `KIO::ApplicationLauncherJob`
+Launch uses `KService::serviceByStorageId` and `KIO::ApplicationLauncherJob`
 for a typed `.desktop` id. Shell strings, `QProcess` of `Exec=` lines,
 `systemd-run`, and `kstart` are rejected. The launch trigger set is exactly:
 

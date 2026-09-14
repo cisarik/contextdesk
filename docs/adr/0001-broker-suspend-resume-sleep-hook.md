@@ -1,7 +1,8 @@
 # ADR 0001 — Broker suspend/resume via systemd-sleep
 
-Status: accepted for the M2 tree. Live host suspend/resume acceptance remains
-open.
+Status: accepted. The sleep hook is implemented and code-accepted with the M2
+tree; one live suspend/resume cycle is a recorded named slice (Session 22),
+while hibernate/hybrid-sleep and the production path remain open.
 
 ## Context
 

@@ -1,6 +1,8 @@
 # ADR 0003 — Workspace assignment schema (schema 4)
 
-Status: accepted for the M4 tree. Implementation-candidate; not accepted.
+Status: accepted. The schema is implemented and code-accepted (Slice A on
+`aca6c68`; Slice B consumes it on `db9ddc1`). The M4 live IRL run is deferred by
+explicit COOPERATOR decision, and M4 is not closed.
 
 ## Context
 

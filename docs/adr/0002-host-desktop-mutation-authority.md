@@ -1,9 +1,10 @@
 # ADR 0002 — Host desktop mutation authority and no `kwinrulesrc`
 
-Status: accepted for the M4 tree. Slice B implements this decision in code; the
-live desktop mutation itself remains gated by an explicit user Apply and has no
-standing host authority from this repository. Running it against a real session
-is a separate COOPERATOR grant.
+Status: accepted. Slice B implements this decision in code and is code-accepted
+on `db9ddc1`. The live desktop mutation itself remains gated by an explicit
+user Apply and has no standing host authority from this repository; running it
+against a real session is a separate COOPERATOR grant, and the M4 live IRL run
+is deferred by explicit COOPERATOR decision. M4 is not closed.
 
 ## Context
 

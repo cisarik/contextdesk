@@ -218,11 +218,14 @@ struct DesiredLighting {
             return false;
         }
     }
+    QString base = value;
     if (value.endsWith(QLatin1String(".desktop"))) {
-        return true;
+        base = value.left(value.size() - 8);
+    } else if (!value.contains(QLatin1Char('.'))) {
+        return false;
     }
-    if (!value.contains(QLatin1Char('.')) || value.startsWith(QLatin1Char('.')) || value.endsWith(QLatin1Char('.'))
-        || value.contains(QLatin1String(".."))) {
+    if (base.isEmpty() || base.startsWith(QLatin1Char('.')) || base.endsWith(QLatin1Char('.'))
+        || base.contains(QLatin1String(".."))) {
         return false;
     }
     return true;

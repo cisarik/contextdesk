@@ -1,8 +1,8 @@
 # ContextDeck M4 workspace sessions — later IRL checklist
 
-Numbered procedure for a **later** COOPERATOR run after a separate fresh Worker
-has accepted the public Slice B implementation candidate and after an explicit
-mutation grant. This file records intent only: it does **not** authorize host
+Numbered procedure for a **later** COOPERATOR run after the public Slice B
+implementation candidate was separately code-accepted (`db9ddc1`) and after an
+explicit mutation grant. This file records intent only: it does **not** authorize host
 mutation, package installs, desktop changes, application launches, KWin bridge
 reload, broker start, ARM, grab, autostart, suspend, udev/ACL changes, or
 OpenRGB CLI-per-change. Running these steps against a real session requires its
@@ -11,6 +11,9 @@ own grant.
 The Slice B code path is in the tree: explicit Apply, checkpoint revert, typed
 launch, and bridge placement. The steps below still require the separately
 granted IRL run; automated tests alone do not establish live behavior.
+
+QML runtime behavior has so far been validated only by build-time compilation;
+these steps are its first runtime validation.
 
 Automated evidence lives in the registered CTest suite owned by
 `CMakeLists.txt` (`test_profile_persistence`, `test_profile_resolver`,

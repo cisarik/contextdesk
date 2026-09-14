@@ -1,7 +1,8 @@
 # ContextDeck M3 workspace lighting — later IRL checklist
 
-Numbered procedure for a **later** COOPERATOR physical run after a separate
-fresh Worker has accepted the public implementation candidate. This file does
+Numbered procedure for a **later** COOPERATOR physical run after the public
+implementation candidate was separately code-accepted (`502ae75...`); code
+acceptance is not physical acceptance. This file does
 not authorize host mutation, package installs, broker start, ARM, grab,
 autostart, suspend, udev/ACL changes, or OpenRGB CLI-per-change.
 

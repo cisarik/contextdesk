@@ -28,30 +28,35 @@ COOPERATOR action, separate from any authorized report-file preparation.
   deferred by explicit COOPERATOR decision. M3 is not closed, and code
   acceptance is not physical acceptance. Later IRL steps live in
   `docs/testing-m3.md`.
-- Current whole: **M4 `g213-contextdeck-workspace-session-manager`** — Slice A
-  (schema 4 named sessions/assignments, `rows`/wrapping observation, pure dry-run
-  `WorkspacePlan`, `Plochy` editor) is code-accepted on `aca6c68`; Slice B
-  (fail-closed `DesktopMutator` with user-local checkpoint/revert, typed
-  `ApplicationLauncher`, `PlacementResolver` + bridge `PlacementHint`, opt-in
-  non-logging title fallback) is code-accepted on `db9ddc1`. **The live IRL run
-  in `docs/testing-m4.md` is deferred by explicit COOPERATOR decision; M4 is not
-  closed, and code acceptance is not live or physical acceptance.** Nothing
-  mutates without the user's explicit Apply and no launch happens at Plasma
-  login.
+- Code-accepted, live IRL deferred: **M4 `g213-contextdeck-workspace-session-manager`** —
+  Slice A (schema 4 named sessions/assignments, `rows`/wrapping observation, pure
+  dry-run `WorkspacePlan`, `Plochy` editor) and Slice B (fail-closed
+  `DesktopMutator` with user-local checkpoint/revert, typed `ApplicationLauncher`,
+  `PlacementResolver` + bridge `PlacementHint`, opt-in non-logging title fallback)
+  are code-accepted on `aca6c68` and `db9ddc1`. M4 workspace session manager is
+  code-accepted (Slice A on `aca6c68`, Slice B on `db9ddc1`); its live IRL run is
+  deferred by explicit COOPERATOR decision. M4 is not closed, and code acceptance
+  is not live or physical acceptance. Nothing mutates without the user's explicit
+  Apply and no launch happens at Plasma login.
+- Current whole: **M4 state and ledger reconciliation** — documentation-only
+  reconciliation of the accepted M1–M4 state and disposition of the carried M4
+  ledger candidates; no host, device, desktop, launch, broker, packaging, or
+  license mutation. Ledger dispositions are recorded in the M4 backlog section.
 - Parked whole: **M2 `g213-contextdeck-input-passthrough-safety`**. Planning
   and production implementation are in the repository. Exact candidate
   `cb72ae0388307b514182efc6936712e3da42cda4` was installed and verified on
   the reference host while the broker remained inactive (`deployment-PASS`;
   META Worker 14). Named physical slices from Sessions 16, 19, 22, 23, and 24
-  are recorded as accepted (ARM / pass-through / cutoff / armed watchdog with
-  a held modifier). Trace:
+  are recorded as accepted (ARM / pass-through / cutoff; armed watchdog with a
+  held modifier; one live suspend/resume cycle; LED return and all eighteen
+  host-remappable controls; one bounded input-remapper mapping). Trace:
   `projects/contextdesk/00/02-g213-contextdeck-input-passthrough-safety/`.
   **Full G4 remains open.** Independent G3 re-audit of the residual ACL gap
   stays host-mitigated (`G3-ACL-REPROBE-01`) and is not closed here.
   Remaining M2 work is a separately authorized fresh task — not granted by
-  M3. A systemd-sleep hook in the tree can stop an active broker before sleep
-  and start it once afterwards, always disarmed; that is not live suspend
-  evidence.
+  M3. A systemd-sleep hook in the tree stops an active broker before sleep
+  and can start it once afterwards, always disarmed; one live suspend/resume
+  cycle is a recorded named slice (Session 22).
 
 ## Routing decisions taken by the COOPERATOR (this revision)
 
@@ -85,7 +90,7 @@ done-as-planned.
 | V0 | baseline reconciliation | Confirmed baseline, trace continuation | — | Done (G0) |
 | M1 | `g213-contextdeck-mvp-context-lighting` | Build skeleton, typed profile model, KWin context bridge, tray + Kirigami settings UI, OpenRGB protocol-5 client (5 zones verified IRL), typed `DisplaysOff`/`Suspend`, IRL test pack | G0, P2 | **Done (Accepted IRL)** |
 | P2 | host enablement (COOPERATOR-run) | `openrgb` install, loopback SDK server, KWin script load — G2 five-zone evidence | — | **Done IRL** (five zones confirmed physically) |
-| P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
+| P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | **Done** — G1 closed: 18 host-remappable, Game Mode and Backlight firmware-only |
 | M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Parked** — production path in repo including suspend/resume sleep hook; inactive install (`deployment-PASS`); named Sessions 16/19/22/23/24 slices (`acceptance-PASS`); **full G4 open**; residual independent G3 gap not closed |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Opt-in five-slot layout: desktop indicators + application color through existing OpenRGB | M1 | **Code-accepted** (`502ae75`); physical IRL deferred — not closed |
 | M4 | `g213-contextdeck-workspace-session-manager` | In-session workspace orchestrator: named sessions, app assignment to virtual desktops, explicit-apply / in-transaction launch (never at Plasma login), placement, opt-in title fallback | M3 | **Slice A + Slice B code-accepted** (`aca6c68`, `db9ddc1`); **live IRL deferred** — not closed |
@@ -94,7 +99,7 @@ done-as-planned.
 Dependency order: P2 confirmed five-zone lighting; M1 → M2 (input safety) OR
 M1 → M3 (workspace lighting); M3 → M4 (workspace session manager); M4 + M2 → M5
 (full autostart release). P1 must land before M2 remapping. G7 (power actions)
-tested in M1 IRL.
+remains pending its own IRL acceptance.
 
 ## Evidence gates
 
@@ -107,7 +112,7 @@ ship:
 | G1 | Routing matrix for all 20 requested controls | Special-button remapping | **Closed** — probe measured 2026-09-11: F1–F12 on if00 (59–68/87/88), media+volume on if01 (165/164/163, 113/114/115) all host-remappable; Game Mode and Backlight emit **zero** host events — firmware-only, permanently out of the remap catalog (`docs/hardware/g213-control-matrix.md`) |
 | G2 | OpenRGB trial: five zones, reconnect, coexistence | Shipping the RGB route | **Closed — proven IRL** during M1 (five zones, modes, speed, gradient all verified physically) |
 | G3 | Accepted input/RGB access boundaries | Services, udev rules, broker deployment | **Model accepted.** Repo packaging: system user `contextdeck-broker`, guard udev (G213 event + `/dev/port` + `i2c`, hidraw kept), narrow event grant, late uinput ACL after seat `uaccess`. Whether a host has those files installed is operations evidence, not implied by the tree. Never autostart an unproven broker |
-| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | **Open.** Named physical slices accepted on candidate `cb72ae0` (ARM/pass-through/cutoff, Worker 16; armed watchdog abort / held modifier, Worker 19). Remaining: LED return, all-control fidelity, live host suspend/resume, input-remapper coexistence beyond those samples, production/autostart. A documentation or hook-implementation commit does not close G4 |
+| G4 | Interception, crash, hang, release, recovery acceptance | Enabling remapping | **Open.** Named live slices accepted (Sessions 16, 19, 22, 23, 24): ARM/pass-through/cutoff, armed watchdog abort with a held modifier, one live suspend/resume cycle, LED return and all eighteen host-remappable controls, one bounded input-remapper mapping. Remaining: production/autostart readiness (G8/M5), hibernate/hybrid-sleep, general input-remapper coexistence. A documentation or hook-implementation commit does not close G4 |
 | G5 | KWin lifecycle, identity, focus-race measurements | Contextual behavior claims | Partially exercised in M1 (bridge, heartbeat, self-context) |
 | G6 | License decision + dependency provenance | Release | Planned |
 | G7 | Authorized display-off and suspend acceptance | Enabling power actions | **IRL pending** — M1 test steps 7–8 (`CanSuspend=yes` verified; `KScreen::Dpms` linked; see the known suspect note) |
@@ -283,10 +288,11 @@ and one zone tracking the app, with the global preset itself configurable.
   default. All-black workspace composition uses device Off.
 
 The unfilled control-to-zone Results table remains unmeasured and does not
-block ordinary five-slot lighting. M4 is now its own current whole; remapping,
+block ordinary five-slot lighting. M4 has since been code-accepted with its
+live IRL deferred (see *Where we are now*); remapping,
 the deck layer, and M5 stay separate future wholes.
 
-### Workspace session manager — current whole, code-accepted, live IRL deferred `g213-contextdeck-workspace-session-manager`
+### Workspace session manager — code-accepted, live IRL deferred `g213-contextdeck-workspace-session-manager`
 
 **Need (COOPERATOR):** transform ContextDesk into a true KDE Plasma Context &
 Workspace Manager:
@@ -296,11 +302,12 @@ Workspace Manager:
    maximize them to their respective virtual desktops.
 4. Window-title-based matching as a fallback when an unassigned window has focus.
 
-**Classification:** current logical whole (milestone M4). Slice A and Slice B
-are code-accepted; the live IRL run is deferred by explicit COOPERATOR decision
-and M4 is not closed. All live desktop mutation, launch, and bridge reload remain
-separately granted COOPERATOR operations. Nothing here grants host or desktop
-mutation.
+**Classification:** milestone M4, code-accepted and not closed. M4 workspace
+session manager is code-accepted (Slice A on `aca6c68`, Slice B on `db9ddc1`);
+its live IRL run is deferred by explicit COOPERATOR decision. M4 is not closed,
+and code acceptance is not live or physical acceptance. All live desktop
+mutation, launch, and bridge reload remain separately granted COOPERATOR
+operations. Nothing here grants host or desktop mutation.
 
 **Implemented Slice B contract (code-accepted on `db9ddc1`; live IRL deferred):**
 - Schema 4: `workspace_sessions[]` ordinal layouts plus per-application
@@ -339,12 +346,29 @@ run (explicit Apply, checkpoint revert, launch-on-apply, placement/maximize,
 opt-in title fallback) is deferred. M4 stays not closed and no live desktop,
 launch, placement, or compositor behavior is claimed. When run, it needs
 explicit mutation-class authority, a named checkpoint, and one demonstrated
-recovery route. Non-blocking ledger candidates carried for later work: ADR
-0002/0004 status phrasing; the `.desktop` id predicate accepting trivially short
-forms; `KApplicationTrader` named only in the specification; the
-late-`desktopCreated` checkpoint-disclosure gap; QML runtime validated only at
-build time; and a possible orphaned old-path checkpoint from the never-accepted
-parent candidate.
+recovery route.
+
+**Ledger disposition (M4 state and ledger reconciliation):** every carried M4
+ledger candidate is disposed here.
+- ADR 0002/0003/0004 status phrasing — **fixed**: the status lines no longer say
+  "accepted for the M4 tree"; they record the code-accepted slices and the
+  deferred live IRL.
+- `.desktop` id predicate accepting trivially short forms — **fixed**:
+  `workspaceDesktopIdLooksValid` rejects empty or dot-only prefixes
+  (`.desktop`, `a..desktop`) while still accepting `a.desktop`,
+  `org.kde.dolphin.desktop`, and reverse-DNS ids such as `org.kde.dolphin`.
+- `KApplicationTrader` named only in the specification — **fixed**:
+  `docs/specification.md` now names `KService::serviceByStorageId` and
+  `KIO::ApplicationLauncherJob`.
+- Late-`desktopCreated` checkpoint-disclosure gap — **fixed**: the checkpoint
+  section discloses the abnormal-ordering under-recording residual.
+- QML runtime validated only at build time — **parked**: the deferred M4 live
+  IRL run (`docs/testing-m4.md` steps 2–5) and the separate later UI/IRL whole
+  own the first runtime validation; no runtime evidence is claimed.
+- Orphaned old-path checkpoint from the never-accepted parent candidate —
+  **invalidated**: the pre-correction path existed only in the never-accepted
+  parent `5087277`; no accepted history or host evidence exists, and no note
+  instructs touching a user file.
 
 **Route corrections measured during M4 planning (supersede the old notes):**
 - `window.desktops` is writable in the installed KWin script API;
@@ -408,13 +432,14 @@ in the repository (tree content, not a G4 close):
   suspend evidence. ADR 0001.
 
 **G4 remains open.** Named slices from Sessions 16, 19, 22, 23, and 24 are
-recorded as accepted (ARM / pass-through / cutoff; armed watchdog abort with
-a held modifier). Neither those slices nor later documentation close this
-whole. Independent G3 re-audit of the residual ACL gap remains
-host-mitigated and is not a fresh audit. Remaining: LED-return behavior,
-all-control fidelity, live host suspend/resume, input-remapper coexistence
-beyond those samples, and production/autostart readiness. A host may or may
-not have installed the packaging files; that is operations evidence. The
+recorded as accepted (ARM / pass-through / cutoff and typing after descriptor
+close; armed watchdog abort with a held modifier; one live suspend/resume cycle;
+LED return and all eighteen host-remappable controls; one bounded input-remapper
+mapping). Neither those slices nor later documentation close this whole.
+Independent G3 re-audit of the residual ACL gap remains host-mitigated and is
+not a fresh audit. Remaining: production/autostart readiness (G8/M5),
+hibernate/hybrid-sleep, and general input-remapper coexistence. A host may or
+may not have installed the packaging files; that is operations evidence. The
 broker must stay static/inactive with no autostart until those remaining
 claims are separately authorized and accepted.
 
@@ -425,11 +450,11 @@ Either route is sufficient. A cutoff timer is additional evidence and never a
 replacement. Device-free S3 procedures may remain keyboard-free.
 
 **Next remaining M2 work:** named slices are accepted. A separately
-authorized fresh task remains for LED return / all-control fidelity, live
-host suspend/resume acceptance, or production/autostart. Documentation here
-does not grant grab, ARM, autostart, live suspend, or host mutation, and does
-not choose which remainder comes next. Production safety gaps already visible
-in source (silent uinput write errors; virtual-device capabilities from
+authorized fresh task remains for production/autostart readiness (G8/M5),
+hibernate/hybrid-sleep, or general input-remapper coexistence. Documentation
+here does not grant grab, ARM, autostart, live suspend, or host mutation, and
+does not choose which remainder comes next. Production safety gaps already
+visible in source (silent uinput write errors; virtual-device capabilities from
 `passthroughCapabilities()` rather than measured source bits / LED return
 path; logind `sd_pid_get_session` vs user-manager-launched session apps) stay
 in that remainder unless a later prompt names them.

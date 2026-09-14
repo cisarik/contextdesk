@@ -1,8 +1,10 @@
 # ADR 0004 — Typed application launch (in-session, not autostart)
 
-Status: accepted for the M4 tree. Slice B implements the typed launcher in
-code; a launch happens only on the user's explicit Apply (or an in-transaction
-`desktopCreated`) and still requires a separate COOPERATOR IRL grant.
+Status: accepted. Slice B implements the typed launcher in code and is
+code-accepted on `db9ddc1`. A launch happens only on the user's explicit Apply
+(or an in-transaction `desktopCreated`) and still requires a separate COOPERATOR
+IRL grant; the M4 live IRL run is deferred by explicit COOPERATOR decision, and
+M4 is not closed.
 
 ## Context
 

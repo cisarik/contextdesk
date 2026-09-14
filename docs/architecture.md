@@ -302,12 +302,12 @@ Durable rules for this project:
   best-effort synthetic releases, then destroy the virtual device. The real
   keyboard must stay usable. Kernel close behavior (grab release on evdev
   close, uinput teardown on close) is verified in source. Named physical
-  slices recorded as accepted on candidate `cb72ae0` / docs descendant
-  `9a89095`: explicit ARM, sampled pass-through, matching-invocation cutoff,
-  typing after descriptor close (Worker 16); armed watchdog abort with a held
-  modifier (Worker 19). Remaining G4 claims (LED return, all-control
-  fidelity, live host suspend/resume, production autostart) still need
-  acceptance.
+  slices are recorded as accepted (Sessions 16, 19, 22, 23, 24): explicit ARM,
+  sampled pass-through, matching-invocation cutoff and typing after descriptor
+  close; armed watchdog abort with a held modifier; one live suspend/resume
+  cycle; LED return and all eighteen host-remappable controls; one bounded
+  input-remapper mapping. Remaining G4 claims: production/autostart readiness,
+  hibernate/hybrid-sleep, and general coexistence.
 - System suspend/resume is a lifecycle boundary, not a watchdog failure.
   `packaging/systemd/contextdeck-sleep.sh` (installed as
   `/usr/lib/systemd/system-sleep/contextdeck-broker`) stops an **active**
@@ -359,5 +359,5 @@ interception entirely and M2 owns it.
 ## Open evidence gates
 
 See ROADMAP.md: G1 physical controls, G2 RGB behavior, G3 device authority,
-G4 input safety (named slice accepted; remainder open), G5 desktop behavior,
+G4 input safety (named slices accepted; remainder open), G5 desktop behavior,
 G6 licensing, G7 power actions, G8 release lifecycle.

@@ -267,8 +267,8 @@ loop (S3) and accepts an authenticated session lease on
 `[Install]` section and no `RuntimeMaxSec`. Production ARM (S5) enumerates the
 G213 by USB ancestry and may construct `RealSink` / `EvdevGrabber` only after
 an explicit authenticated `ARM`. Do **not** enable or start the unit from this
-G3 section. IRL pass-through remains a G4 claim: one named slice is
-recorded as accepted; full G4 is not closed.
+G3 section. IRL pass-through remains a G4 claim: named live slices are
+recorded as accepted (Sessions 16, 19, 22, 23, 24); full G4 is not closed.
 
 `ExecStart` is `/usr/bin/contextdeck-broker`. Install that binary with the
 documented `/usr` prefix (section 9) before any later G4 start. Do not start
@@ -333,12 +333,13 @@ group is gone. Unplug/replug the G213 if event-node ownership stays stale.
 
 This is the documented recovery path for the input broker. Do **not** start or
 enable `contextdeck-broker.service` from this section. Device-free S3 evidence
-does not require a second keyboard or SSH. Named physical slices on candidate
-`cb72ae0` / docs descendant `9a89095` are recorded as accepted: explicit ARM,
-sampled pass-through, matching-invocation cutoff, typing after descriptor
-close (Worker 16); armed watchdog abort with a held modifier (Worker 19).
-Full G4 remains open (LED return, all-control fidelity, live host
-suspend/resume, production/autostart).
+does not require a second keyboard or SSH. Named live slices are recorded as
+accepted (Sessions 16, 19, 22, 23, 24): explicit ARM, sampled pass-through,
+matching-invocation cutoff, typing after descriptor close; armed watchdog abort
+with a held modifier; one live suspend/resume cycle; LED return and all
+eighteen host-remappable controls; one bounded input-remapper mapping.
+Full G4 remains open (production/autostart readiness, hibernate/hybrid-sleep,
+general input-remapper coexistence).
 
 ### Independent recovery path (live G4)
 
@@ -410,7 +411,7 @@ watchdog PASS. Distinguish:
 |-------|----------------|------------------------|
 | Watchdog expiry (`WatchdogSec=2`) | the event-loop thread stopped feeding | physical typing; cutoff path |
 | Invocation-bound cutoff expiry | PID1 killed the matching invocation after 30 s | that the watchdog fired; physical typing |
-| Physical usability after descriptor close | named-slice typing after matching-invocation cutoff death | LED return; all-control fidelity; live suspend |
+| Physical usability after descriptor close | named-slice typing after matching-invocation cutoff death | LED return; all-control fidelity; live suspend (each proven only by its own named slice) |
 
 The cutoff helper is supplemental recovery evidence. It never replaces the
 independent second-keyboard or SSH path required for live G4. Limitations:
@@ -426,7 +427,9 @@ Because `Restart=no`, the unit stays dead. If the broker had been armed,
 descriptor close is what must return the physical keyboard. Named-slice
 cutoff death showed G213 typing after descriptor close; Worker 19 recorded
 armed watchdog abort with a held modifier. LED return, all-control fidelity,
-and live host suspend/resume still need G4.
+and live suspend/resume have their own accepted named slices (Sessions 22 and
+23); production/autostart, hibernate/hybrid-sleep, and general coexistence
+remain open G4.
 
 The production hang procedure is external: `SIGSTOP` the broker PID from a
 recovery path, observe that watchdog feeding stops, then let systemd abort
@@ -446,11 +449,12 @@ userspace teardown. The planned armed teardown order remains ungrab
 physical first, then balanced synthetic releases, then destroy the virtual
 device. A dead process cannot run that sequence. Named-slice cutoff SIGKILL
 showed typing after descriptor close; Worker 19 recorded armed watchdog abort
-with a held modifier. LED return, all-control fidelity, and live host
-suspend/resume still need G4.
+with a held modifier. LED return, all-control fidelity, and live suspend/resume
+have their own accepted named slices (Sessions 22 and 23); production/autostart,
+hibernate/hybrid-sleep, and general coexistence remain open G4.
 
 Do not enable autostart until full G4 evidence exists (handout §29). The
-named slice does not authorize autostart.
+named slices do not authorize autostart.
 
 ### TTY / second-seat recovery
 
@@ -504,8 +508,9 @@ bounded journal line (`class=error reason=stop-failed|start-failed`) and is
 not retried. `WatchdogSec=2` and `Restart=no` stay as they are; do not mask
 sleep targets or inhibit user sleep to work around the watchdog.
 
-This section does **not** authorize a live suspend. Host suspend/resume
-acceptance remains open G4. Device-free coverage is `test_sleep_hook` (fake
+This section does **not** authorize a live suspend. One live suspend/resume
+cycle is a recorded named slice (Session 22); hibernate/hybrid-sleep and the
+production path remain open G4. Device-free coverage is `test_sleep_hook` (fake
 `systemctl`, no `/run`, no `systemctl suspend`).
 
 Quitting the session app, closing the broker socket, or letting the 6 s
@@ -665,8 +670,10 @@ Checkpoint and revert:
   `$HOME/.config/contextdeck/workspace-checkpoint.json`) atomically with
   user-only permissions. It is never the profile document, never META, never
   logged.
-- Revert removes exactly the UUIDs this Apply created and restores names,
-  `rows`, and wrapping from the checkpoint. The `current` restore is skipped
+- Revert removes exactly the UUIDs recorded as created by this Apply and restores names,
+  `rows`, and wrapping from the checkpoint (a desktop created by this Apply whose
+  signal arrived only after the transaction ended may be left in place;
+  under-removal is the fail-safe direction). The `current` restore is skipped
   as a bounded residual when the checkpoint UUID no longer exists. The
   checkpoint is deleted after a successful revert and overwritten by the next
   Apply.

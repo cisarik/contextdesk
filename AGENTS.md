@@ -9,20 +9,35 @@ this project.
 
 - ContextDeck is a Linux/KDE/Wayland control utility for the Logitech G213
   Prodigy keyboard only. Canonical repo: `https://github.com/cisarik/contextdesk`.
+  `ROADMAP.md` is the human plan of record for milestone state, evidence gates,
+  and ledger dispositions.
 - **M1 `g213-contextdeck-mvp-context-lighting` is implemented and recorded as
   COOPERATOR-accepted IRL.** That acceptance is historical evidence (META notes
   for that whole). It is not a fresh hardware run from later sessions and does
   not close unrelated remaining gates such as G4 or G7.
-- **M2 `g213-contextdeck-input-passthrough-safety` is in progress in this
-  repository.** The tree contains the production broker path, explicit
-  session-app ARM action, Unix-socket IPC lease, watchdog integration, broker
-  install rule, and the late uinput ACL rule. Candidate `cb72ae0` has a
-  recorded inactive-host `deployment-PASS` and one named physical
-  `acceptance-PASS` (explicit authenticated ARM, sampled G213 pass-through,
-  matching-invocation cutoff recovery, post-death G213 typing). **Full G4
-  remains open** (watchdog/hang, held-modifier-at-death, LED return,
-  all-control fidelity, production/autostart). Restoring this planned whole
-  does not restart its initial planning or acceptance budgets.
+- **M2 `g213-contextdeck-input-passthrough-safety` is parked, not closed.** The
+  named live G4 slices are accepted (Sessions 16, 19, 22, 23, and 24, as
+  recorded in the M2 trace), but the M2 logical whole remains open. M2 is parked
+  with G3 host-mitigated on the authorized reference host. **Full G4 remains
+  open**: the named slices are not rerun or reopened, and the remaining work is
+  production/autostart readiness, hibernate/hybrid-sleep, and general
+  input-remapper coexistence. The production broker path is in the tree
+  (enumerator, explicit `LEASE`/`ARM`, Unix-socket IPC lease, watchdog, broker
+  install rule, late uinput ACL rule, suspend/resume sleep hook); an inactive
+  install of candidate `cb72ae0` is recorded as `deployment-PASS`.
+  `G3-ACL-REPROBE-01` is host-mitigated but was not independently re-audited.
+  Do not claim whole M2, whole G4, independent G3 closure, install/remove/
+  rollback readiness, production readiness, autostart safety, hibernate/
+  hybrid-sleep support, or general coexistence.
+- **M3 `g213-contextdeck-workspace-aware-lighting`**: M3 workspace-aware
+  lighting is code-accepted on `502ae75...`; its physical five-zone IRL
+  observation is deferred by explicit COOPERATOR decision. M3 is not closed, and
+  code acceptance is not physical acceptance.
+- **M4 `g213-contextdeck-workspace-session-manager`**: M4 workspace session
+  manager is code-accepted (Slice A on `aca6c68`, Slice B on `db9ddc1`); its
+  live IRL run is deferred by explicit COOPERATOR decision. M4 is not closed,
+  and code acceptance is not live or physical acceptance. Nothing mutates
+  without the user's explicit Apply and no launch happens at Plasma login.
 - Tree: `handout.md`, `AGENTS.md`, `README.md`, `ROADMAP.md`, `LICENSE`, `docs/`,
   `CMakeLists.txt`, `cmake/`, `src/` (session app + `src/broker/`), `ui/`,
   `kwin/`, `tests/unit/`, `packaging/` (systemd, udev, sysusers), and the pinned
@@ -35,7 +50,7 @@ this project.
 - Repository artifacts are not installed host state. Presence of packaging
   files, a local `build/` binary, or `/usr` copies on one machine does not mean
   every host is installed or verified. Host enablement, named physical
-  acceptance, and remaining G4 claims remain COOPERATOR-owned operations
+  acceptance, and remaining G4/G8 claims remain COOPERATOR-owned operations
   evidence. A documentation commit does not rerun hardware acceptance.
 - `handout.md` is the original COOPERATOR-to-ORCHESTRATOR bootstrap contract
   (historical). Read it for intent and safety constraints; it is not a renewed
@@ -62,18 +77,13 @@ this project.
 - M1 is implemented and recorded as COOPERATOR-accepted IRL (five-zone lighting
   and context). G2 is closed. G7 remains the power-action evidence gate and is
   not closed by later documentation work.
-- M2 Planner report 01/01 passed (native Plan Mode). The repository now has
-  production wiring: enumerator + `RealSink`/`EvdevGrabber` behind explicit
-  `LEASE`/`ARM`, session IPC, watchdog, G3 packaging, and the late uinput ACL
-  rule. Candidate `cb72ae0` has a recorded inactive `deployment-PASS` and one
-  named-slice `acceptance-PASS`. **Nothing in documentation grants live grab
-  or autostart.** Full G4 remains open. The next remaining M2 work is a
-  separately authorized fresh task for watchdog/hang, held-modifier-at-death,
-  LED return / all-control fidelity, or an explicitly chosen documentation or
-  decision step — not a recovery-design decision that blocks any live grab,
-  and not a claim that the next choice is already accepted. The Super-key
-  **deck layer** brainstorm remains a future whole after M3, recorded in
-  ROADMAP.
+- M2 planning passed and the production wiring is in the tree (enumerator +
+  `RealSink`/`EvdevGrabber` behind explicit `LEASE`/`ARM`, session IPC,
+  watchdog, G3 packaging, and the late uinput ACL rule). **Nothing in
+  documentation grants live grab or autostart.** Full G4 remains open; see
+  "Current repository state" above and `ROADMAP.md` for the park claims and the
+  named accepted slices. The Super-key **deck layer** brainstorm remains a
+  future whole after M3, recorded in `ROADMAP.md`.
 - COOPERATOR-granted mutation classes for M1 host enablement (named, bounded):
   install `openrgb` from the repo including its udev rules; run the OpenRGB SDK
   server on loopback; install/load the KWin script via `kpackagetool6` or

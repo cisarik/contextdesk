@@ -7,17 +7,20 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 > (M1) are implemented and recorded as accepted on hardware. The input broker
 > (M2) exists in this repository and can be installed **inactive**. The named
 > live G4 slices are accepted, but the M2 logical whole remains open. M2 is
-> parked with G3 host-mitigated on the authorized reference host; the next
-> bounded whole is M4 workspace session manager. **Full G4** remains open,
-> including live host suspend/resume, and independent G3 re-audit of the
-> residual ACL gap remains host-mitigated only. M3 workspace-aware lighting is
-> code-accepted on `502ae75...`; its physical five-zone IRL observation is
-> deferred by explicit COOPERATOR decision. M3 is not closed, and code
-> acceptance is not physical acceptance. M4 workspace sessions Slice B
-> (schema 4, desktop observation, explicit Apply with checkpoint/revert, typed
-> in-session launch, bridge placement) is an **implementation candidate** —
-> not accepted and not live-verified: nothing changes unless the user presses
-> Apply, and nothing launches because the session began. The plan lives in
+> parked with G3 host-mitigated on the authorized reference host; the current
+> bounded whole reconciles the accepted M1–M4 state and disposes of the carried
+> M4 ledger candidates. **Full G4 remains open**: the named live slices
+> (Sessions 16, 19, 22, 23, 24) are accepted, and the remaining work is
+> production/autostart readiness, hibernate/hybrid-sleep, and general
+> input-remapper coexistence. Independent G3 re-audit of the residual ACL gap
+> remains host-mitigated only. M3 workspace-aware lighting is code-accepted on
+> `502ae75...`; its physical five-zone IRL observation is deferred by explicit
+> COOPERATOR decision. M3 is not closed, and code acceptance is not physical
+> acceptance. M4 workspace session manager is code-accepted (Slice A on
+> `aca6c68`, Slice B on `db9ddc1`); its live IRL run is deferred by explicit
+> COOPERATOR decision. M4 is not closed, and code acceptance is not live or
+> physical acceptance. Nothing changes unless the user presses Apply, and
+> nothing launches because the session began. The plan lives in
 > [ROADMAP.md](ROADMAP.md) and the design in
 > [docs/architecture.md](docs/architecture.md).
 
@@ -36,10 +39,10 @@ does — automatically, quietly, and only where you configured it:
 - **Workspace-aware lighting (opt-in).** A global five-slot layout can mix
   virtual-desktop indicators with application color. Existing presets keep
   their previous behavior until those roles are configured.
-- **Named workspace sessions (in progress).** M4 Slice B describes named
-  desktop layouts and per-application assignments, observes live desktop
-  state, previews the intended diff, and applies it only when you press
-  **Použiť** — with a checkpoint revert, typed in-session launch, and
+- **Named workspace sessions (code-accepted; live IRL deferred).** M4 Slice B
+  implements named desktop layouts and per-application assignments, observes
+  live desktop state, previews the intended diff, and applies it only when you
+  press **Použiť** — with a checkpoint revert, typed in-session launch, and
   event-driven placement. Plasma-login autostart stays in M5.
 - **A quiet tray indicator.** Connection state, automatic mode, the current
   app and the active profile at a glance.
@@ -68,9 +71,9 @@ enough; device-free tests do not need that path.
 | Plan | Foundation planning accepted; M2 parked; M3 code-accepted with physical observation deferred; M4 Slice A + Slice B code-accepted with live IRL deferred — [ROADMAP.md](ROADMAP.md) |
 | Lighting (M1) | Implemented; recorded as COOPERATOR-accepted IRL (five zones, not per-key) |
 | Workspace lighting (M3) | M3 workspace-aware lighting is code-accepted on `502ae75...`; its physical five-zone IRL observation is deferred by explicit COOPERATOR decision. M3 is not closed, and code acceptance is not physical acceptance. Later IRL steps: [docs/testing-m3.md](docs/testing-m3.md) |
-| Workspace sessions (M4) | Slice A code-accepted on `aca6c68`; Slice B code-accepted on `db9ddc1` (schema 4 sessions/assignments, extended desktop observation, pure dry-run plan, fail-closed explicit Apply with user-local checkpoint/revert, typed in-session launch, `PlacementHint` placement/maximize). Default Apply creates/renames/sets rows/wrapping only; removal, `current`, launch, and maximize are separate opt-ins. **Live IRL deferred by COOPERATOR decision; M4 not closed; no autostart.** Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md) |
+| Workspace sessions (M4) | Slice A code-accepted on `aca6c68`; Slice B code-accepted on `db9ddc1` (schema 4 sessions/assignments, extended desktop observation, pure dry-run plan, fail-closed explicit Apply with user-local checkpoint/revert, typed in-session launch, `PlacementHint` placement/maximize). Default Apply creates/renames/sets rows/wrapping only; removal, `current`, launch, and maximize are separate opt-ins. **Live IRL deferred by explicit COOPERATOR decision; M4 not closed; code acceptance is not live or physical acceptance; no autostart.** Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md) |
 | Input broker (M2) | Parked. Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL, suspend/resume sleep hook). Inactive install recorded; named Sessions 16/19/22/23/24 slices accepted; **full G4 remains open**; residual independent G3 evidence gap is not closed by this whole |
-| Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named ARM/pass-through/cutoff and armed-watchdog/held-modifier slices accepted; LED, all-control, live suspend/resume, and production autostart still open |
+| Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named live slices accepted (Sessions 16, 19, 22, 23, 24: ARM/pass-through/cutoff, armed watchdog/held modifier, one live suspend/resume cycle, LED return + all 18 host-remappable controls, one bounded input-remapper mapping); full G4 still open (production/autostart readiness, hibernate/hybrid-sleep, general input-remapper coexistence) |
 | Build / tests | CMake + Ninja; registered CTest suite owned by [CMakeLists.txt](CMakeLists.txt) |
 | Host install | Packaging files are in the repo. Installed vs not-installed is host evidence — see [docs/operations.md](docs/operations.md). The broker unit has no `[Install]` section and must not autostart |
 

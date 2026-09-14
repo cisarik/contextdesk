@@ -77,7 +77,9 @@ private slots:
             return true;
         });
         launcher.beginTransaction(0);
-        const QStringList rejections{QString(), QStringLiteral("sh -c echo hi"),
+        const QStringList rejections{QString(), QStringLiteral(".desktop"), QStringLiteral("..desktop"),
+                                     QStringLiteral("a..desktop"), QStringLiteral(".a.desktop"),
+                                     QStringLiteral("sh -c echo hi"),
                                      QStringLiteral("systemd-run --user foo"),
                                      QStringLiteral("kstart --desktop 1 foo"),
                                      QStringLiteral("/usr/bin/foo")};
@@ -86,6 +88,42 @@ private slots:
                      WorkspaceLaunchOutcome::InvalidDesktopFile);
         }
         QCOMPARE(calls, 0);
+        launcher.endTransaction();
+    }
+
+    void desktopIdPredicateBoundaries()
+    {
+        const QStringList accepted{QStringLiteral("a.desktop"), QStringLiteral("org.example.A.desktop"),
+                                   QStringLiteral("org.kde.dolphin.desktop"), QStringLiteral("org.kde.dolphin"),
+                                   QStringLiteral("kde.dolphin")};
+        for (const QString &value : accepted) {
+            QVERIFY(workspaceDesktopIdLooksValid(value));
+        }
+        const QStringList rejected{QStringLiteral(".desktop"), QStringLiteral("..desktop"),
+                                   QStringLiteral("a..desktop"), QStringLiteral(".a.desktop"),
+                                   QStringLiteral("a."), QStringLiteral(".a"), QStringLiteral("a..b"),
+                                   QStringLiteral("a")};
+        for (const QString &value : rejected) {
+            QVERIFY(!workspaceDesktopIdLooksValid(value));
+        }
+    }
+
+    void wellFormedIdsStillLaunchFromTheLauncher()
+    {
+        ApplicationLauncher launcher;
+        QStringList launched;
+        launcher.setInvokerForTest([&launched](const QString &desktopFileId) {
+            launched.push_back(desktopFileId);
+            return true;
+        });
+        launcher.beginTransaction(0);
+        QCOMPARE(launcher.requestLaunch(launchEntry(QStringLiteral("a.desktop"), QStringLiteral("a.desktop")), 0),
+                 WorkspaceLaunchOutcome::Launched);
+        QCOMPARE(launcher.requestLaunch(launchEntry(QStringLiteral("b.desktop"), QStringLiteral("org.example.Editor")), 0),
+                 WorkspaceLaunchOutcome::Launched);
+        QCOMPARE(launched.size(), 2);
+        QCOMPARE(launched.at(0), QStringLiteral("a.desktop"));
+        QCOMPARE(launched.at(1), QStringLiteral("org.example.Editor"));
         launcher.endTransaction();
     }
 
