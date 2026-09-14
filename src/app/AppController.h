@@ -35,7 +35,6 @@ class AppController : public QObject
     Q_OBJECT
     Q_PROPERTY(QString currentApplication READ currentApplication NOTIFY contextChanged)
     Q_PROPERTY(QString currentProfile READ currentProfile NOTIFY contextChanged)
-    Q_PROPERTY(QString remappingState READ remappingState CONSTANT)
     Q_PROPERTY(QString lightingMode READ lightingMode NOTIFY lightingModeChanged)
     Q_PROPERTY(QString lightingLabel READ lightingLabel NOTIFY lightingModeChanged)
     Q_PROPERTY(QString sessionLighting READ sessionLighting NOTIFY lightingModeChanged)
@@ -93,7 +92,6 @@ public:
 
     [[nodiscard]] QString currentApplication() const;
     [[nodiscard]] QString currentProfile() const;
-    [[nodiscard]] QString remappingState() const { return QStringLiteral("inactive-until-M2"); }
     [[nodiscard]] QString lightingMode() const;
     [[nodiscard]] QString lightingLabel() const;
     [[nodiscard]] QString sessionLighting() const;
