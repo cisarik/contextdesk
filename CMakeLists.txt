@@ -44,6 +44,8 @@ target_link_libraries(contextdeck_core PUBLIC Qt6::Core)
 add_library(contextdeck_context STATIC
     src/context/ContextReceiver.cpp
     src/context/WorkspaceReceiver.cpp
+    src/context/WorkspaceStateCodec.cpp
+    src/context/InventoryPayload.cpp
     src/workspace/DesktopMutator.cpp
 )
 target_include_directories(contextdeck_context PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")

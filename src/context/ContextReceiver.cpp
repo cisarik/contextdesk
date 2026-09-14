@@ -1,6 +1,7 @@
 #include "context/ContextReceiver.h"
 
 #include "context/DBusNames.h"
+#include "context/InventoryPayload.h"
 
 #include <cmath>
 #include <limits>
@@ -13,17 +14,15 @@
 #include <QDBusVariant>
 #include <QDBusVirtualObject>
 #include <QDateTime>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
-#include <QSet>
 #include <QTimer>
 #include <QVariant>
 
 namespace contextdeck {
 
-Q_LOGGING_CATEGORY(lcContext, "contextdeck.context")
+Q_DECLARE_LOGGING_CATEGORY(lcContext)
 
 namespace {
 
@@ -554,67 +553,13 @@ void ContextReceiver::onInventoryReport(const QString &bridgeId, quint32 sequenc
         return;
     }
     m_lastHeartbeatMs = QDateTime::currentMSecsSinceEpoch();
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(payloadJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-        qCWarning(lcContext) << "rejected inventory: invalid JSON";
+    std::optional<QVector<InventoryEntry>> parsed = parseInventoryPayload(payloadJson);
+    if (!parsed) {
         return;
-    }
-    const QJsonObject root = document.object();
-    if (!root.contains(QStringLiteral("entries")) || !root.value(QStringLiteral("entries")).isArray()) {
-        qCWarning(lcContext) << "rejected inventory: entries array required";
-        return;
-    }
-    for (const QString &key : root.keys()) {
-        if (key != QLatin1String("entries")) {
-            qCWarning(lcContext) << "rejected inventory: unknown semantic field";
-            return;
-        }
     }
 
-    QVector<InventoryEntry> entries;
-    QSet<QString> seen;
-    const QJsonArray array = root.value(QStringLiteral("entries")).toArray();
-    if (array.size() > kMaxInventoryEntries) {
-        qCWarning(lcContext) << "rejected inventory: more than 200 entries";
-        return;
-    }
-    for (const QJsonValue &value : array) {
-        if (!value.isObject()) {
-            qCWarning(lcContext) << "rejected inventory: entry must be an object";
-            return;
-        }
-        const QJsonObject object = value.toObject();
-        for (const QString &key : object.keys()) {
-            if (key != QLatin1String("desktop_file_name") && key != QLatin1String("resource_class")
-                && key != QLatin1String("resource_name")) {
-                qCWarning(lcContext) << "rejected inventory: unknown identity field";
-                return;
-            }
-        }
-        InventoryEntry entry;
-        entry.desktopFileName = object.value(QStringLiteral("desktop_file_name")).toString();
-        entry.resourceClass = object.value(QStringLiteral("resource_class")).toString();
-        entry.resourceName = object.value(QStringLiteral("resource_name")).toString();
-        if (entry.desktopFileName.size() > kMaxDbusStringBytes || entry.resourceClass.size() > kMaxDbusStringBytes
-            || entry.resourceName.size() > kMaxDbusStringBytes) {
-            qCWarning(lcContext) << "rejected inventory: identity field too long";
-            return;
-        }
-        const QString key = entry.identityKey();
-        if (seen.contains(key)) {
-            continue;
-        }
-        seen.insert(key);
-        entries.push_back(entry);
-        if (entries.size() > kMaxInventoryEntries) {
-            qCWarning(lcContext) << "rejected inventory: more than 200 unique entries";
-            return;
-        }
-    }
-
-    if (entries != m_inventory) {
-        m_inventory = std::move(entries);
+    if (*parsed != m_inventory) {
+        m_inventory = std::move(*parsed);
         bumpPolicy();
         emit inventoryChanged();
         qCInfo(lcContext) << "inventory updated, entries" << m_inventory.size() << "policy" << m_policyRevision;

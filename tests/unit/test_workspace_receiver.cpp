@@ -1,5 +1,6 @@
 #include "context/ContextReceiver.h"
 #include "context/WorkspaceReceiver.h"
+#include "context/WorkspaceStateCodec.h"
 
 #include <QDBusArgument>
 #include <QDBusConnection>
@@ -1317,6 +1318,78 @@ private slots:
         for (const QString &message : g_capturedMessages) {
             QVERIFY2(!message.contains(sentinel), qPrintable(message));
         }
+    }
+
+    void codecAcceptsDirectPropertyMap()
+    {
+        QList<VirtualDesktopDBus> desktops;
+        desktops.push_back(VirtualDesktopDBus{0, QStringLiteral("one"), QStringLiteral("One")});
+        desktops.push_back(VirtualDesktopDBus{1, QStringLiteral("two"), QStringLiteral("Two")});
+        QVariantMap properties;
+        properties.insert(QStringLiteral("count"), QVariant::fromValue(uint(2)));
+        properties.insert(QStringLiteral("current"), QStringLiteral("one"));
+        properties.insert(QStringLiteral("desktops"), QVariant::fromValue(desktops));
+        properties.insert(QStringLiteral("rows"), QVariant::fromValue(uint(1)));
+        properties.insert(QStringLiteral("navigationWrappingAround"), true);
+        QString errorClass;
+        const std::optional<WorkspaceState> decoded = decodeWorkspaceSnapshot(properties, errorClass);
+        QVERIFY(decoded.has_value());
+        QCOMPARE(decoded->availability, WorkspaceAvailability::Available);
+        QCOMPARE(decoded->desktops.size(), 2);
+        QCOMPARE(decoded->currentId, QStringLiteral("one"));
+        QCOMPARE(decoded->currentOrdinal, 1);
+        QCOMPARE(decoded->desktops.at(0).displayName, QStringLiteral("One"));
+        QCOMPARE(decoded->desktops.at(1).displayName, QStringLiteral("Two"));
+        QCOMPARE(decoded->rows, 1);
+        QCOMPARE(decoded->navigationWrappingAround, true);
+    }
+
+    void codecEmptyNameFallbackFromPropertyMap()
+    {
+        QList<VirtualDesktopDBus> desktops;
+        desktops.push_back(VirtualDesktopDBus{0, QStringLiteral("one"), QString()});
+        QVariantMap properties;
+        properties.insert(QStringLiteral("count"), QVariant::fromValue(uint(1)));
+        properties.insert(QStringLiteral("current"), QStringLiteral("one"));
+        properties.insert(QStringLiteral("desktops"), QVariant::fromValue(desktops));
+        QString errorClass;
+        const std::optional<WorkspaceState> decoded = decodeWorkspaceSnapshot(properties, errorClass);
+        QVERIFY(decoded.has_value());
+        QCOMPARE(decoded->desktops.at(0).displayName, QStringLiteral("Plocha 1"));
+    }
+
+    void codecRejectsMalformedDirectPropertyMap()
+    {
+        QString errorClass;
+        QVariantMap missing;
+        missing.insert(QStringLiteral("count"), QVariant::fromValue(uint(1)));
+        QVERIFY(!decodeWorkspaceSnapshot(missing, errorClass).has_value());
+        QCOMPARE(errorClass, QStringLiteral("malformed-snapshot"));
+
+        QList<VirtualDesktopDBus> oneDesktop;
+        oneDesktop.push_back(VirtualDesktopDBus{0, QStringLiteral("one"), QStringLiteral("One")});
+        QVariantMap mismatch;
+        mismatch.insert(QStringLiteral("count"), QVariant::fromValue(uint(2)));
+        mismatch.insert(QStringLiteral("current"), QStringLiteral("one"));
+        mismatch.insert(QStringLiteral("desktops"), QVariant::fromValue(oneDesktop));
+        QVERIFY(!decodeWorkspaceSnapshot(mismatch, errorClass).has_value());
+        QCOMPARE(errorClass, QStringLiteral("count-mismatch"));
+
+        QVariantMap emptyCurrent;
+        emptyCurrent.insert(QStringLiteral("count"), QVariant::fromValue(uint(1)));
+        emptyCurrent.insert(QStringLiteral("current"), QString());
+        emptyCurrent.insert(QStringLiteral("desktops"), QVariant::fromValue(oneDesktop));
+        QVERIFY(!decodeWorkspaceSnapshot(emptyCurrent, errorClass).has_value());
+        QCOMPARE(errorClass, QStringLiteral("current-invalid"));
+
+        QList<VirtualDesktopDBus> unsignedHigh;
+        unsignedHigh.push_back(VirtualDesktopDBus{33, QStringLiteral("one"), QStringLiteral("One")});
+        QVariantMap highPosition;
+        highPosition.insert(QStringLiteral("count"), QVariant::fromValue(uint(1)));
+        highPosition.insert(QStringLiteral("current"), QStringLiteral("one"));
+        highPosition.insert(QStringLiteral("desktops"), QVariant::fromValue(unsignedHigh));
+        QVERIFY(!decodeWorkspaceSnapshot(highPosition, errorClass).has_value());
+        QCOMPARE(errorClass, QStringLiteral("position-invalid"));
     }
 };
 
