@@ -9,6 +9,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/contextdeck-warnings.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/contextdeck-tests.cmake")
 include(GNUInstallDirs)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Network Qml Quick QuickControls2 Svg Test)
@@ -122,6 +123,7 @@ add_library(contextdeck_broker_core STATIC
     src/broker/IdentityMatcher.cpp
     src/broker/KeyLedger.cpp
     src/broker/Acquisition.cpp
+    # FakeGrabber, FakeSink, and FakeSource are selftest/unit-only; not the ARM path.
     src/broker/FakeGrabber.cpp
     src/broker/EvdevGrabber.cpp
     src/broker/EvdevSource.cpp
@@ -156,108 +158,84 @@ install(PROGRAMS packaging/systemd/contextdeck-sleep.sh
 
 enable_testing()
 
-add_executable(test_profile_resolver tests/unit/test_profile_resolver.cpp)
-target_link_libraries(test_profile_resolver PRIVATE contextdeck_core Qt6::Test)
-add_test(NAME test_profile_resolver COMMAND test_profile_resolver)
+contextdeck_add_unit_test(test_profile_resolver
+    LIBRARIES contextdeck_core Qt6::Test)
 
-add_executable(test_profile_persistence tests/unit/test_profile_persistence.cpp)
-target_link_libraries(test_profile_persistence PRIVATE contextdeck_core Qt6::Test)
-add_test(NAME test_profile_persistence COMMAND test_profile_persistence)
+contextdeck_add_unit_test(test_profile_persistence
+    LIBRARIES contextdeck_core Qt6::Test)
 
-add_executable(test_workspace_plan tests/unit/test_workspace_plan.cpp)
-target_link_libraries(test_workspace_plan PRIVATE contextdeck_core Qt6::Test)
-add_test(NAME test_workspace_plan COMMAND test_workspace_plan)
+contextdeck_add_unit_test(test_workspace_plan
+    LIBRARIES contextdeck_core Qt6::Test)
 
-add_executable(test_openrgb_protocol tests/unit/test_openrgb_protocol.cpp)
-target_link_libraries(test_openrgb_protocol PRIVATE contextdeck_rgb Qt6::Test)
-add_test(NAME test_openrgb_protocol COMMAND test_openrgb_protocol)
+contextdeck_add_unit_test(test_openrgb_protocol
+    LIBRARIES contextdeck_rgb Qt6::Test)
 
-add_executable(test_broker_identity tests/unit/test_broker_identity.cpp)
-target_link_libraries(test_broker_identity PRIVATE contextdeck_broker_core)
-set_target_properties(test_broker_identity PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_broker_identity COMMAND test_broker_identity)
+contextdeck_add_unit_test(test_broker_identity
+    NO_AUTOMOC
+    LIBRARIES contextdeck_broker_core)
 
-add_executable(test_broker_ledger tests/unit/test_broker_ledger.cpp)
-target_link_libraries(test_broker_ledger PRIVATE contextdeck_broker_core)
-set_target_properties(test_broker_ledger PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_broker_ledger COMMAND test_broker_ledger)
+contextdeck_add_unit_test(test_broker_ledger
+    NO_AUTOMOC
+    LIBRARIES contextdeck_broker_core)
 
-add_executable(test_broker_forwarding tests/unit/test_broker_forwarding.cpp)
-target_link_libraries(test_broker_forwarding PRIVATE contextdeck_broker_core)
-set_target_properties(test_broker_forwarding PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_broker_forwarding COMMAND test_broker_forwarding)
+contextdeck_add_unit_test(test_broker_forwarding
+    NO_AUTOMOC
+    LIBRARIES contextdeck_broker_core)
 
-add_executable(test_broker_acquisition tests/unit/test_broker_acquisition.cpp)
-target_link_libraries(test_broker_acquisition PRIVATE contextdeck_broker_core)
-set_target_properties(test_broker_acquisition PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_broker_acquisition COMMAND test_broker_acquisition)
+contextdeck_add_unit_test(test_broker_acquisition
+    NO_AUTOMOC
+    LIBRARIES contextdeck_broker_core)
 
-add_executable(test_broker_watchdog tests/unit/test_broker_watchdog.cpp)
-target_link_libraries(test_broker_watchdog PRIVATE contextdeck_broker_core)
-set_target_properties(test_broker_watchdog PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_broker_watchdog COMMAND test_broker_watchdog)
+contextdeck_add_unit_test(test_broker_watchdog
+    NO_AUTOMOC
+    LIBRARIES contextdeck_broker_core)
 
-add_executable(test_broker_ipc tests/unit/test_broker_ipc.cpp)
-target_link_libraries(test_broker_ipc PRIVATE contextdeck_broker_core)
-set_target_properties(test_broker_ipc PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_broker_ipc COMMAND test_broker_ipc)
+contextdeck_add_unit_test(test_broker_ipc
+    NO_AUTOMOC
+    LIBRARIES contextdeck_broker_core)
 
-add_executable(test_broker_production tests/unit/test_broker_production.cpp)
-target_link_libraries(test_broker_production PRIVATE contextdeck_broker_core)
-set_target_properties(test_broker_production PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_broker_production COMMAND test_broker_production)
+contextdeck_add_unit_test(test_broker_production
+    NO_AUTOMOC
+    LIBRARIES contextdeck_broker_core)
 
-add_executable(test_udev_policy tests/unit/test_udev_policy.cpp)
-target_compile_definitions(test_udev_policy PRIVATE CONTEXTDECK_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-set_target_properties(test_udev_policy PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-add_test(NAME test_udev_policy COMMAND test_udev_policy)
+contextdeck_add_unit_test(test_udev_policy
+    NO_AUTOMOC
+    COMPILE_DEFINITIONS CONTEXTDECK_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
-add_executable(test_workspace_receiver tests/unit/test_workspace_receiver.cpp)
-target_link_libraries(test_workspace_receiver PRIVATE contextdeck_context Qt6::Test Qt6::DBus)
-add_test(NAME test_workspace_receiver
-         COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- $<TARGET_FILE:test_workspace_receiver>)
-set_tests_properties(test_workspace_receiver PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_DISABLE_SESSION_MANAGER=1")
+contextdeck_add_unit_test(test_workspace_receiver
+    DBUS_SESSION
+    LIBRARIES contextdeck_context Qt6::Test Qt6::DBus)
 
-add_executable(test_workspace_lighting
-    tests/unit/test_workspace_lighting.cpp
-    src/app/AppController.cpp
-    src/app/BrokerIpcClient.cpp
-)
-target_include_directories(test_workspace_lighting PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/app")
-target_link_libraries(test_workspace_lighting PRIVATE
-    contextdeck_core
-    contextdeck_context
-    contextdeck_launch
-    contextdeck_rgb
-    contextdeck_actions
-    contextdeck_ipc
-    Qt6::Test
-    Qt6::DBus
-    Qt6::Network
-    Qt6::Gui
-    KF6::ScreenDpms
-)
-add_test(NAME test_workspace_lighting
-         COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- $<TARGET_FILE:test_workspace_lighting>)
-set_tests_properties(test_workspace_lighting PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_DISABLE_SESSION_MANAGER=1")
+contextdeck_add_unit_test(test_workspace_lighting
+    DBUS_SESSION
+    SOURCES
+        tests/unit/test_workspace_lighting.cpp
+        src/app/AppController.cpp
+        src/app/BrokerIpcClient.cpp
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
+    LIBRARIES
+        contextdeck_core
+        contextdeck_context
+        contextdeck_launch
+        contextdeck_rgb
+        contextdeck_actions
+        contextdeck_ipc
+        Qt6::Test
+        Qt6::DBus
+        Qt6::Network
+        Qt6::Gui
+        KF6::ScreenDpms)
 
-add_executable(test_placement_resolver tests/unit/test_placement_resolver.cpp)
-target_link_libraries(test_placement_resolver PRIVATE contextdeck_core Qt6::Test)
-add_test(NAME test_placement_resolver COMMAND test_placement_resolver)
+contextdeck_add_unit_test(test_placement_resolver
+    LIBRARIES contextdeck_core Qt6::Test)
 
-add_executable(test_workspace_mutator tests/unit/test_workspace_mutator.cpp)
-target_link_libraries(test_workspace_mutator PRIVATE contextdeck_context Qt6::Test Qt6::DBus)
-add_test(NAME test_workspace_mutator
-         COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- $<TARGET_FILE:test_workspace_mutator>)
-set_tests_properties(test_workspace_mutator PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_DISABLE_SESSION_MANAGER=1")
+contextdeck_add_unit_test(test_workspace_mutator
+    DBUS_SESSION
+    LIBRARIES contextdeck_context Qt6::Test Qt6::DBus)
 
-add_executable(test_application_launcher tests/unit/test_application_launcher.cpp)
-target_link_libraries(test_application_launcher PRIVATE contextdeck_launch contextdeck_core Qt6::Test)
-add_test(NAME test_application_launcher COMMAND test_application_launcher)
+contextdeck_add_unit_test(test_application_launcher
+    LIBRARIES contextdeck_launch contextdeck_core Qt6::Test)
 
 add_test(NAME test_udev_verify
          COMMAND udevadm verify --resolve-names=never
@@ -274,10 +252,10 @@ add_test(NAME test_sleep_hook
          COMMAND bash "${CMAKE_SOURCE_DIR}/tests/unit/test_sleep_hook.sh"
                  "${CMAKE_SOURCE_DIR}")
 
-add_executable(test_broker_ipc_client
-    tests/unit/test_broker_ipc_client.cpp
-    src/app/BrokerIpcClient.cpp
-)
-target_include_directories(test_broker_ipc_client PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(test_broker_ipc_client PRIVATE contextdeck_ipc Qt6::Test Qt6::Network)
-add_test(NAME test_broker_ipc_client COMMAND test_broker_ipc_client -nocrashhandler)
+contextdeck_add_unit_test(test_broker_ipc_client
+    SOURCES
+        tests/unit/test_broker_ipc_client.cpp
+        src/app/BrokerIpcClient.cpp
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    LIBRARIES contextdeck_ipc Qt6::Test Qt6::Network
+    COMMAND_ARGS -nocrashhandler)
