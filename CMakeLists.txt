@@ -27,6 +27,12 @@ add_library(contextdeck_core STATIC
     src/core/ControlCatalog.cpp
     src/core/Resolver.cpp
     src/core/Persistence.cpp
+    src/core/persistence/JsonCommon.cpp
+    src/core/persistence/KeysJson.cpp
+    src/core/persistence/LightingJson.cpp
+    src/core/persistence/MatchJson.cpp
+    src/core/persistence/WorkspaceJson.cpp
+    src/core/persistence/DocumentCodec.cpp
     src/core/ZoneMap.cpp
     src/workspace/WorkspacePlan.cpp
     src/workspace/WorkspaceCheckpoint.cpp
