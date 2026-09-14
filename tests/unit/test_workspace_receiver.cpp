@@ -1,9 +1,11 @@
+#include "context/ContextReceiver.h"
 #include "context/WorkspaceReceiver.h"
 
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QDBusPendingCallWatcher>
 #include <QDBusVariant>
 #include <QDBusVirtualObject>
 #include <QCoreApplication>
@@ -204,6 +206,34 @@ public:
         m_connection.send(signal);
     }
 
+    void emitDesktopCreated(const QString &id, int position)
+    {
+        VirtualDesktopDBus row;
+        row.position = position;
+        row.id = id;
+        row.name = nameOf(id);
+        QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
+                                                         QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                                         QStringLiteral("desktopCreated"));
+        signal << id << QVariant::fromValue(row);
+        m_connection.send(signal);
+    }
+
+    void appendDesktop(const QString &id, const QString &name)
+    {
+        m_desktops.push_back(DesktopTuple{static_cast<qint32>(m_desktops.size()), id, name});
+    }
+
+    [[nodiscard]] QString nameOf(const QString &id) const
+    {
+        for (const DesktopTuple &row : m_desktops) {
+            if (row.id == id) {
+                return row.name;
+            }
+        }
+        return {};
+    }
+
     void emitDesktopDataChanged()
     {
         QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
@@ -349,6 +379,13 @@ QDBusConnection makeClientBus()
     static int serial = 0;
     const QString name = QStringLiteral("contextdeck-ws-test-%1").arg(++serial);
     return QDBusConnection::connectToBus(QDBusConnection::SessionBus, name);
+}
+
+QStringList g_capturedMessages;
+
+void captureMessage(QtMsgType, const QMessageLogContext &, const QString &message)
+{
+    g_capturedMessages.push_back(message);
 }
 
 } // namespace
@@ -1072,6 +1109,214 @@ private slots:
         QCOMPARE(receiver.errorClass(), QString());
         bus.unregisterService(QStringLiteral("org.kde.KWin"));
         bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void desktopCreatedEmitsEventSurface()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        QSignalSpy createdSpy(&receiver, &WorkspaceReceiver::desktopCreatedObserved);
+        const quint64 invalidations = receiver.invalidationCount();
+
+        fake.appendDesktop(QStringLiteral("three"), QStringLiteral("Three"));
+        fake.emitDesktopCreated(QStringLiteral("three"), 2);
+        QTRY_COMPARE(createdSpy.count(), 1);
+        QCOMPARE(createdSpy.at(0).at(0).toString(), QStringLiteral("three"));
+        QCOMPARE(createdSpy.at(0).at(1).toInt(), 2);
+        QVERIFY(receiver.invalidationCount() > invalidations);
+        QTRY_COMPARE(receiver.state().desktops.size(), 3);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void currentChangedDoesNotEmitDesktopCreated()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+        QSignalSpy createdSpy(&receiver, &WorkspaceReceiver::desktopCreatedObserved);
+        fake.setCurrent(QStringLiteral("two"));
+        fake.emitCurrentChanged();
+        QTRY_COMPARE(receiver.state().currentOrdinal, 2);
+        QCOMPARE(createdSpy.count(), 0);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void contextReceiverTitleHintIsConsumedOnce()
+    {
+        ContextReceiver receiver;
+        QVERIFY(receiver.start());
+        QDBusConnection client = makeClientBus();
+        QDBusMessage call = QDBusMessage::createMethodCall(
+            QStringLiteral("io.github.cisarik.ContextDeck"),
+            QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+            QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("TitleHint"));
+        call << QStringLiteral("kwin-contextdeck-bridge") << quint32(1) << QStringLiteral("Synthetic caption");
+        QDBusPendingCallWatcher watcher(client.asyncCall(call));
+        QSignalSpy finished(&watcher, &QDBusPendingCallWatcher::finished);
+        QTRY_COMPARE(finished.count(), 1);
+        QCOMPARE(watcher.reply().type(), QDBusMessage::ReplyMessage);
+        const std::optional<QString> caption = receiver.takeTitleHint();
+        QVERIFY(caption.has_value());
+        QCOMPARE(*caption, QStringLiteral("Synthetic caption"));
+        QVERIFY(!receiver.takeTitleHint().has_value());
+    }
+
+    void contextReceiverRejectsOversizedTitleHint()
+    {
+        ContextReceiver receiver;
+        QVERIFY(receiver.start());
+        QDBusConnection client = makeClientBus();
+        QDBusMessage call = QDBusMessage::createMethodCall(
+            QStringLiteral("io.github.cisarik.ContextDeck"),
+            QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+            QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("TitleHint"));
+        call << QStringLiteral("kwin-contextdeck-bridge") << quint32(2) << QString(300, QLatin1Char('c'));
+        QDBusPendingCallWatcher watcher(client.asyncCall(call));
+        QSignalSpy finished(&watcher, &QDBusPendingCallWatcher::finished);
+        QTRY_COMPARE(finished.count(), 1);
+        QCOMPARE(watcher.reply().type(), QDBusMessage::ErrorMessage);
+        QVERIFY(!receiver.takeTitleHint().has_value());
+    }
+
+    void contextReceiverPlacementHintUsesProviderAndConsumesCaption()
+    {
+        ContextReceiver receiver;
+        ApplicationIdentity captured;
+        std::optional<QString> capturedCaption;
+        bool providerCalled = false;
+        receiver.setPlacementHintProvider([&](const ApplicationIdentity &identity,
+                                              const std::optional<QString> &caption) {
+            providerCalled = true;
+            captured = identity;
+            capturedCaption = caption;
+            PlacementHintDecision decision;
+            decision.desktopId = QStringLiteral("live-uuid-1");
+            decision.maximize = true;
+            return decision;
+        });
+        QVERIFY(receiver.start());
+        QDBusConnection client = makeClientBus();
+        QDBusMessage titleCall = QDBusMessage::createMethodCall(
+            QStringLiteral("io.github.cisarik.ContextDeck"),
+            QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+            QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("TitleHint"));
+        titleCall << QStringLiteral("kwin-contextdeck-bridge") << quint32(1) << QStringLiteral("Hint caption");
+        QDBusPendingCallWatcher titleWatcher(client.asyncCall(titleCall));
+        QSignalSpy titleFinished(&titleWatcher, &QDBusPendingCallWatcher::finished);
+        QTRY_COMPARE(titleFinished.count(), 1);
+
+        QDBusMessage placeCall = QDBusMessage::createMethodCall(
+            QStringLiteral("io.github.cisarik.ContextDeck"),
+            QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+            QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("PlacementHint"));
+        placeCall << QStringLiteral("editor.desktop") << QStringLiteral("editor") << QStringLiteral("Editor");
+        QDBusPendingCallWatcher placeWatcher(client.asyncCall(placeCall));
+        QSignalSpy placeFinished(&placeWatcher, &QDBusPendingCallWatcher::finished);
+        QTRY_COMPARE(placeFinished.count(), 1);
+        const QDBusMessage reply = placeWatcher.reply();
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        const QVariantList args = reply.arguments();
+        QCOMPARE(args.size(), 2);
+        QCOMPARE(args.at(0).toString(), QStringLiteral("live-uuid-1"));
+        QCOMPARE(args.at(1).toBool(), true);
+        QVERIFY(providerCalled);
+        QCOMPARE(captured.desktopFileName, QStringLiteral("editor.desktop"));
+        QCOMPARE(captured.resourceClass, QStringLiteral("editor"));
+        QCOMPARE(captured.resourceName, QStringLiteral("Editor"));
+        QVERIFY(capturedCaption.has_value());
+        QCOMPARE(*capturedCaption, QStringLiteral("Hint caption"));
+        QVERIFY(!receiver.takeTitleHint().has_value());
+    }
+
+    void contextReceiverPlacementHintWithoutProviderIsNoOp()
+    {
+        ContextReceiver receiver;
+        QVERIFY(receiver.start());
+        QDBusConnection client = makeClientBus();
+        QDBusMessage placeCall = QDBusMessage::createMethodCall(
+            QStringLiteral("io.github.cisarik.ContextDeck"),
+            QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+            QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("PlacementHint"));
+        placeCall << QStringLiteral("editor.desktop") << QStringLiteral("editor") << QStringLiteral("Editor");
+        QDBusPendingCallWatcher watcher(client.asyncCall(placeCall));
+        QSignalSpy finished(&watcher, &QDBusPendingCallWatcher::finished);
+        QTRY_COMPARE(finished.count(), 1);
+        const QVariantList args = watcher.reply().arguments();
+        QCOMPARE(args.size(), 2);
+        QVERIFY(args.at(0).toString().isEmpty());
+        QCOMPARE(args.at(1).toBool(), false);
+    }
+
+    void contextReportReplyCarriesTitleFallbackFlag()
+    {
+        ContextReceiver receiver;
+        receiver.setTitleFallbackEnabled(true);
+        QVERIFY(receiver.start());
+        QDBusConnection client = makeClientBus();
+        QDBusMessage call = QDBusMessage::createMethodCall(
+            QStringLiteral("io.github.cisarik.ContextDeck"),
+            QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+            QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("ContextReport"));
+        call << QStringLiteral("kwin-contextdeck-bridge") << quint32(1) << QStringLiteral("app.desktop")
+             << QStringLiteral("app") << QStringLiteral("App") << qint64(0);
+        QDBusPendingCallWatcher watcher(client.asyncCall(call));
+        QSignalSpy finished(&watcher, &QDBusPendingCallWatcher::finished);
+        QTRY_COMPARE(finished.count(), 1);
+        const QDBusMessage reply = watcher.reply();
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(reply.arguments().size(), 1);
+        QCOMPARE(reply.arguments().at(0).toBool(), true);
+    }
+
+    void contextReceiverDoesNotLogTitleHintArguments()
+    {
+        const QString sentinel = QStringLiteral("contextdeck-caption-sentinel-6a1f");
+        g_capturedMessages.clear();
+        QtMessageHandler previous = qInstallMessageHandler(captureMessage);
+
+        {
+            ContextReceiver receiver;
+            QVERIFY(receiver.start());
+            QDBusConnection client = makeClientBus();
+            QDBusMessage call = QDBusMessage::createMethodCall(
+                QStringLiteral("io.github.cisarik.ContextDeck"),
+                QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+                QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("TitleHint"));
+            call << QStringLiteral("kwin-contextdeck-bridge") << quint32(1) << sentinel;
+            QDBusPendingCallWatcher watcher(client.asyncCall(call));
+            QSignalSpy finished(&watcher, &QDBusPendingCallWatcher::finished);
+            QTRY_COMPARE(finished.count(), 1);
+            QVERIFY(receiver.takeTitleHint().has_value());
+
+            QDBusMessage reportCall = QDBusMessage::createMethodCall(
+                QStringLiteral("io.github.cisarik.ContextDeck"),
+                QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+                QStringLiteral("io.github.cisarik.ContextDeck.Context1"), QStringLiteral("ContextReport"));
+            reportCall << QStringLiteral("kwin-contextdeck-bridge") << quint32(2) << QStringLiteral("app.desktop")
+                       << QStringLiteral("app") << QStringLiteral("App") << qint64(0);
+            QDBusPendingCallWatcher reportWatcher(client.asyncCall(reportCall));
+            QSignalSpy reportFinished(&reportWatcher, &QDBusPendingCallWatcher::finished);
+            QTRY_COMPARE(reportFinished.count(), 1);
+            QCoreApplication::processEvents();
+        }
+
+        qInstallMessageHandler(previous);
+        for (const QString &message : g_capturedMessages) {
+            QVERIFY2(!message.contains(sentinel), qPrintable(message));
+        }
     }
 };
 

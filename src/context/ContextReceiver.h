@@ -6,7 +6,15 @@
 #include <QString>
 #include <QVector>
 
+#include <functional>
+#include <optional>
+
 namespace contextdeck {
+
+struct PlacementHintDecision {
+    QString desktopId;
+    bool maximize = false;
+};
 
 struct InventoryEntry {
     QString desktopFileName;
@@ -30,6 +38,9 @@ class ContextReceiver : public QObject
     Q_PROPERTY(bool degraded READ isDegraded NOTIFY degradedChanged)
 
 public:
+    using PlacementHintProvider =
+        std::function<PlacementHintDecision(const ApplicationIdentity &identity, const std::optional<QString> &caption)>;
+
     explicit ContextReceiver(QObject *parent = nullptr);
     ~ContextReceiver() override;
 
@@ -42,6 +53,11 @@ public:
     [[nodiscard]] ApplicationIdentity identity() const { return m_identity; }
     [[nodiscard]] QVector<InventoryEntry> inventory() const { return m_inventory; }
     [[nodiscard]] QString lastError() const { return m_lastError; }
+    [[nodiscard]] bool titleFallbackEnabled() const { return m_titleFallbackEnabled; }
+
+    void setTitleFallbackEnabled(bool enabled) { m_titleFallbackEnabled = enabled; }
+    void setPlacementHintProvider(PlacementHintProvider provider) { m_placementProvider = std::move(provider); }
+    [[nodiscard]] std::optional<QString> takeTitleHint();
 
 signals:
     void currentIdentityChanged();
@@ -59,6 +75,8 @@ private:
                          qint64 parentWindowId);
     void onInventoryReport(const QString &bridgeId, quint32 sequence, const QString &payloadJson);
     void onHeartbeat(const QString &bridgeId, quint32 sequence);
+    void onTitleHint(const QString &bridgeId, quint32 sequence, const QString &caption);
+    [[nodiscard]] PlacementHintDecision onPlacementHint(const ApplicationIdentity &identity);
     void onWatchdog();
     void markBridgeLost(const QString &reason);
     void bumpPolicy();
@@ -67,7 +85,10 @@ private:
     Object *m_object = nullptr;
     bool m_degraded = false;
     bool m_bridgeConnected = false;
+    bool m_registered = false;
+    bool m_objectRegistered = false;
     bool m_warnedLoss = false;
+    bool m_titleFallbackEnabled = false;
     quint32 m_policyRevision = 0;
     quint32 m_lastSequence = 0;
     QString m_bridgeId;
@@ -75,6 +96,8 @@ private:
     ApplicationIdentity m_identity;
     QVector<InventoryEntry> m_inventory;
     qint64 m_lastHeartbeatMs = 0;
+    std::optional<QString> m_pendingCaption;
+    PlacementHintProvider m_placementProvider;
 };
 
 } // namespace contextdeck

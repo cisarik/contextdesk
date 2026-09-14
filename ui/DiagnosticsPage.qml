@@ -135,6 +135,38 @@ Kirigami.ScrollablePage {
                 text: String(app.diagnostics.inventoryCount)
             }
             Controls.Label {
+                Kirigami.FormData.label: "workspaceApplyStatus"
+                text: String(app.diagnostics.workspaceApplyStatus)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceApplyRunning"
+                text: String(app.diagnostics.workspaceApplyRunning)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceCheckpointAvailable"
+                text: String(app.diagnostics.workspaceCheckpointAvailable)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceLastMutationCreated"
+                text: String(app.diagnostics.workspaceLastMutationCreated)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceLastMutationRemoved"
+                text: String(app.diagnostics.workspaceLastMutationRemoved)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceLastApplyReverted"
+                text: String(app.diagnostics.workspaceLastApplyReverted)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceLastResidual"
+                text: String(app.diagnostics.workspaceLastResidual)
+            }
+            Controls.Label {
+                Kirigami.FormData.label: "workspaceLaunchAttempts"
+                text: String(app.diagnostics.workspaceLaunchAttempts)
+            }
+            Controls.Label {
                 Kirigami.FormData.label: "lastError"
                 text: String(app.diagnostics.lastError)
                 wrapMode: Text.WordWrap

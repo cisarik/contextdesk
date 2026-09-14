@@ -40,6 +40,7 @@ struct WorkspaceLaunchPlan {
     QString displayName;
     int desktopOrdinal = 0;
     bool maximize = false;
+    QString desktopFileId;
     WorkspaceLaunchIntent intent = WorkspaceLaunchIntent::Disabled;
 };
 
@@ -82,6 +83,7 @@ public:
     void endTransaction();
     [[nodiscard]] bool isActive() const { return m_active; }
     [[nodiscard]] bool tryAttempt(const QString &profileId, qint64 nowMs);
+    [[nodiscard]] bool tryBoundedRetry(const QString &profileId, qint64 nowMs);
     [[nodiscard]] bool hasAttempted(const QString &profileId) const;
     [[nodiscard]] int attemptCount(const QString &profileId) const;
 

@@ -1,6 +1,8 @@
 # ADR 0004 — Typed application launch (in-session, not autostart)
 
-Status: accepted for the M4 tree. Launch itself is not implemented in Slice A.
+Status: accepted for the M4 tree. Slice B implements the typed launcher in
+code; a launch happens only on the user's explicit Apply (or an in-transaction
+`desktopCreated`) and still requires a separate COOPERATOR IRL grant.
 
 ## Context
 
@@ -13,11 +15,11 @@ executable configuration are forbidden.
 ## Decision
 
 - **Launch is typed.** The product launches a `.desktop` application id
-  through `KIO::ApplicationLauncherJob` (`KF6::Service` + `KF6::KIOGui`) in a
-  later separately authorized slice. `KF6KIO` is not linked in Slice A.
+  through `KIO::ApplicationLauncherJob` (`KF6::Service` + `KF6::KIOGui`).
+  `KF6KIO` is linked only in the typed-launch component.
 - **Rejected routes:** `systemd-run --user` for GUI launch (session/Wayland
   inheritance), `kstart` argv wrapping, and shell/`QProcess` execution of
-  `Exec=` lines.
+  `Exec=` lines. The launcher accepts only a validated desktop id.
 - **Trigger set is narrow:** only an explicit user `applyWorkspaceSession` and
   a `desktopCreated` event that occurs during that in-flight transaction (for
   profiles assigned to the new ordinal). Plasma login, session-app start,
@@ -25,14 +27,15 @@ executable configuration are forbidden.
   events are not triggers.
 - **Duplicate skip:** do not launch when the bridge inventory already matches
   the profile. Debounce: one launch attempt per profile per transaction, with
-  a bounded retry only on the matching in-transaction `desktopCreated`.
-  Bounded failure class, no retry storm, no kill-on-revert.
+  a bounded retry only on the matching in-transaction `desktopCreated` when
+  the first job failed before a window appeared. Bounded failure class, no
+  retry storm, no kill-on-revert.
 - **Non-autostart posture:** no units, no `[Install]` sections, no login
   hooks, no `graphical-session.target` binding. M4 never launches because the
   session began; M5/G8 owns login lifecycle.
-- **Slice A dry-runs only:** `WorkspacePlan` reports `would_launch`,
-  `already_running`, `missing_desktop_file`, or `disabled` in memory. It never
-  contacts KIO and never starts anything.
+- **Dry-run stays available:** `WorkspacePlan` still reports `would_launch`,
+  `already_running`, `missing_desktop_file`, or `disabled` in memory before
+  any launch attempt.
 
 ## Consequences
 

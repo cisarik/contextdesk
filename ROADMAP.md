@@ -28,13 +28,14 @@ COOPERATOR action, separate from any authorized report-file preparation.
   deferred by explicit COOPERATOR decision. M3 is not closed, and code
   acceptance is not physical acceptance. Later IRL steps live in
   `docs/testing-m3.md`.
-- Current whole: **M4 `g213-contextdeck-workspace-session-manager`** — Slice A
+- Current whole: **M4 `g213-contextdeck-workspace-session-manager`** — Slice B
   implementation candidate in the product tree (schema 4 named
   sessions/assignments, `rows`/wrapping observation, pure dry-run
-  `WorkspacePlan`, `Plochy` editor, Apply hidden/disabled). **Not accepted; no
-  live desktop mutation and no application launch in Slice A.** Later IRL
-  steps live in `docs/testing-m4.md`; a separately authorized Slice B owns
-  live desktop mutation, typed in-session launch, and placement.
+  `WorkspacePlan`, explicit Apply with a user-local checkpoint/revert,
+  `DesktopMutator`, typed `ApplicationLauncher`, `PlacementResolver`, the
+  `Plochy` editor, and bridge `PlacementHint`). **Not accepted and not
+  live-verified; nothing mutates without the user's Apply and no launch happens
+  at login.** Later IRL steps live in `docs/testing-m4.md`.
 - Parked whole: **M2 `g213-contextdeck-input-passthrough-safety`**. Planning
   and production implementation are in the repository. Exact candidate
   `cb72ae0388307b514182efc6936712e3da42cda4` was installed and verified on
@@ -85,7 +86,7 @@ done-as-planned.
 | P1 | `g213-contextdeck-control-evidence` | Physical control matrix for all 20 controls (COOPERATOR-run probe) — G1 | — | Planned, parallel |
 | M2 | `g213-contextdeck-input-passthrough-safety` | Narrow libevdev/uinput broker, pass-through only, crash/hang/recovery evidence | P1, M1, G3 | **Parked** — production path in repo including suspend/resume sleep hook; inactive install (`deployment-PASS`); named Sessions 16/19/22/23/24 slices (`acceptance-PASS`); **full G4 open**; residual independent G3 gap not closed |
 | M3 | `g213-contextdeck-workspace-aware-lighting` | Opt-in five-slot layout: desktop indicators + application color through existing OpenRGB | M1 | **Implementation-candidate** — not accepted |
-| M4 | `g213-contextdeck-workspace-session-manager` | In-session workspace orchestrator: named sessions, app assignment to virtual desktops, explicit-apply / in-transaction launch (never at Plasma login), placement, opt-in title fallback | M3 | **Slice A implementation-candidate** — not accepted |
+| M4 | `g213-contextdeck-workspace-session-manager` | In-session workspace orchestrator: named sessions, app assignment to virtual desktops, explicit-apply / in-transaction launch (never at Plasma login), placement, opt-in title fallback | M3 | **Slice B implementation-candidate** — not accepted |
 | M5 | `g213-contextdeck-system-integration-and-autostart` | Full KDE Plasma session autostart, systemd user integration, packaging, complete lifecycle | M2, M4, G6, G8 | Planned |
 
 Dependency order: P2 confirmed five-zone lighting; M1 → M2 (input safety) OR
@@ -283,7 +284,7 @@ The unfilled control-to-zone Results table remains unmeasured and does not
 block ordinary five-slot lighting. M4 is now its own current whole; remapping,
 the deck layer, and M5 stay separate future wholes.
 
-### Workspace session manager — current whole, Slice A implementation candidate `g213-contextdeck-workspace-session-manager`
+### Workspace session manager — current whole, Slice B implementation candidate `g213-contextdeck-workspace-session-manager`
 
 **Need (COOPERATOR):** transform ContextDesk into a true KDE Plasma Context &
 Workspace Manager:
@@ -293,24 +294,40 @@ Workspace Manager:
    maximize them to their respective virtual desktops.
 4. Window-title-based matching as a fallback when an unassigned window has focus.
 
-**Classification:** current logical whole (milestone M4). Slice A is an
-observational implementation candidate, not acceptance; live desktop mutation,
-launch, and placement belong to a separately authorized Slice B. Nothing here
-grants host or desktop mutation.
+**Classification:** current logical whole (milestone M4). Slice B is an
+implementation candidate, not acceptance and not live-verified. All live
+desktop mutation, launch, and bridge reload remain separately granted
+COOPERATOR operations. Nothing here grants host or desktop mutation.
 
-**Implemented Slice A contract (candidate, not accepted):**
+**Implemented Slice B contract (candidate, not accepted):**
 - Schema 4: `workspace_sessions[]` ordinal layouts plus per-application
   `workspace` assignment; preserving schema-1/2/3 migration; explicit save only.
 - `WorkspaceReceiver` additionally decodes `rows` and
-  `navigationWrappingAround` and subscribes the two extra invalidation signals.
+  `navigationWrappingAround`, subscribes the two extra invalidation signals,
+  and exposes a payload-free in-transaction `desktopCreatedObserved` event
+  surface (no second `GetAll`, no polling, no desktop identity logged).
 - Pure `WorkspacePlan` dry-run: create/rename/rows/wrapping diff, drift and
-  extra-desktop indicator, launch intent
-  (`would_launch`/`already_running`/`missing_desktop_file`/`disabled`), launch
-  debounce and trigger classification. No D-Bus/KIO/mutation.
-- `Plochy` editor and per-profile assignment fields; Apply hidden/disabled.
+  extra-desktop indicator, launch intent, debounce, and trigger classification.
+- `DesktopMutator`: checkpoint-write-and-verify first, then create ascending,
+  conditional rename ascending, `rows`, wrapping, the opted-in `current`
+  switch, and explicit extra removals last. Any error stops and reverts from
+  the user-local `WorkspaceCheckpoint`; `removeDesktop` is opt-in only.
+- `ApplicationLauncher`: typed `.desktop` id through
+  `KService`/`KIO::ApplicationLauncherJob` (`KF6::Service` + `KF6::KIOGui`),
+  triggered only by explicit Apply or the matching in-transaction
+  `desktopCreated`; inventory skip, 2 s debounce, one bounded retry.
+- `PlacementResolver` + bridge `PlacementHint` on `windowAdded`: identity wins
+  over the opt-in title fallback; empty id is a no-op; no `kwinrulesrc`.
 - Opt-in title fallback: user-authored pattern compared in memory for one
-  call; captions never stored, logged, or added to `MatchSpec`.
+  call; the caption is sent only while the global flag is on and is discarded
+  after the call, never stored or logged.
+- `Plochy` editor and per-profile assignment fields; Apply/revert are explicit.
 - Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md).
+
+**Slice history (recorded):** Slice A (schema 4, observation, dry-run,
+editor) was implemented and corrected to accepted candidate `aca6c68`; its
+code acceptance is superseded as the base for Slice B and is not live
+behavior evidence.
 
 **Route corrections measured during M4 planning (supersede the old notes):**
 - `window.desktops` is writable in the installed KWin script API;

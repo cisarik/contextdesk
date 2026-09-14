@@ -27,7 +27,7 @@ Kirigami.ScrollablePage {
         Controls.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "Observational M4 Slice A: ContextDeck reads the live desktop state (org.kde.KWin VirtualDesktopManager) and stores named sessions with per-application assignments. Saving writes only profiles.json. This slice never creates, renames, removes, or switches live desktops, and never launches applications; live apply is a later separately authorized grant."
+            text: "M4 Slice B: ContextDeck vie na výslovné Použitie vytvoriť chýbajúce plochy, premenovať odlišné, nastaviť mriežku/obtáčanie a voliteľne prepnúť plochu alebo odstrániť prebytočné plochy. Predvolený Apply nič neodstraňuje. Nič sa nedeje automaticky pri štarte relácie ani pri zmene fokusu."
         }
 
         Controls.CheckBox {
@@ -278,14 +278,57 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
             Controls.Button {
                 text: "Použiť"
-                enabled: app.workspaceApplyAvailable
+                enabled: app.workspaceApplyAvailable && !app.workspaceApplyRunning
+                onClicked: {
+                    if (applyRemoveExtras.checked) {
+                        removeExtrasDialog.open();
+                    } else {
+                        app.applyWorkspaceSession(applySwitchCurrent.checked, false);
+                    }
+                }
             }
+            Controls.Button {
+                text: "Vrátiť z checkpointu"
+                enabled: app.workspaceCheckpointAvailable && !app.workspaceApplyRunning
+                onClicked: app.revertWorkspaceApply()
+            }
+        }
+        Controls.CheckBox {
+            id: applySwitchCurrent
+            text: "Prepnúť na prvú plochu relácie (voliteľné, mimo predvoleného Apply)"
+        }
+        Controls.CheckBox {
+            id: applyRemoveExtras
+            text: "Odstrániť prebytočné plochy (neexistuje vrátenie odstránených plôch späť)"
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.8
+            text: "Predvolený Apply: vytvorenie chýbajúcich plôch, podmienené premenovanie, mriežka a obtáčanie. Spustenie aplikácií a maximalizácia sú samostatné voľby v profile aplikácie (karta Aplikácie). Vrátenie z checkpointu obnoví iba konfiguráciu plôch: už otvorené okná sa nepresúvajú a spustené aplikácie sa neukončujú."
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: app.workspaceApplyStatus.length > 0
+            text: "Stav: " + app.workspaceApplyStatus
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: app.workspaceLastResidual.length > 0
+            text: "Obmedzený zvyšok: " + app.workspaceLastResidual
+        }
+        Controls.Dialog {
+            id: removeExtrasDialog
+            title: "Odstrániť prebytočné plochy?"
+            modal: true
+            standardButtons: Controls.Dialog.Ok | Controls.Dialog.Cancel
             Controls.Label {
-                Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                opacity: 0.8
-                text: "Live apply je samostatne autorizovaný krok (Slice B). Tento build nič nemení na bežiacich plochách a nespúšťa žiadne aplikácie."
+                text: "Odstránené plochy sa nedajú vrátiť späť ako tie isté plochy; nové plochy dostanú nové identifikátory. Checkpoint obnoví pôvodný počet, názvy, mriežku a obtáčanie, ale odstránené plochy už nemajú pôvodné identifikátory. Pokračovať?"
             }
+            onAccepted: app.applyWorkspaceSession(applySwitchCurrent.checked, true)
         }
         Controls.Button {
             text: "Uložiť"

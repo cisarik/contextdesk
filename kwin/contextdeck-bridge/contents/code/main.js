@@ -6,6 +6,7 @@ const MAX_INVENTORY = 200;
 const MAX_PARENT_WALK = 8;
 
 var sequence = 0;
+var titleFallbackEnabled = false;
 
 function nextSequence() {
     sequence += 1;
@@ -16,6 +17,14 @@ function bounded(value) {
     var text = value === undefined || value === null ? "" : String(value);
     if (text.length > 256) {
         return text.substring(0, 256);
+    }
+    return text;
+}
+
+function boundedCaption(value) {
+    var text = value === undefined || value === null ? "" : String(value);
+    if (text.length > 64) {
+        return text.substring(0, 64);
     }
     return text;
 }
@@ -77,7 +86,23 @@ function identityOf(window) {
     };
 }
 
+function sendTitleHint(window) {
+    if (!titleFallbackEnabled) {
+        return;
+    }
+    var root = resolveRoot(window);
+    if (!root) {
+        return;
+    }
+    var caption = boundedCaption(root.caption);
+    if (!caption) {
+        return;
+    }
+    callDBus(SERVICE, PATH, IFACE, "TitleHint", BRIDGE_ID, nextSequence(), caption);
+}
+
 function sendContext(window) {
+    sendTitleHint(window);
     var identity = { desktopFileName: "", resourceClass: "", resourceName: "", parentWindowId: 0 };
     if (window && !skipWindow(window)) {
         identity = identityOf(window);
@@ -88,7 +113,59 @@ function sendContext(window) {
              identity.desktopFileName,
              identity.resourceClass,
              identity.resourceName,
-             identity.parentWindowId);
+             identity.parentWindowId,
+             function (enabled) {
+                 if (typeof enabled === "boolean") {
+                     titleFallbackEnabled = enabled;
+                 }
+             });
+}
+
+function desktopById(id) {
+    if (!id) {
+        return null;
+    }
+    var desktops = workspace.desktops;
+    for (var i = 0; i < desktops.length; i++) {
+        if (String(desktops[i].id) === id) {
+            return desktops[i];
+        }
+    }
+    return null;
+}
+
+function applyPlacement(window, desktopId, maximize) {
+    if (!window || !desktopId) {
+        return;
+    }
+    var desktop = desktopById(desktopId);
+    if (desktop) {
+        window.desktops = [desktop];
+    }
+    if (maximize) {
+        window.setMaximize(true, true);
+    }
+}
+
+function requestPlacement(window) {
+    if (!window || skipWindow(window)) {
+        return;
+    }
+    var identity = identityOf(window);
+    if (!identity.desktopFileName && !identity.resourceClass && !identity.resourceName) {
+        return;
+    }
+    sendTitleHint(window);
+    callDBus(SERVICE, PATH, IFACE, "PlacementHint",
+             identity.desktopFileName,
+             identity.resourceClass,
+             identity.resourceName,
+             function (desktopId, maximize) {
+                 if (typeof desktopId !== "string" || desktopId.length === 0) {
+                     return;
+                 }
+                 applyPlacement(window, desktopId, maximize === true);
+             });
 }
 
 function identityKey(entry) {
@@ -163,6 +240,7 @@ workspace.windowActivated.connect(function (window) {
 });
 
 workspace.windowAdded.connect(function (window) {
+    requestPlacement(window);
     scheduleInventory();
     if (window && window === workspace.activeWindow) {
         schedule(window);

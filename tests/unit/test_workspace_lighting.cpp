@@ -9,6 +9,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QDBusPendingCallWatcher>
 #include <QDBusVariant>
 #include <QDBusVirtualObject>
 #include <QCoreApplication>
@@ -134,8 +135,96 @@ public:
             }
             return sendAll(message, connection);
         }
+        if (message.interface() == QLatin1String("org.freedesktop.DBus.Properties")
+            && message.member() == QLatin1String("Set")) {
+            const QVariantList args = message.arguments();
+            if (args.size() != 3) {
+                return connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("bad args")));
+            }
+            const QString property = args.at(1).toString();
+            const QVariant value = args.at(2).canConvert<QDBusVariant>()
+                ? qvariant_cast<QDBusVariant>(args.at(2)).variant()
+                : args.at(2);
+            if (property == QLatin1String("rows")) {
+                m_rows = value.toUInt();
+            } else if (property == QLatin1String("navigationWrappingAround")) {
+                m_wrapping = value.toBool();
+            } else if (property == QLatin1String("current")) {
+                m_current = value.toString();
+            } else {
+                return connection.send(message.createErrorReply(QDBusError::UnknownProperty, property));
+            }
+            return connection.send(message.createReply());
+        }
+        if (message.member() == QLatin1String("createDesktop")) {
+            const QVariantList args = message.arguments();
+            if (args.size() != 2) {
+                return connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("bad args")));
+            }
+            const QString id = QStringLiteral("gen-%1").arg(++m_generated);
+            const QString name = args.at(1).toString();
+            m_desktops.push_back(DesktopTuple{static_cast<qint32>(m_desktops.size()), id, name});
+            VirtualDesktopDBus row;
+            row.position = static_cast<qint32>(m_desktops.size() - 1);
+            row.id = id;
+            row.name = name;
+            QDBusMessage created = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
+                                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                                              QStringLiteral("desktopCreated"));
+            created << id << QVariant::fromValue(row);
+            m_connection.send(created);
+            QDBusMessage countSignal = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
+                                                                  QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                                                  QStringLiteral("countChanged"));
+            countSignal << static_cast<uint>(m_desktops.size());
+            m_connection.send(countSignal);
+            return connection.send(message.createReply());
+        }
+        if (message.member() == QLatin1String("setDesktopName")) {
+            const QVariantList args = message.arguments();
+            if (args.size() != 2) {
+                return connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("bad args")));
+            }
+            for (DesktopTuple &row : m_desktops) {
+                if (row.id == args.at(0).toString()) {
+                    row.name = args.at(1).toString();
+                    return connection.send(message.createReply());
+                }
+            }
+            return connection.send(message.createErrorReply(QDBusError::UnknownMethod, QStringLiteral("no desktop")));
+        }
         return false;
     }
+
+    void appendDesktop(const QString &id, const QString &name)
+    {
+        m_desktops.push_back(DesktopTuple{static_cast<qint32>(m_desktops.size()), id, name});
+    }
+
+    void emitDesktopCreated(const QString &id, int position)
+    {
+        VirtualDesktopDBus row;
+        row.position = position;
+        row.id = id;
+        row.name = nameOf(id);
+        QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/VirtualDesktopManager"),
+                                                         QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                                         QStringLiteral("desktopCreated"));
+        signal << id << QVariant::fromValue(row);
+        m_connection.send(signal);
+    }
+
+    [[nodiscard]] QString nameOf(const QString &id) const
+    {
+        for (const DesktopTuple &row : m_desktops) {
+            if (row.id == id) {
+                return row.name;
+            }
+        }
+        return {};
+    }
+
+    [[nodiscard]] int desktopCount() const { return static_cast<int>(m_desktops.size()); }
 
     void setDelayMs(int delayMs) { m_delayMs = delayMs; }
     void setCurrent(const QString &id) { m_current = id; }
@@ -164,7 +253,8 @@ public:
         QVariantMap map;
         map.insert(QStringLiteral("count"), QVariant::fromValue(static_cast<uint>(m_desktops.size())));
         map.insert(QStringLiteral("current"), m_current);
-        map.insert(QStringLiteral("rows"), QVariant::fromValue(uint(1)));
+        map.insert(QStringLiteral("rows"), QVariant::fromValue(m_rows));
+        map.insert(QStringLiteral("navigationWrappingAround"), QVariant(m_wrapping));
         QList<VirtualDesktopDBus> rows;
         for (const DesktopTuple &tuple : m_desktops) {
             VirtualDesktopDBus row;
@@ -182,6 +272,9 @@ private:
     QVector<DesktopTuple> m_desktops;
     QString m_current;
     int m_delayMs = 0;
+    uint m_rows = 1;
+    bool m_wrapping = false;
+    int m_generated = 0;
 };
 
 int g_lightingClientIndex = 0;
@@ -202,6 +295,13 @@ bool registerLightingFake(QDBusConnection &bus, FakeDesktopManager *fake)
         return false;
     }
     return bus.registerVirtualObject(QStringLiteral("/VirtualDesktopManager"), fake, QDBusConnection::SingleNode);
+}
+
+QStringList g_lightingCapturedMessages;
+
+void captureLightingMessage(QtMsgType, const QMessageLogContext &, const QString &message)
+{
+    g_lightingCapturedMessages.push_back(message);
 }
 
 } // namespace
@@ -463,6 +563,215 @@ private slots:
                 QVERIFY2(!normalized.contains(fragment),
                          qPrintable(QStringLiteral("diagnostics key exposes a sensitive category: %1").arg(it.key())));
             }
+        }
+    }
+
+    void applyLaunchesInTransactionDesktopProfilesOnce()
+    {
+        QVERIFY(QDBusConnection::sessionBus().isConnected());
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        QVERIFY(registerLightingFake(bus, &fake));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        ProfileDocument document;
+        document.preferences.workspaceManagementEnabled = true;
+        document.preferences.activeWorkspaceSessionId = QStringLiteral("coding");
+        WorkspaceSession session;
+        session.id = QStringLiteral("coding");
+        session.displayName = QStringLiteral("Coding");
+        session.desktops.push_back(WorkspaceDesktopEntry{1, QStringLiteral("One")});
+        session.desktops.push_back(WorkspaceDesktopEntry{2, QStringLiteral("Two")});
+        session.desktops.push_back(WorkspaceDesktopEntry{3, QStringLiteral("Test")});
+        document.workspaceSessions.push_back(session);
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("editor.desktop");
+        profile.displayName = QStringLiteral("Editor");
+        profile.match.desktopFileName = QStringLiteral("editor.desktop");
+        WorkspaceAssignment assignment;
+        assignment.sessionId = QStringLiteral("coding");
+        assignment.desktopOrdinal = 3;
+        assignment.launch = true;
+        assignment.launchDesktopFile = QStringLiteral("org.example.Editor.desktop");
+        profile.workspace = assignment;
+        document.applications.push_back(profile);
+        const SaveOutcome saved = store.save(document);
+        QVERIFY2(saved.ok, qPrintable(saved.error.reason));
+
+        ContextReceiver context;
+        OpenRgbClient rgb;
+        PowerActions power;
+        AppController controller(&context, &rgb, &power, nullptr, dir.path());
+        QDBusConnection client = makeLightingClientBus();
+        WorkspaceReceiver workspace(client);
+        workspace.setTimingForTest(200, {20, 40});
+        controller.setWorkspaceReceiver(&workspace);
+        controller.load();
+        QVERIFY(workspace.start());
+        QTRY_COMPARE(workspace.state().availability, WorkspaceAvailability::Available);
+
+        QStringList launched;
+        controller.launcher().setInvokerForTest([&launched](const QString &desktopFileId) {
+            launched.push_back(desktopFileId);
+            return true;
+        });
+
+        const QVariantMap preview = controller.workspacePlanPreview();
+        QVERIFY(preview.value(QStringLiteral("sessionFound")).toBool());
+        QVERIFY(controller.workspaceApplyAvailable());
+        QVERIFY(controller.applyWorkspaceSession(false, false));
+        QCOMPARE(controller.workspaceApplyStatus(), QStringLiteral("applied"));
+        QCOMPARE(launched, QStringList{QStringLiteral("org.example.Editor.desktop")});
+        QCOMPARE(fake.desktopCount(), 3);
+        QVERIFY(!controller.workspaceApplyRunning());
+
+        launched.clear();
+        fake.appendDesktop(QStringLiteral("user-x"), QStringLiteral("User"));
+        fake.emitDesktopCreated(QStringLiteral("user-x"), 3);
+        QTest::qWait(50);
+        QCoreApplication::processEvents();
+        QVERIFY(launched.isEmpty());
+
+        fake.setCurrent(QStringLiteral("one"));
+        fake.emitCurrentChanged();
+        QTest::qWait(50);
+        QCoreApplication::processEvents();
+        QVERIFY(launched.isEmpty());
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void applyRefusalsAreFailClosed()
+    {
+        QVERIFY(QDBusConnection::sessionBus().isConnected());
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeDesktopManager fake(bus);
+        QVERIFY(registerLightingFake(bus, &fake));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileStore store(dir.path());
+        ProfileDocument document;
+        document.preferences.workspaceManagementEnabled = true;
+        document.preferences.activeWorkspaceSessionId = QStringLiteral("coding");
+        WorkspaceSession session;
+        session.id = QStringLiteral("coding");
+        session.displayName = QStringLiteral("Coding");
+        session.desktops.push_back(WorkspaceDesktopEntry{1, QStringLiteral("One")});
+        session.desktops.push_back(WorkspaceDesktopEntry{2, QStringLiteral("Two")});
+        document.workspaceSessions.push_back(session);
+        QVERIFY(store.save(document).ok);
+
+        ContextReceiver context;
+        OpenRgbClient rgb;
+        PowerActions power;
+        AppController controller(&context, &rgb, &power, nullptr, dir.path());
+        QDBusConnection client = makeLightingClientBus();
+        WorkspaceReceiver workspace(client);
+        workspace.setTimingForTest(200, {20, 40});
+        controller.setWorkspaceReceiver(&workspace);
+        controller.load();
+        QVERIFY(workspace.start());
+        QTRY_COMPARE(workspace.state().availability, WorkspaceAvailability::Available);
+
+        controller.setWorkspaceManagementEnabled(false);
+        QVERIFY(!controller.applyWorkspaceSession(false, false));
+        QCOMPARE(controller.workspaceApplyStatus(), QStringLiteral("management-disabled"));
+        QCOMPARE(fake.desktopCount(), 2);
+
+        controller.setWorkspaceManagementEnabled(true);
+        QVERIFY(controller.workspacePlanPreview().value(QStringLiteral("sessionFound")).toBool());
+        fake.setName(0, QStringLiteral("Renamed live"));
+        fake.emitDesktopDataChanged();
+        QTRY_COMPARE(workspace.state().desktops.at(0).displayName, QStringLiteral("Renamed live"));
+        QVERIFY(!controller.applyWorkspaceSession(false, false));
+        QCOMPARE(controller.workspaceApplyStatus(), QStringLiteral("preview-stale"));
+        QCOMPARE(fake.desktopCount(), 2);
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void liveCaptionPrivacyGuard()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString captionSentinel = QStringLiteral("contextdeck-caption-guard-9c2e");
+
+        ProfileStore store(dir.path());
+        ProfileDocument document;
+        document.preferences.titleFallbackEnabled = true;
+        WorkspaceSession session;
+        session.id = QStringLiteral("coding");
+        session.displayName = QStringLiteral("Coding");
+        session.desktops.push_back(WorkspaceDesktopEntry{1, QStringLiteral("One")});
+        document.workspaceSessions.push_back(session);
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("fallback.desktop");
+        profile.displayName = QStringLiteral("Fallback");
+        profile.match.resourceClass = QStringLiteral("FallbackClass");
+        WorkspaceAssignment assignment;
+        assignment.sessionId = QStringLiteral("coding");
+        assignment.desktopOrdinal = 1;
+        TitleFallback fallback;
+        fallback.enabled = true;
+        fallback.mode = TitleMatchMode::Contains;
+        fallback.pattern = captionSentinel;
+        assignment.titleFallback = fallback;
+        profile.workspace = assignment;
+        document.applications.push_back(profile);
+        const SaveOutcome saved = store.save(document);
+        QVERIFY2(saved.ok, qPrintable(saved.error.reason));
+
+        ContextReceiver context;
+        QVERIFY(context.start());
+        OpenRgbClient rgb;
+        PowerActions power;
+        AppController controller(&context, &rgb, &power, nullptr, dir.path());
+        controller.load();
+        QVERIFY(controller.titleFallbackEnabled());
+
+        g_lightingCapturedMessages.clear();
+        QtMessageHandler previous = qInstallMessageHandler(captureLightingMessage);
+        QDBusConnection client = makeLightingClientBus();
+
+        const auto sendCall = [&client](const QString &member, const QVariantList &arguments) {
+            QDBusMessage call = QDBusMessage::createMethodCall(
+                QStringLiteral("io.github.cisarik.ContextDeck"),
+                QStringLiteral("/io/github/cisarik/ContextDeck/Context1"),
+                QStringLiteral("io.github.cisarik.ContextDeck.Context1"), member);
+            call.setArguments(arguments);
+            return client.asyncCall(call);
+        };
+
+        const QString caption = QStringLiteral("window ") + captionSentinel;
+        sendCall(QStringLiteral("TitleHint"),
+                 {QStringLiteral("kwin-contextdeck-bridge"), quint32(1), caption});
+        sendCall(QStringLiteral("ContextReport"),
+                 {QStringLiteral("kwin-contextdeck-bridge"), quint32(2), QStringLiteral("unmatched.desktop"),
+                  QStringLiteral("unmatched"), QStringLiteral("Unmatched"), qint64(0)});
+        QTRY_COMPARE(controller.currentProfile(), QStringLiteral("fallback.desktop"));
+
+        sendCall(QStringLiteral("ContextReport"),
+                 {QStringLiteral("kwin-contextdeck-bridge"), quint32(3), QStringLiteral("other.desktop"),
+                  QStringLiteral("other"), QStringLiteral("Other"), qint64(0)});
+        QTRY_COMPARE(controller.currentProfile(), QStringLiteral("global"));
+        QCoreApplication::processEvents();
+        qInstallMessageHandler(previous);
+
+        for (const QString &message : g_lightingCapturedMessages) {
+            QVERIFY2(!message.contains(captionSentinel), qPrintable(message));
+        }
+
+        const QVariantMap diagnostics = controller.diagnostics();
+        QStringList diagnosticsStrings;
+        for (auto it = diagnostics.cbegin(); it != diagnostics.cend(); ++it) {
+            diagnosticsStrings.push_back(it.key());
+            collectDiagnosticStrings(it.value(), diagnosticsStrings);
+        }
+        for (const QString &text : diagnosticsStrings) {
+            QVERIFY2(!text.contains(captionSentinel), qPrintable(text));
         }
     }
 };

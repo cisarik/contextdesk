@@ -152,13 +152,104 @@ Durable sessions are ordinal layouts, not live desktop UUIDs; live UUIDs are
 runtime-only. Desktop names and captions are user-visible on screen but are
 never logged, never persisted in META, and never used as default identity.
 
-Schema 4 is observational in M4 Slice A: the application observes live desktop
-state, computes a dry-run `WorkspacePlan` in memory, and can save named
-sessions and assignments through the explicit `Uložiť` action. Slice A never
+Schema 4 is the shared document for Slice A (observation, dry-run preview,
+explicit save) and the later mutation slice. The observation slice never
 creates, renames, removes, or switches a live desktop, never launches an
 application, and never writes `kwinrulesrc`. Live apply, launch, and placement
-belong to a separately authorized later slice. Plasma-login autostart stays
+are explicit, bounded operations described below; Plasma-login autostart stays
 out of M4 entirely (M5/G8).
+
+## M4 workspace mutation, launch, and placement
+
+The mutation path is explicit and fail-closed. It runs only from the user's
+`Použiť`/Apply action when `workspace_management_enabled` is true and the
+active session is valid, the desktop observation is `Available`, fresh for the
+exact preview shown (no pending receiver request), and the service owner has not
+changed since the preview. A live-state difference between the preview and
+Apply refuses the operation as `preview-stale` and re-previews.
+
+Default Apply performs exactly:
+
+1. `createDesktop(position, name)` for each missing trailing ordinal, ascending;
+2. `setDesktopName(id, name)` only when the live name for that ordinal differs,
+   using the live UUID matched by ordinal, ascending;
+3. `rows` and `navigationWrappingAround` `Properties.Set` only when the preview
+   diff is non-empty.
+
+Separate, explicitly disclosed opt-ins (never part of the default path):
+
+- switching `current` to the first desktop of the session;
+- explicit `removeDesktop(id)` for live desktops beyond the session count, with
+  a confirmation that removed desktops cannot be restored as the same desktops;
+- per-profile launch of a typed `.desktop` application id;
+- per-profile maximize.
+
+`removeDesktop` is never implicit and is never triggered by drift. Every step
+gates the next; any error stops the sequence and triggers the revert path from
+the checkpoint. The mutation executor never polls and never mutates on
+`currentChanged` or on user-initiated desktop changes outside an explicit
+transaction.
+
+### Checkpoint, revert, and stop rules
+
+Before the first mutation, Apply writes a user-local checkpoint
+`$XDG_CONFIG_HOME/contextdeck/workspace-checkpoint.json` (fallback
+`$HOME/.config/contextdeck/workspace-checkpoint.json`) with an atomic
+`QSaveFile` write and user-only permissions. The checkpoint holds the pre-Apply
+desktop ordinals, live UUIDs and names, `rows`, wrapping, and the current UUID;
+the UUIDs created by this Apply are appended as they are observed. The
+checkpoint is never the profile document, never META, and never logged.
+
+Revert removes exactly the UUIDs this Apply created — never a desktop it did not
+create, including user-created extras — and restores names, `rows`, and
+wrapping from the checkpoint. The `current` restore runs only when the
+checkpoint UUID still exists; otherwise it is skipped and reported as a bounded
+residual. The checkpoint is retained until a successful revert or the next
+Apply, and deleted after a successful revert. Revert is
+desktop-configuration-only: launched applications are not killed and an
+already-open window is not moved back.
+
+### Typed launch triggers and error classes
+
+Launch uses `KService`/`KApplicationTrader` and `KIO::ApplicationLauncherJob`
+for a typed `.desktop` id. Shell strings, `QProcess` of `Exec=` lines,
+`systemd-run`, and `kstart` are rejected. The launch trigger set is exactly:
+
+- the explicit Apply action, after the mutation sequence;
+- an in-transaction `desktopCreated` event for profiles assigned to the created
+  ordinal.
+
+Plasma login, session-app start, `currentChanged`, user-created desktops, and
+broker events are not triggers. A profile is skipped when the bridge inventory
+already matches it (`already_running`). At most one attempt per profile per
+transaction is debounced (2 s), plus one bounded retry on the matching
+in-transaction `desktopCreated` when the first job failed. Failures use bounded
+error classes; no application is killed on revert. Launch never occurs because
+the session began.
+
+### Placement and the KWin bridge
+
+The existing KWin bridge calls `PlacementHint(desktop_file_name,
+resource_class, resource_name)` on `windowAdded` (docks and splashes are
+skipped as before). The session application answers with
+`(desktop_id, maximize)`; an empty `desktop_id` is a no-op. Identity matching
+wins over the opt-in title fallback. The bridge sets `window.desktops = [id]`
+and calls `window.setMaximize(true, true)` when requested. `kwinrulesrc` is
+never written. The bridge reload is a COOPERATOR-owned host operation and is
+not part of the repository build or tests.
+
+When the global `title_fallback_enabled` preference is on, the bridge sends the
+focused window's caption through `TitleHint` immediately before the identity
+report; when the preference is off, no caption is sent. The caption is compared
+in memory for one resolution and discarded; it is never stored, logged, added
+to `MatchSpec`, or persisted. Diagnostics expose counters and bounded classes
+only.
+
+### Build dependency
+
+Typed launch adds `find_package(KF6Service REQUIRED)` and
+`find_package(KF6KIO REQUIRED)` with targets `KF6::Service` and `KF6::KIOGui`.
+No umbrella `KF6`, no `extra-cmake-modules`, and no package install are added.
 
 ## Persistence and recovery
 
@@ -325,10 +416,10 @@ Never `/sys/power/state`, never `systemctl`, never `QProcess`.
 - No plugins, telemetry, cloud, or web UI.
 - No durable desktop UUIDs as identity and no per-desktop profile database.
   Named sessions are ordinal layouts; live UUIDs stay runtime-only.
-- M4 Slice A does not create, rename, remove, or switch live desktops, does not
-  launch or place applications, and does not write `kwinrulesrc`. Those remain
-  separately authorized later work. M5/G8 owns Plasma-login autostart,
-  packaging, and full lifecycle.
+- M4 mutation is explicit-only: no desktop change happens without the user's
+  Apply action, and no automatic rewrite of a saved session ever happens.
+  No `kwinrulesrc` write. No launch at login or at session-app start.
+  M5/G8 owns Plasma-login autostart, packaging, and full lifecycle.
 - No remapping or deck layer in M4; those remain separate future wholes.
 
 Chord recording, when present in the settings window, captures keys only while
@@ -345,7 +436,9 @@ Object `/io/github/cisarik/ContextDeck/Context1`, interface
 
 | Member | Kind | Arguments / type |
 |--------|------|------------------|
-| `ContextReport` | method | `bridge_id s`, `sequence u`, `desktop_file_name s`, `resource_class s`, `resource_name s`, `parent_window_id x` |
+| `ContextReport` | method | `bridge_id s`, `sequence u`, `desktop_file_name s`, `resource_class s`, `resource_name s`, `parent_window_id x`; reply `title_fallback_enabled b` |
+| `TitleHint` | method | `bridge_id s`, `sequence u`, `caption s` (sent by the bridge only when the global title-fallback preference is on) |
+| `PlacementHint` | method | `desktop_file_name s`, `resource_class s`, `resource_name s`; reply `desktop_id s`, `maximize b` |
 | `InventoryReport` | method | `bridge_id s`, `sequence u`, `payload_json s` (hard cap 64 KiB, max 200 unique identity entries) |
 | `Heartbeat` | method | `bridge_id s`, `sequence u` |
 | `CurrentIdentity` | property | `s` (JSON of the three identity fields only) |
@@ -359,7 +452,10 @@ The KWin script sends a full `ContextReport` on every heartbeat interval as
 well as on window events, so an application restart recovers identity without
 a focus change. The receiver treats a repeated identical identity as a refresh:
 it does not bump `PolicyRevision`, does not emit a context-change, and does
-not rewrite lighting.
+not rewrite lighting. The `ContextReport` reply tells the bridge whether the
+global title-fallback preference is enabled; that reply is event-driven and is
+not polled. A `TitleHint` caption is held only until the next resolution
+consumes it and is never logged or persisted.
 
 ## Virtual desktop observation
 
@@ -455,7 +551,7 @@ drawer):
 |---------|---------|
 | **Stav** (Overview) | Five-zone Hero preview, one human-readable status sentence, empty-state CTA |
 | **Farby** | Global lighting preset, visual zone pickers, gradient helper, animation speed, Breathing color |
-| **Aplikácie** | Per-application lighting presets from the KWin inventory, plus named-session assignment fields (observation-only in M4 Slice A) |
+| **Aplikácie** | Per-application lighting presets from the KWin inventory, plus named-session assignment fields and the per-profile launch/maximize/title-fallback opt-ins (applied only on explicit Apply) |
 | **Plochy** | Observed desktop count/current/rows/wrapping, named-session editor, dry-run plan preview. Apply hidden/disabled until a later authorized slice |
 | **Diagnostika** | D-Bus names, bridge id, socket/SDK state, counters, power actions |
 | **Pokročilé** | Inactive M2 shortcut catalog and chord recorder |

@@ -59,6 +59,7 @@ public:
     [[nodiscard]] quint64 notificationCount() const { return m_notificationCount; }
     [[nodiscard]] quint64 logicalRequestCount() const { return m_logicalRequestCount; }
     [[nodiscard]] quint64 activeLogicalRequestId() const { return m_activeRequestId; }
+    [[nodiscard]] quint64 ownerGeneration() const { return m_ownerGeneration; }
     [[nodiscard]] int recoveryAttempt() const { return m_recoveryAttempt; }
 
     void setTimingForTest(int deadlineMs, const QVector<int> &recoveryDelaysMs);
@@ -66,6 +67,7 @@ public:
 signals:
     void stateChanged();
     void diagnosticsChanged();
+    void desktopCreatedObserved(const QString &id, int position);
 
 private slots:
     void onServiceOwnerChanged(const QString &service, const QString &oldOwner, const QString &newOwner);

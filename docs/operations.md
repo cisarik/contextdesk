@@ -633,20 +633,45 @@ Do **not** `systemctl start`. An inactive install of candidate `cb72ae0` is
 separately recorded as `deployment-PASS` (META Worker 14). Remaining IRL G4
 claims are a separate acceptance. This section does not grant a start.
 
-## 10. M4 Slice A workspace sessions — observational only
+## 10. M4 workspace sessions — explicit Apply only
 
-M4 Slice A adds schema 4 (named sessions, per-application workspace
-assignments) and a read-only `WorkspacePlan` dry-run. It grants **no** host or
-desktop mutation:
+M4 adds schema 4 (named sessions, per-application workspace assignments), the
+read-only `WorkspacePlan` dry-run, and the bounded Slice B mutation path:
+desktop create/conditional rename/`rows`/wrapping plus the separately opted-in
+`current` switch, extra-desktop removal, typed launch, and placement. Nothing
+runs automatically:
 
-- No `createDesktop`, `setDesktopName`, `removeDesktop`, `rows`,
-  `navigationWrappingAround`, or `current` write, and no `kwinrulesrc` write.
-- No application launch. Slice A only reports
-  `would_launch`/`already_running`/`missing_desktop_file`/`disabled` in memory.
+- Desktop mutation happens only when the user presses **Použiť** with
+  `workspace_management_enabled`, a valid saved session, and a fresh,
+  `Available` observation matching the shown preview. A changed live state
+  refuses the Apply as `preview-stale`.
+- Default Apply is create + conditional rename + `rows`/wrapping only.
+  `removeDesktop`, the `current` switch, launch, and maximize are separate
+  opt-ins.
+- Launch is a typed `.desktop` id through `KIO::ApplicationLauncherJob` and is
+  triggered only by the explicit Apply or an in-transaction `desktopCreated`.
+  Plasma login, session-app start, `currentChanged`, and user-created desktops
+  never launch anything.
+- Placement/maximize is event-driven through the existing KWin bridge on
+  `windowAdded`; `kwinrulesrc` is never written.
 - No broker start, ARM, grab, udev change, package install, or systemd change.
 - KWin observation is read-only through the existing `VirtualDesktopManager`
-  snapshot path. `rows` and `navigationWrappingAround` are decoded and the two
-  extra signals are subscribed as invalidations.
+  snapshot path.
+
+Checkpoint and revert:
+
+- Before the first mutation, Apply writes
+  `$XDG_CONFIG_HOME/contextdeck/workspace-checkpoint.json` (fallback
+  `$HOME/.config/contextdeck/workspace-checkpoint.json`) atomically with
+  user-only permissions. It is never the profile document, never META, never
+  logged.
+- Revert removes exactly the UUIDs this Apply created and restores names,
+  `rows`, and wrapping from the checkpoint. The `current` restore is skipped
+  as a bounded residual when the checkpoint UUID no longer exists. The
+  checkpoint is deleted after a successful revert and overwritten by the next
+  Apply.
+- Revert is desktop-configuration-only: launched applications are not killed
+  and already-open windows are not moved back.
 
 Persistence behavior:
 
@@ -660,9 +685,9 @@ Persistence behavior:
 
 Boundaries for later work, so no operator assumes them here:
 
-- Live apply (desktop create/rename/rows/wrapping, optional current switch),
-  typed in-session launch, and placement/maximize belong to a separately
-  authorized later slice with its own checkpoint/revert procedure.
+- Running the IRL checklist against a real session — including the KWin bridge
+  reload, desktop mutation, application launch, and placement — needs its own
+  explicit COOPERATOR grant. This document does not grant it.
 - Plasma-login autostart, systemd user integration, and production lifecycle
   remain M5/G8. M4 never launches because the session began.
 

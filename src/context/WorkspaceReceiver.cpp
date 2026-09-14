@@ -387,9 +387,41 @@ void WorkspaceReceiver::onServiceOwnerChanged(const QString &service, const QStr
 
 void WorkspaceReceiver::onInvalidatingMessage(const QDBusMessage &message)
 {
-    Q_UNUSED(message);
     if (!m_started || m_paused) {
         return;
+    }
+    if (message.member() == QLatin1String("desktopCreated")) {
+        const QVariantList args = message.arguments();
+        if (args.size() == 2) {
+            int position = 0;
+            QString id;
+            QString name;
+            const QVariant desktop = unwrapDbusVariant(args.at(1));
+            bool decoded = false;
+            if (desktop.metaType() == QMetaType::fromType<VirtualDesktopDBus>()) {
+                const VirtualDesktopDBus row = desktop.value<VirtualDesktopDBus>();
+                position = row.position;
+                id = row.id;
+                name = row.name;
+                decoded = true;
+            } else if (desktop.metaType() == QMetaType::fromType<VirtualDesktopDBusUnsigned>()) {
+                const VirtualDesktopDBusUnsigned row = desktop.value<VirtualDesktopDBusUnsigned>();
+                position = static_cast<int>(row.position);
+                id = row.id;
+                name = row.name;
+                decoded = true;
+            } else if (desktop.metaType() == QMetaType::fromType<QDBusArgument>()
+                       || desktop.canConvert<QDBusArgument>()) {
+                const QDBusArgument argument = qvariant_cast<QDBusArgument>(desktop);
+                if (argument.currentType() == QDBusArgument::StructureType) {
+                    decoded = decodeDesktopStructure(argument, position, id, name);
+                }
+            }
+            if (decoded && !id.isEmpty() && boundedUtf8(id, kMaxDesktopIdBytes) && !hasControlCharacters(id)
+                && position >= 0 && position <= kMaxPosition) {
+                emit desktopCreatedObserved(id, position);
+            }
+        }
     }
     invalidate(QStringLiteral("desktop-signal"), false);
 }

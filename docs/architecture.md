@@ -121,17 +121,19 @@ are unchanged by this whole.
 | System sleep while broker active | Hook stops the unit on `pre` (orderly SIGTERM); after `post` starts it once, always disarmed, only if a valid active-before-sleep marker exists |
 | Session app reconnect after resume | Existing bounded retry; `STATUS` only; no silent `LEASE`/`ARM` |
 
-## Workspace session management (M4 Slice A)
+## Workspace session management (M4)
 
 M4 keeps the session application inside an already running Plasma session. It
-adds named desktop sessions and per-application assignments without touching
-live desktop state in Slice A:
+adds named desktop sessions, per-application assignments, an explicit mutation
+path, typed in-session launch, and event-driven placement:
 
-- `WorkspaceReceiver` observation is extended with `rows` and
+- `WorkspaceReceiver` observation includes `rows` and
   `navigationWrappingAround`, decoded from the same `GetAll` snapshot; the two
   extra signals (`rowsChanged`, `navigationWrappingAroundChanged`) are
   subscribed as invalidations only. Request ownership, coalescing,
   one-in-flight, owner generations, and stale-reply rejection are unchanged.
+  A payload-free `desktopCreatedObserved(id, position)` signal classifies the
+  in-transaction create events without polling or a second `GetAll`.
 - Durable sessions are named ordinal layouts stored in schema 4 (see
   [ADR 0003](adr/0003-workspace-assignment-schema.md)), not live desktop UUIDs.
   Live UUIDs stay runtime-only; desktop names and captions are never logged.
@@ -141,11 +143,28 @@ live desktop state in Slice A:
   (`would_launch`, `already_running`, `missing_desktop_file`, `disabled`). It
   performs no D-Bus, KIO, compositor, or mutation call. Launch-attempt debounce
   and transaction trigger classification are pure in-memory helpers.
-- No live desktop mutation, no application launch, and no `kwinrulesrc` write
-  in Slice A. A later separately authorized slice owns
-  `createDesktop`/`setDesktopName`/`removeDesktop`, typed launch, and
-  placement (see [ADR 0002](adr/0002-host-desktop-mutation-authority.md) and
+- `DesktopMutator` executes one explicit transaction against
+  `org.kde.KWin /VirtualDesktopManager`: checkpoint write and verify, create
+  ascending, conditional rename ascending, `rows`, wrapping, the optional
+  `current` switch, and the opted-in extra removals last. Each step gates the
+  next; any error stops and reverts from `WorkspaceCheckpoint` (user-local,
+  atomic `QSaveFile`, user-only permissions, deleted after a successful
+  revert). `removeDesktop` is explicit-only.
+- `ApplicationLauncher` launches a typed `.desktop` id through
+  `KService`/`KIO::ApplicationLauncherJob` with `KF6::Service` and
+  `KF6::KIOGui`. Triggers are the explicit Apply and the in-transaction
+  `desktopCreated` event; the bridge inventory skip, 2 s debounce, and one
+  bounded retry match ADR 0004. No autostart path exists.
+- `PlacementResolver` decides `(desktop_id, maximize)` from identity first and
+  the opt-in title fallback second. The KWin bridge calls `PlacementHint` on
+  `windowAdded`, assigns `window.desktops`, and calls
+  `window.setMaximize(true, true)` when requested; `kwinrulesrc` is never
+  written (see [ADR 0002](adr/0002-host-desktop-mutation-authority.md) and
   [ADR 0004](adr/0004-typed-application-launch.md)).
+- The optional `TitleHint` caption path is gated by the global
+  `title_fallback_enabled` preference reported in the `ContextReport` reply;
+  the caption is compared in memory for one resolution and discarded, never
+  stored or logged.
 - M5/G8 owns Plasma-login autostart and systemd/session integration. M4 must
   not start at login and must not add `[Install]`, `graphical-session.target`,
   or autostart entries.

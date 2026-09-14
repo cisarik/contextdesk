@@ -13,10 +13,11 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 > residual ACL gap remains host-mitigated only. M3 workspace-aware lighting is
 > code-accepted on `502ae75...`; its physical five-zone IRL observation is
 > deferred by explicit COOPERATOR decision. M3 is not closed, and code
-> acceptance is not physical acceptance. M4 workspace sessions Slice A
-> (schema 4, desktop observation, dry-run plan, session editor) is an
-> **implementation candidate** — not accepted and not live: it performs no
-> desktop mutation and launches nothing. The plan lives in
+> acceptance is not physical acceptance. M4 workspace sessions Slice B
+> (schema 4, desktop observation, explicit Apply with checkpoint/revert, typed
+> in-session launch, bridge placement) is an **implementation candidate** —
+> not accepted and not live-verified: nothing changes unless the user presses
+> Apply, and nothing launches because the session began. The plan lives in
 > [ROADMAP.md](ROADMAP.md) and the design in
 > [docs/architecture.md](docs/architecture.md).
 
@@ -35,11 +36,11 @@ does — automatically, quietly, and only where you configured it:
 - **Workspace-aware lighting (opt-in).** A global five-slot layout can mix
   virtual-desktop indicators with application color. Existing presets keep
   their previous behavior until those roles are configured.
-- **Named workspace sessions (in progress).** M4 Slice A describes named
+- **Named workspace sessions (in progress).** M4 Slice B describes named
   desktop layouts and per-application assignments, observes live desktop
-  state, and previews the intended diff. Live desktop changes and in-session
-  launch arrive in a later, separately authorized slice; Plasma-login
-  autostart stays in M5.
+  state, previews the intended diff, and applies it only when you press
+  **Použiť** — with a checkpoint revert, typed in-session launch, and
+  event-driven placement. Plasma-login autostart stays in M5.
 - **A quiet tray indicator.** Connection state, automatic mode, the current
   app and the active profile at a glance.
 - **Two deck buttons.** Game Mode → Suspend and Backlight → Displays Off —
@@ -64,10 +65,10 @@ enough; device-free tests do not need that path.
 
 | Area | State |
 |------|-------|
-| Plan | Foundation planning accepted; M2 parked; M3 code-accepted with physical observation deferred; M4 Slice A implementation-candidate — [ROADMAP.md](ROADMAP.md) |
+| Plan | Foundation planning accepted; M2 parked; M3 code-accepted with physical observation deferred; M4 Slice B implementation-candidate — [ROADMAP.md](ROADMAP.md) |
 | Lighting (M1) | Implemented; recorded as COOPERATOR-accepted IRL (five zones, not per-key) |
 | Workspace lighting (M3) | M3 workspace-aware lighting is code-accepted on `502ae75...`; its physical five-zone IRL observation is deferred by explicit COOPERATOR decision. M3 is not closed, and code acceptance is not physical acceptance. Later IRL steps: [docs/testing-m3.md](docs/testing-m3.md) |
-| Workspace sessions (M4) | Slice A implementation candidate: schema 4 sessions/assignments, extended desktop observation (`rows`, wrapping), pure dry-run plan, `Plochy` editor, Apply disabled. **Not accepted; no live desktop mutation or application launch.** Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md) |
+| Workspace sessions (M4) | Slice B implementation candidate: schema 4 sessions/assignments, extended desktop observation (`rows`, wrapping), pure dry-run plan, explicit Apply with user-local checkpoint/revert, typed in-session launch, and `PlacementHint` placement/maximize through the bridge. Default Apply creates/renames/sets rows/wrapping only; removal, `current`, launch, and maximize are separate opt-ins. **Not accepted and not live-verified; no autostart.** Later IRL steps: [docs/testing-m4.md](docs/testing-m4.md) |
 | Input broker (M2) | Parked. Production path in tree (enumerator, explicit ARM, IPC lease, watchdog, install + late uinput ACL, suspend/resume sleep hook). Inactive install recorded; named Sessions 16/19/22/23/24 slices accepted; **full G4 remains open**; residual independent G3 evidence gap is not closed by this whole |
 | Hardware evidence | G1 control matrix closed (Game Mode / Backlight firmware-only); G2 lighting closed; G4 named ARM/pass-through/cutoff and armed-watchdog/held-modifier slices accepted; LED, all-control, live suspend/resume, and production autostart still open |
 | Build / tests | CMake + Ninja; registered CTest suite owned by [CMakeLists.txt](CMakeLists.txt) |

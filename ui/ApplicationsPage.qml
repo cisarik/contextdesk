@@ -78,8 +78,10 @@ Kirigami.ScrollablePage {
                     Layout.fillWidth: true
                 }
                 Controls.Label {
-                    text: "Plocha — priradenie (ukladá sa; nič nespúšťa)"
+                    text: "Plocha — priradenie (spustenie a maximalizácia sú samostatné voľby; uplatnia sa iba pri výslovnom Použití v karte Plochy)"
                     font.bold: true
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
                 }
                 RowLayout {
                     Layout.fillWidth: true

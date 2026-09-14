@@ -6,11 +6,11 @@
                 "Name": "ContextDeck contributors"
             }
         ],
-        "Description": "Reports foreground application identity to ContextDeck. Never sends captions, PIDs, or executable paths.",
+        "Description": "Reports foreground application identity to ContextDeck and requests placement hints. Captions are sent only when title fallback is enabled; PIDs and executable paths are never sent.",
         "Id": "contextdeck-bridge",
         "License": "MIT",
         "Name": "ContextDeck Bridge",
-        "Version": "0.1.0",
+        "Version": "0.2.0",
         "Website": "https://github.com/cisarik/contextdesk"
     },
     "X-Plasma-API": "javascript"

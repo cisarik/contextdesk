@@ -88,14 +88,17 @@ WorkspacePlan computeWorkspacePlan(const ProfileDocument &document, const QStrin
                     break;
                 }
             }
+            std::optional<QString> desktopFile = profile.workspace->launchDesktopFile;
+            if (!desktopFile && profile.match.desktopFileName
+                && workspaceDesktopIdLooksValid(*profile.match.desktopFileName)) {
+                desktopFile = *profile.match.desktopFileName;
+            }
+            if (desktopFile.has_value()) {
+                launch.desktopFileId = *desktopFile;
+            }
             if (running) {
                 launch.intent = WorkspaceLaunchIntent::AlreadyRunning;
             } else {
-                std::optional<QString> desktopFile = profile.workspace->launchDesktopFile;
-                if (!desktopFile && profile.match.desktopFileName
-                    && workspaceDesktopIdLooksValid(*profile.match.desktopFileName)) {
-                    desktopFile = *profile.match.desktopFileName;
-                }
                 launch.intent = desktopFile.has_value() ? WorkspaceLaunchIntent::WouldLaunch
                                                         : WorkspaceLaunchIntent::MissingDesktopFile;
             }
@@ -171,6 +174,20 @@ bool WorkspaceLaunchDebounce::tryAttempt(const QString &profileId, qint64 nowMs)
     }
     const auto last = m_lastAttemptMs.constFind(profileId);
     if (last != m_lastAttemptMs.constEnd() && nowMs - last.value() < kMinimumIntervalMs) {
+        return false;
+    }
+    m_lastAttemptMs.insert(profileId, nowMs);
+    m_attempts.insert(profileId, attempts + 1);
+    return true;
+}
+
+bool WorkspaceLaunchDebounce::tryBoundedRetry(const QString &profileId, qint64 nowMs)
+{
+    if (!m_active || profileId.isEmpty()) {
+        return false;
+    }
+    const int attempts = m_attempts.value(profileId, 0);
+    if (attempts != 1) {
         return false;
     }
     m_lastAttemptMs.insert(profileId, nowMs);

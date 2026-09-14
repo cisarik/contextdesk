@@ -15,6 +15,8 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets DBus Network Qml Quick Qui
 find_package(KF6StatusNotifierItem REQUIRED)
 find_package(KF6Kirigami REQUIRED)
 find_package(KF6Screen REQUIRED)
+find_package(KF6Service REQUIRED)
+find_package(KF6KIO REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVDEV REQUIRED IMPORTED_TARGET libevdev)
 pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
@@ -26,6 +28,8 @@ add_library(contextdeck_core STATIC
     src/core/Persistence.cpp
     src/core/ZoneMap.cpp
     src/workspace/WorkspacePlan.cpp
+    src/workspace/WorkspaceCheckpoint.cpp
+    src/workspace/PlacementResolver.cpp
 )
 target_include_directories(contextdeck_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_core PUBLIC Qt6::Core)
@@ -33,9 +37,16 @@ target_link_libraries(contextdeck_core PUBLIC Qt6::Core)
 add_library(contextdeck_context STATIC
     src/context/ContextReceiver.cpp
     src/context/WorkspaceReceiver.cpp
+    src/workspace/DesktopMutator.cpp
 )
 target_include_directories(contextdeck_context PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_context PUBLIC contextdeck_core Qt6::DBus)
+
+add_library(contextdeck_launch STATIC
+    src/workspace/ApplicationLauncher.cpp
+)
+target_include_directories(contextdeck_launch PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(contextdeck_launch PUBLIC contextdeck_core KF6::Service KF6::KIOGui)
 
 add_library(contextdeck_rgb STATIC
     src/rgb/OpenRgbProtocol.cpp
@@ -60,6 +71,7 @@ add_executable(contextdeck
 )
 target_link_libraries(contextdeck PRIVATE
     contextdeck_context
+    contextdeck_launch
     contextdeck_rgb
     contextdeck_actions
     contextdeck_ipc
@@ -217,6 +229,7 @@ target_include_directories(test_workspace_lighting PRIVATE "${CMAKE_CURRENT_SOUR
 target_link_libraries(test_workspace_lighting PRIVATE
     contextdeck_core
     contextdeck_context
+    contextdeck_launch
     contextdeck_rgb
     contextdeck_actions
     contextdeck_ipc
@@ -230,6 +243,21 @@ add_test(NAME test_workspace_lighting
          COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- $<TARGET_FILE:test_workspace_lighting>)
 set_tests_properties(test_workspace_lighting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_DISABLE_SESSION_MANAGER=1")
+
+add_executable(test_placement_resolver tests/unit/test_placement_resolver.cpp)
+target_link_libraries(test_placement_resolver PRIVATE contextdeck_core Qt6::Test)
+add_test(NAME test_placement_resolver COMMAND test_placement_resolver)
+
+add_executable(test_workspace_mutator tests/unit/test_workspace_mutator.cpp)
+target_link_libraries(test_workspace_mutator PRIVATE contextdeck_context Qt6::Test Qt6::DBus)
+add_test(NAME test_workspace_mutator
+         COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- $<TARGET_FILE:test_workspace_mutator>)
+set_tests_properties(test_workspace_mutator PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_DISABLE_SESSION_MANAGER=1")
+
+add_executable(test_application_launcher tests/unit/test_application_launcher.cpp)
+target_link_libraries(test_application_launcher PRIVATE contextdeck_launch contextdeck_core Qt6::Test)
+add_test(NAME test_application_launcher COMMAND test_application_launcher)
 
 add_test(NAME test_udev_verify
          COMMAND udevadm verify --resolve-names=never

@@ -182,6 +182,19 @@ const QString kIntrospection = QStringLiteral(
     "      <arg direction=\"in\" type=\"s\" name=\"resource_class\"/>\n"
     "      <arg direction=\"in\" type=\"s\" name=\"resource_name\"/>\n"
     "      <arg direction=\"in\" type=\"x\" name=\"parent_window_id\"/>\n"
+    "      <arg direction=\"out\" type=\"b\" name=\"title_fallback_enabled\"/>\n"
+    "    </method>\n"
+    "    <method name=\"TitleHint\">\n"
+    "      <arg direction=\"in\" type=\"s\" name=\"bridge_id\"/>\n"
+    "      <arg direction=\"in\" type=\"u\" name=\"sequence\"/>\n"
+    "      <arg direction=\"in\" type=\"s\" name=\"caption\"/>\n"
+    "    </method>\n"
+    "    <method name=\"PlacementHint\">\n"
+    "      <arg direction=\"in\" type=\"s\" name=\"desktop_file_name\"/>\n"
+    "      <arg direction=\"in\" type=\"s\" name=\"resource_class\"/>\n"
+    "      <arg direction=\"in\" type=\"s\" name=\"resource_name\"/>\n"
+    "      <arg direction=\"out\" type=\"s\" name=\"desktop_id\"/>\n"
+    "      <arg direction=\"out\" type=\"b\" name=\"maximize\"/>\n"
     "    </method>\n"
     "    <method name=\"InventoryReport\">\n"
     "      <arg direction=\"in\" type=\"s\" name=\"bridge_id\"/>\n"
@@ -255,7 +268,44 @@ public:
             identity.resourceClass = resourceClass;
             identity.resourceName = resourceName;
             m_receiver->onContextReport(bridgeId, sequence, identity, parentWindowId);
+            return connection.send(message.createReply(QVariantList{m_receiver->titleFallbackEnabled()}));
+        }
+
+        if (member == QLatin1String("TitleHint")) {
+            if (args.size() != 3) {
+                return connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("TitleHint expects 3 arguments")));
+            }
+            QString bridgeId;
+            QString caption;
+            quint32 sequence = 0;
+            if (!boundedString(args.at(0), kMaxBridgeIdBytes, bridgeId) || !asUint32(args.at(1), sequence)
+                || !boundedString(args.at(2), kMaxDbusStringBytes, caption)) {
+                qCWarning(lcContext) << "rejected TitleHint: unbounded or mistyped argument";
+                return connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("invalid TitleHint argument")));
+            }
+            m_receiver->onTitleHint(bridgeId, sequence, caption);
             return connection.send(message.createReply());
+        }
+
+        if (member == QLatin1String("PlacementHint")) {
+            if (args.size() != 3) {
+                return connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("PlacementHint expects 3 arguments")));
+            }
+            QString desktop;
+            QString resourceClass;
+            QString resourceName;
+            if (!boundedString(args.at(0), kMaxDbusStringBytes, desktop)
+                || !boundedString(args.at(1), kMaxDbusStringBytes, resourceClass)
+                || !boundedString(args.at(2), kMaxDbusStringBytes, resourceName)) {
+                qCWarning(lcContext) << "rejected PlacementHint: unbounded or mistyped argument";
+                return connection.send(message.createErrorReply(QDBusError::InvalidArgs, QStringLiteral("invalid PlacementHint argument")));
+            }
+            ApplicationIdentity identity;
+            identity.desktopFileName = desktop;
+            identity.resourceClass = resourceClass;
+            identity.resourceName = resourceName;
+            const PlacementHintDecision decision = m_receiver->onPlacementHint(identity);
+            return connection.send(message.createReply(QVariantList{decision.desktopId, decision.maximize}));
         }
 
         if (member == QLatin1String("InventoryReport")) {
@@ -359,7 +409,17 @@ ContextReceiver::ContextReceiver(QObject *parent)
     watchdog->start();
 }
 
-ContextReceiver::~ContextReceiver() = default;
+ContextReceiver::~ContextReceiver()
+{
+    if (m_objectRegistered) {
+        QDBusConnection::sessionBus().unregisterObject(QString(kContextObjectPath));
+        m_objectRegistered = false;
+    }
+    if (m_registered) {
+        QDBusConnection::sessionBus().unregisterService(QString(kServiceName));
+        m_registered = false;
+    }
+}
 
 bool ContextReceiver::start()
 {
@@ -384,6 +444,7 @@ bool ContextReceiver::start()
         emit degradedChanged();
         return false;
     }
+    m_registered = true;
 
     m_object = new Object(this);
     if (!bus.registerVirtualObject(QString(kContextObjectPath), m_object, QDBusConnection::SingleNode)) {
@@ -393,6 +454,7 @@ bool ContextReceiver::start()
         emit degradedChanged();
         return false;
     }
+    m_objectRegistered = true;
 
     qCInfo(lcContext) << "session bus name registered:" << kServiceName;
     return true;
@@ -453,8 +515,37 @@ void ContextReceiver::onContextReport(const QString &bridgeId, quint32 sequence,
         emit currentIdentityChanged();
         qCInfo(lcContext) << "context identity updated, policy" << m_policyRevision;
     } else {
+        m_pendingCaption.reset();
         qCDebug(lcContext) << "context identity refresh without policy bump";
     }
+}
+
+void ContextReceiver::onTitleHint(const QString &bridgeId, quint32 sequence, const QString &caption)
+{
+    if (!acceptSequence(bridgeId, sequence)) {
+        return;
+    }
+    if (caption.isEmpty()) {
+        m_pendingCaption.reset();
+        return;
+    }
+    m_pendingCaption = caption;
+}
+
+std::optional<QString> ContextReceiver::takeTitleHint()
+{
+    const std::optional<QString> caption = m_pendingCaption;
+    m_pendingCaption.reset();
+    return caption;
+}
+
+PlacementHintDecision ContextReceiver::onPlacementHint(const ApplicationIdentity &identity)
+{
+    const std::optional<QString> caption = takeTitleHint();
+    if (!m_placementProvider) {
+        return {};
+    }
+    return m_placementProvider(identity, caption);
 }
 
 void ContextReceiver::onInventoryReport(const QString &bridgeId, quint32 sequence, const QString &payloadJson)
@@ -565,6 +656,7 @@ void ContextReceiver::markBridgeLost(const QString &reason)
     }
     m_bridgeConnected = false;
     m_identity = {};
+    m_pendingCaption.reset();
     if (!m_warnedLoss) {
         qCWarning(lcContext) << "bridge lost:" << reason << "- context unknown, falling back to global profile";
         m_warnedLoss = true;

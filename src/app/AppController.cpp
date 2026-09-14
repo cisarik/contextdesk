@@ -6,8 +6,10 @@
 #include "core/ControlCatalog.h"
 #include "core/Resolver.h"
 #include "core/ZoneMap.h"
+#include "workspace/PlacementResolver.h"
 #include "workspace/WorkspacePlan.h"
 
+#include <QDateTime>
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QSet>
@@ -193,11 +195,18 @@ AppController::AppController(ContextReceiver *context, OpenRgbClient *rgb, Power
     , m_store(std::move(configRoot))
 {
     m_document.globalLighting = defaultLighting();
+    m_mutator.setCheckpointPath(m_store.configRoot() + QStringLiteral("/workspace-checkpoint.json"));
     connect(m_context, &ContextReceiver::currentIdentityChanged, this, &AppController::onContextInputsChanged);
     connect(m_context, &ContextReceiver::bridgeLost, this, &AppController::onContextInputsChanged);
     connect(m_context, &ContextReceiver::bridgeConnectedChanged, this, &AppController::contextChanged);
     connect(m_context, &ContextReceiver::inventoryChanged, this, &AppController::onInventoryChanged);
     connect(m_context, &ContextReceiver::degradedChanged, this, &AppController::contextChanged);
+    connect(&m_mutator, &DesktopMutator::desktopCreatedInTransaction,
+            this, &AppController::onDesktopCreatedInTransaction);
+    m_context->setPlacementHintProvider(
+        [this](const ApplicationIdentity &identity, const std::optional<QString> &caption) {
+            return placementHintFor(identity, caption);
+        });
     connect(m_rgb, &OpenRgbClient::connectionStateChanged, this, &AppController::diagnosticsChanged);
     connect(m_rgb, &OpenRgbClient::lastErrorChanged, this, &AppController::diagnosticsChanged);
     connect(m_rgb, &OpenRgbClient::lightingEnabledChanged, this, &AppController::diagnosticsChanged);
@@ -225,6 +234,7 @@ void AppController::setWorkspaceReceiver(WorkspaceReceiver *receiver)
     }
     connect(m_workspace, &WorkspaceReceiver::stateChanged, this, &AppController::scheduleRecompute);
     connect(m_workspace, &WorkspaceReceiver::diagnosticsChanged, this, &AppController::diagnosticsChanged);
+    connect(m_workspace, &WorkspaceReceiver::desktopCreatedObserved, this, &AppController::onWorkspaceDesktopCreated);
 }
 
 void AppController::load()
@@ -246,11 +256,18 @@ void AppController::load()
     if (m_document.preferences.automaticEnabled) {
         m_sessionLighting = SessionLightingMode::Automatic;
     }
+    m_context->setTitleFallbackEnabled(m_document.preferences.titleFallbackEnabled);
+    m_applyStatus.clear();
+    m_applyResidual.clear();
+    m_lastApplyReverted = false;
+    m_lastApplyCreated = 0;
+    m_lastApplyRemoved = 0;
     rememberExternalContext();
     refreshResolvedProfile();
     recompute();
     emit documentChanged();
     emit contextChanged();
+    emit presentationChanged();
 }
 
 QString AppController::currentApplication() const
@@ -714,6 +731,14 @@ QVariantMap AppController::diagnostics() const
     map.insert(QStringLiteral("workspacePlanDrift"), workspacePlan.value(QStringLiteral("drift")));
     map.insert(QStringLiteral("workspaceObservedRows"), workspaceObserved().value(QStringLiteral("rows")));
     map.insert(QStringLiteral("workspaceObservedWrapping"), workspaceObserved().value(QStringLiteral("wrapping")));
+    map.insert(QStringLiteral("workspaceApplyRunning"), m_applyRunning);
+    map.insert(QStringLiteral("workspaceApplyStatus"), m_applyStatus);
+    map.insert(QStringLiteral("workspaceCheckpointAvailable"), workspaceCheckpointAvailable());
+    map.insert(QStringLiteral("workspaceLastResidual"), m_applyResidual);
+    map.insert(QStringLiteral("workspaceLastMutationCreated"), m_lastApplyCreated);
+    map.insert(QStringLiteral("workspaceLastMutationRemoved"), m_lastApplyRemoved);
+    map.insert(QStringLiteral("workspaceLastApplyReverted"), m_lastApplyReverted);
+    map.insert(QStringLiteral("workspaceLaunchAttempts"), m_launcher.launchAttemptsInTransaction());
     return map;
 }
 
@@ -1081,8 +1106,13 @@ QVariantMap AppController::workspacePlanPreview() const
 
 QVariantMap AppController::workspacePlanMap() const
 {
+    const WorkspaceState observed = currentWorkspaceState();
     const WorkspacePlan plan =
-        computeWorkspacePlan(m_document, activeWorkspaceSession(), currentWorkspaceState(), openWindowIdentities());
+        computeWorkspacePlan(m_document, activeWorkspaceSession(), observed, openWindowIdentities());
+    m_lastPlan = plan;
+    m_hasLastPlan = true;
+    m_previewFingerprint = workspacePreviewFingerprint(plan, observed);
+    m_previewOwnerGeneration = m_workspace != nullptr ? m_workspace->ownerGeneration() : 0;
     QVariantMap map;
     map.insert(QStringLiteral("sessionId"), plan.sessionId);
     map.insert(QStringLiteral("sessionFound"), plan.sessionFound);
@@ -1192,6 +1222,10 @@ void AppController::setTitleFallbackEnabled(bool enabled)
         return;
     }
     m_document.preferences.titleFallbackEnabled = enabled;
+    m_context->setTitleFallbackEnabled(enabled);
+    if (!enabled) {
+        (void)m_context->takeTitleHint();
+    }
     emit documentChanged();
     emit presentationChanged();
 }
@@ -1656,6 +1690,231 @@ void AppController::assignEmitShortcut(const QString &controlName, const QString
     }
 }
 
+bool AppController::workspaceApplyAvailable() const
+{
+    if (m_applyRunning) {
+        return false;
+    }
+    if (!m_document.preferences.workspaceManagementEnabled) {
+        return false;
+    }
+    if (findWorkspaceSession(m_document, activeWorkspaceSession()) == nullptr) {
+        return false;
+    }
+    if (m_workspace == nullptr) {
+        return false;
+    }
+    const WorkspaceState state = currentWorkspaceState();
+    if (state.availability != WorkspaceAvailability::Available || state.refreshPending) {
+        return false;
+    }
+    return m_workspace->activeLogicalRequestId() == 0;
+}
+
+bool AppController::workspaceCheckpointAvailable() const
+{
+    return m_mutator.checkpointExists();
+}
+
+bool AppController::applyWorkspaceSession(bool switchCurrent, bool removeExtras)
+{
+    const auto refuse = [this](const QString &status) {
+        m_applyStatus = status;
+        m_applyResidual.clear();
+        emit presentationChanged();
+        return false;
+    };
+    if (m_applyRunning) {
+        return refuse(QStringLiteral("in-progress"));
+    }
+    if (!m_document.preferences.workspaceManagementEnabled) {
+        return refuse(QStringLiteral("management-disabled"));
+    }
+    const QString sessionId = activeWorkspaceSession();
+    if (findWorkspaceSession(m_document, sessionId) == nullptr) {
+        return refuse(QStringLiteral("no-session"));
+    }
+    if (m_workspace == nullptr) {
+        return refuse(QStringLiteral("observation-unavailable"));
+    }
+    const WorkspaceState observed = m_workspace->state();
+    if (observed.availability != WorkspaceAvailability::Available || observed.refreshPending
+        || m_workspace->activeLogicalRequestId() != 0) {
+        return refuse(QStringLiteral("observation-stale"));
+    }
+    if (m_workspace->ownerGeneration() != m_previewOwnerGeneration) {
+        return refuse(QStringLiteral("owner-changed"));
+    }
+    const WorkspacePlan plan = computeWorkspacePlan(m_document, sessionId, observed, openWindowIdentities());
+    const QString fingerprint = workspacePreviewFingerprint(plan, observed);
+    if (!m_hasLastPlan || m_previewFingerprint.isEmpty() || fingerprint != m_previewFingerprint) {
+        return refuse(QStringLiteral("preview-stale"));
+    }
+
+    m_applyRunning = true;
+    m_applyStatus.clear();
+    m_applyResidual.clear();
+    m_lastApplyReverted = false;
+    m_lastApplyCreated = 0;
+    m_lastApplyRemoved = 0;
+    emit presentationChanged();
+
+    m_lastPlan = plan;
+    m_hasLastPlan = true;
+    m_launcher.beginTransaction(QDateTime::currentMSecsSinceEpoch());
+    WorkspaceMutationOptions options;
+    options.switchCurrent = switchCurrent;
+    options.removeExtras = removeExtras;
+    const WorkspaceMutationResult result = m_mutator.apply(plan, observed, options);
+    if (result.ok && !result.noChanges) {
+        launchPlannedProfiles(plan);
+    }
+    m_lastApplyReverted = result.reverted && !result.revertFailed;
+    m_lastApplyCreated = result.createdCount;
+    m_lastApplyRemoved = result.removedCount;
+    m_applyResidual = result.residualClass;
+    if (result.ok) {
+        m_applyStatus = result.noChanges ? QStringLiteral("no-changes")
+                                         : (result.residualClass.isEmpty() ? QStringLiteral("applied")
+                                                                           : QStringLiteral("applied-with-residual"));
+    } else {
+        m_applyStatus = result.reverted ? (result.revertFailed ? QStringLiteral("failed") : QStringLiteral("failed-reverted"))
+                                        : QStringLiteral("failed-no-revert");
+    }
+    m_launcher.endTransaction();
+    m_applyRunning = false;
+    (void)workspacePlanMap();
+    emit presentationChanged();
+    emit diagnosticsChanged();
+    return result.ok;
+}
+
+bool AppController::revertWorkspaceApply()
+{
+    if (m_applyRunning) {
+        m_applyStatus = QStringLiteral("in-progress");
+        emit presentationChanged();
+        return false;
+    }
+    if (!m_mutator.checkpointExists()) {
+        m_applyStatus = QStringLiteral("no-checkpoint");
+        m_applyResidual.clear();
+        emit presentationChanged();
+        return false;
+    }
+    const WorkspaceState observed = m_workspace != nullptr ? m_workspace->state() : WorkspaceState{};
+    const WorkspaceMutationResult result = m_mutator.revert(observed);
+    m_lastApplyReverted = result.ok;
+    m_applyResidual = result.residualClass;
+    if (result.ok) {
+        m_applyStatus = result.residualClass.isEmpty() ? QStringLiteral("reverted")
+                                                       : QStringLiteral("reverted-with-residual");
+    } else {
+        m_applyStatus = QStringLiteral("revert-failed");
+    }
+    (void)workspacePlanMap();
+    emit presentationChanged();
+    emit diagnosticsChanged();
+    return result.ok;
+}
+
+void AppController::onWorkspaceDesktopCreated(const QString &id, int position)
+{
+    if (!m_applyRunning) {
+        return;
+    }
+    m_mutator.recordCreatedDesktop(id, position);
+}
+
+void AppController::onDesktopCreatedInTransaction(const QString &id, int position)
+{
+    Q_UNUSED(id);
+    if (!m_applyRunning) {
+        return;
+    }
+    launchProfilesForOrdinal(position + 1);
+}
+
+void AppController::launchPlannedProfiles(const WorkspacePlan &plan)
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (const WorkspaceLaunchPlan &entry : plan.launches) {
+        if (entry.intent != WorkspaceLaunchIntent::WouldLaunch || m_launcher.hasAttempted(entry.profileId)) {
+            continue;
+        }
+        (void)m_launcher.requestLaunch(entry, now);
+    }
+}
+
+void AppController::launchProfilesForOrdinal(int ordinal)
+{
+    if (!m_hasLastPlan) {
+        return;
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (const WorkspaceLaunchPlan &entry : m_lastPlan.launches) {
+        if (entry.desktopOrdinal != ordinal || entry.intent != WorkspaceLaunchIntent::WouldLaunch) {
+            continue;
+        }
+        if (!m_launcher.hasAttempted(entry.profileId)) {
+            (void)m_launcher.requestLaunch(entry, now);
+        } else {
+            (void)m_launcher.retryForDesktopCreated(entry, now);
+        }
+    }
+}
+
+QString AppController::workspacePreviewFingerprint(const WorkspacePlan &plan, const WorkspaceState &state) const
+{
+    QString text = plan.sessionId;
+    text += QLatin1Char('|');
+    text += plan.sessionFound ? QLatin1Char('1') : QLatin1Char('0');
+    text += plan.managementEnabled ? QLatin1Char('1') : QLatin1Char('0');
+    text += plan.observationAvailable ? QLatin1Char('1') : QLatin1Char('0');
+    text += QLatin1Char('|');
+    text += QString::number(plan.desiredDesktopCount);
+    text += QLatin1Char(',');
+    text += QString::number(plan.observedDesktopCount);
+    text += QLatin1Char(',');
+    text += plan.extraDesktop ? QLatin1Char('1') : QLatin1Char('0');
+    text += plan.rowsChange ? QLatin1Char('1') : QLatin1Char('0');
+    text += plan.wrappingChange ? QLatin1Char('1') : QLatin1Char('0');
+    text += QLatin1Char('|');
+    for (const WorkspaceDesktopPlan &desktop : plan.desktops) {
+        text += QString::number(desktop.ordinal);
+        text += QLatin1Char(':');
+        text += desktop.name;
+        text += QLatin1Char(':');
+        text += desktop.observedName;
+        text += QLatin1Char(':');
+        text += desktop.create ? QLatin1Char('1') : QLatin1Char('0');
+        text += desktop.rename ? QLatin1Char('1') : QLatin1Char('0');
+        text += QLatin1Char(';');
+    }
+    text += QLatin1Char('|');
+    for (const WorkspaceLaunchPlan &launch : plan.launches) {
+        text += launch.profileId;
+        text += QLatin1Char(':');
+        text += QString::number(launch.desktopOrdinal);
+        text += QLatin1Char(':');
+        text += launch.maximize ? QLatin1Char('1') : QLatin1Char('0');
+        text += QLatin1Char(':');
+        text += launch.desktopFileId;
+        text += QLatin1Char(':');
+        text += workspaceLaunchIntentName(launch.intent);
+        text += QLatin1Char(';');
+    }
+    text += QLatin1Char('|');
+    text += QString::number(state.currentOrdinal);
+    text += QLatin1Char(':');
+    text += state.rows.has_value() ? QString::number(*state.rows) : QStringLiteral("-");
+    text += QLatin1Char(':');
+    text += state.navigationWrappingAround.has_value()
+        ? (*state.navigationWrappingAround ? QStringLiteral("1") : QStringLiteral("0"))
+        : QStringLiteral("-");
+    return text;
+}
+
 void AppController::onIdentityChanged()
 {
     onContextInputsChanged();
@@ -1780,8 +2039,30 @@ void AppController::rememberExternalContext()
 
 void AppController::refreshResolvedProfile()
 {
-    const ApplicationProfile *profile = matchApplication(m_document, m_context->identity());
+    const ApplicationIdentity identity = m_context->identity();
+    const ApplicationProfile *profile = matchApplication(m_document, identity);
+    if (profile == nullptr && m_document.preferences.titleFallbackEnabled) {
+        const std::optional<QString> caption = m_context->takeTitleHint();
+        if (caption.has_value()) {
+            const WorkspaceResolution resolution = resolveWorkspaceAssignment(m_document, identity, *caption);
+            if (resolution.matchedByTitleFallback) {
+                profile = resolution.profile;
+            }
+        }
+    }
     m_resolvedProfileId = profile != nullptr ? profile->id : QString();
+}
+
+PlacementHintDecision AppController::placementHintFor(const ApplicationIdentity &identity,
+                                                      const std::optional<QString> &caption) const
+{
+    const WorkspaceState observed = currentWorkspaceState();
+    const PlacementDecision decision =
+        resolvePlacementDecision(m_document, identity, observed, activeWorkspaceSession(), caption);
+    PlacementHintDecision hint;
+    hint.desktopId = decision.desktopId;
+    hint.maximize = decision.maximize;
+    return hint;
 }
 
 bool AppController::isOwnSurface(const ApplicationIdentity &identity) const
