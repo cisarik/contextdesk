@@ -70,15 +70,34 @@ add_library(contextdeck_actions STATIC
 target_include_directories(contextdeck_actions PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(contextdeck_actions PUBLIC Qt6::DBus Qt6::Gui KF6::ScreenDpms)
 
+add_library(contextdeck_app STATIC
+    src/app/AppController.cpp
+    src/app/LightingEdit.cpp
+    src/app/ProfileDocumentEditor.cpp
+    src/app/WorkspaceSessionEditor.cpp
+    src/app/WorkspaceApplyController.cpp
+    src/app/PresentationModel.cpp
+)
+target_include_directories(contextdeck_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(contextdeck_app PUBLIC
+    contextdeck_core
+    contextdeck_context
+    contextdeck_launch
+    contextdeck_rgb
+    contextdeck_actions
+    Qt6::Core
+    Qt6::Gui
+)
+
 add_executable(contextdeck
     src/app/main.cpp
     src/app/SessionApplication.cpp
-    src/app/AppController.cpp
     src/app/TrayController.cpp
     src/app/SettingsHost.cpp
     src/app/BrokerIpcClient.cpp
 )
 target_link_libraries(contextdeck PRIVATE
+    contextdeck_app
     contextdeck_context
     contextdeck_launch
     contextdeck_rgb
@@ -220,12 +239,12 @@ contextdeck_add_unit_test(test_workspace_lighting
     DBUS_SESSION
     SOURCES
         tests/unit/test_workspace_lighting.cpp
-        src/app/AppController.cpp
         src/app/BrokerIpcClient.cpp
     INCLUDE_DIRECTORIES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/support"
     LIBRARIES
+        contextdeck_app
         contextdeck_core
         contextdeck_context
         contextdeck_launch

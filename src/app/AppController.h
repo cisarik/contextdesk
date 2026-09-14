@@ -1,5 +1,9 @@
 #pragma once
 
+#include "app/PresentationModel.h"
+#include "app/ProfileDocumentEditor.h"
+#include "app/WorkspaceApplyController.h"
+#include "app/WorkspaceSessionEditor.h"
 #include "actions/PowerActions.h"
 #include "context/ContextReceiver.h"
 #include "core/Persistence.h"
@@ -9,6 +13,7 @@
 #include "workspace/DesktopMutator.h"
 #include "workspace/WorkspacePlan.h"
 
+#include <QLoggingCategory>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -20,13 +25,11 @@ namespace contextdeck {
 class BrokerIpcClient;
 class WorkspaceReceiver;
 
-enum class SessionLightingMode {
-    Automatic,
-    TemporaryColor,
-    LightsOff,
-    DeviceDefault,
-};
+Q_DECLARE_LOGGING_CATEGORY(lcUi)
 
+// Sole QML type and test-facing facade. Owns context/rgb/workspace wiring and
+// the resolved-lighting state; delegates document edits, session editing,
+// workspace apply, and presentation queries to the app units.
 class AppController : public QObject
 {
     Q_OBJECT
@@ -129,19 +132,19 @@ public:
     [[nodiscard]] QVariantMap workspacePlanPreview() const;
     [[nodiscard]] bool workspaceApplyAvailable() const;
     [[nodiscard]] bool workspaceCheckpointAvailable() const;
-    [[nodiscard]] bool workspaceApplyRunning() const { return m_applyRunning; }
-    [[nodiscard]] QString workspaceApplyStatus() const { return m_applyStatus; }
-    [[nodiscard]] QString workspaceLastResidual() const { return m_applyResidual; }
+    [[nodiscard]] bool workspaceApplyRunning() const { return m_apply.workspaceApplyRunning(); }
+    [[nodiscard]] QString workspaceApplyStatus() const { return m_apply.workspaceApplyStatus(); }
+    [[nodiscard]] QString workspaceLastResidual() const { return m_apply.workspaceLastResidual(); }
     [[nodiscard]] QVariantList inventory() const;
     [[nodiscard]] QVariantList profiles() const;
     [[nodiscard]] QVariantList controls() const;
     [[nodiscard]] QVariantMap diagnostics() const;
     [[nodiscard]] const ProfileDocument &document() const { return m_document; }
     [[nodiscard]] SessionLightingMode sessionLightingMode() const { return m_sessionLighting; }
-    [[nodiscard]] ApplicationLauncher &launcher() { return m_launcher; }
-    [[nodiscard]] DesktopMutator &mutator() { return m_mutator; }
+    [[nodiscard]] ApplicationLauncher &launcher() { return m_apply.launcher(); }
+    [[nodiscard]] DesktopMutator &mutator() { return m_apply.mutator(); }
 
-    Q_INVOKABLE QString saveStatus() const { return m_saveStatus; }
+    Q_INVOKABLE QString saveStatus() const { return m_editor.saveStatus(); }
     Q_INVOKABLE bool save();
     Q_INVOKABLE void setGlobalColor(const QString &hex);
     Q_INVOKABLE void setApplicationColor(const QString &id, const QString &hex);
@@ -209,37 +212,15 @@ private:
     void onIdentityChanged();
     void onContextInputsChanged();
     void onInventoryChanged();
-    void onWorkspaceDesktopCreated(const QString &id, int position);
-    void onDesktopCreatedInTransaction(const QString &id, int position);
-    void launchPlannedProfiles(const WorkspacePlan &plan);
-    void launchProfilesForOrdinal(int ordinal);
-    void rememberExternalContext();
-    void refreshResolvedProfile();
     void scheduleRecompute();
     void recompute();
     [[nodiscard]] PlacementHintDecision placementHintFor(const ApplicationIdentity &identity,
                                                          const std::optional<QString> &caption) const;
-    [[nodiscard]] QString workspacePreviewFingerprint(const WorkspacePlan &plan, const WorkspaceState &state) const;
-    [[nodiscard]] bool isOwnSurface(const ApplicationIdentity &identity) const;
-    [[nodiscard]] Lighting effectiveLighting() const;
-    [[nodiscard]] std::optional<Lighting> sessionOverrideLighting() const;
     [[nodiscard]] WorkspaceState currentWorkspaceState() const;
-    [[nodiscard]] QVariantMap workspacePlanMap() const;
-    [[nodiscard]] QVector<ApplicationIdentity> openWindowIdentities() const;
-    [[nodiscard]] bool workspaceSessionExists(const QString &id) const;
-    [[nodiscard]] int workspaceSessionDesktopCount(const QString &id) const;
-    [[nodiscard]] WorkspaceAssignment *applicationWorkspace(const QString &id);
+    [[nodiscard]] std::optional<Lighting> sessionOverrideLighting() const;
+    void rememberExternalContext();
+    void refreshResolvedProfile();
     void sendLighting(const DesiredLighting &desired);
-    [[nodiscard]] QString friendlyApplicationName(const ApplicationIdentity &identity) const;
-    [[nodiscard]] QString openRgbPhrase() const;
-    [[nodiscard]] QString lightsPhrase() const;
-    [[nodiscard]] static std::optional<Rgb> parseHex(const QString &hex);
-    [[nodiscard]] static QString toHex(const Rgb &color);
-    void speedBounds(LightingMode mode, quint32 &slowest, quint32 &fastest) const;
-    [[nodiscard]] quint32 percentToSpeed(int percent, LightingMode mode) const;
-    [[nodiscard]] int speedToPercent(const Lighting &lighting) const;
-    bool applySpeedPercent(Lighting &lighting, int percent);
-    bool applyBreathingColor(Lighting &lighting, const Rgb &color);
 
     ContextReceiver *m_context = nullptr;
     WorkspaceReceiver *m_workspace = nullptr;
@@ -256,22 +237,13 @@ private:
     bool m_recomputeQueued = false;
     bool m_contextEventQueued = false;
     QString m_resolvedProfileId;
-    QString m_saveStatus;
     QString m_lastExternalApplication;
     quint64 m_identityUpdates = 0;
     quint64 m_lightingUpdates = 0;
-    DesktopMutator m_mutator;
-    ApplicationLauncher m_launcher;
-    mutable WorkspacePlan m_lastPlan;
-    mutable bool m_hasLastPlan = false;
-    mutable QString m_previewFingerprint;
-    mutable quint64 m_previewOwnerGeneration = 0;
-    bool m_applyRunning = false;
-    QString m_applyStatus;
-    QString m_applyResidual;
-    bool m_lastApplyReverted = false;
-    int m_lastApplyCreated = 0;
-    int m_lastApplyRemoved = 0;
+    ProfileDocumentEditor m_editor;
+    WorkspaceSessionEditor m_sessions;
+    WorkspaceApplyController m_apply;
+    PresentationModel m_presentation;
 };
 
 } // namespace contextdeck
