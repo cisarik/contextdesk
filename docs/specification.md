@@ -552,7 +552,7 @@ drawer):
 | **Stav** (Overview) | Five-zone Hero preview, one human-readable status sentence, empty-state CTA |
 | **Farby** | Global lighting preset, visual zone pickers, gradient helper, animation speed, Breathing color |
 | **Aplikácie** | Per-application lighting presets from the KWin inventory, plus named-session assignment fields and the per-profile launch/maximize/title-fallback opt-ins (applied only on explicit Apply) |
-| **Plochy** | Observed desktop count/current/rows/wrapping, named-session editor, dry-run plan preview. Apply hidden/disabled until a later authorized slice |
+| **Plochy** | Observed desktop count/current/rows/wrapping, named-session editor, dry-run plan preview, and the explicit Apply / revert-from-checkpoint controls. Apply is available only with workspace management enabled, a valid saved session, and a fresh `Available` observation matching the shown preview; `current` switch and extra-desktop removal stay separate opt-ins |
 | **Diagnostika** | D-Bus names, bridge id, socket/SDK state, counters, power actions |
 | **Pokročilé** | Inactive M2 shortcut catalog and chord recorder |
 

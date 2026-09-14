@@ -315,12 +315,13 @@ WorkspaceMutationResult DesktopMutator::apply(const WorkspacePlan &plan, const W
     if (options.switchCurrent) {
         const QString target = observedIdAtOrdinal(observed, 1);
         if (target.isEmpty()) {
-            result.residualClass = QStringLiteral("current-target-missing");
-        } else if (!setStringProperty(QStringLiteral("current"), target, errorClass)) {
-            result.residualClass = QStringLiteral("current-switch-skipped");
-        } else {
-            result.currentSwitched = true;
+            errorClass = QStringLiteral("current-target-missing");
+            return failApply(errorClass);
         }
+        if (!setStringProperty(QStringLiteral("current"), target, errorClass)) {
+            return failApply(errorClass);
+        }
+        result.currentSwitched = true;
     }
 
     if (options.removeExtras) {

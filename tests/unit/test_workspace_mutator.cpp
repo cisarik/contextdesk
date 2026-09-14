@@ -650,6 +650,113 @@ private slots:
         bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
     }
 
+    void currentSwitchFailureAbortsAndReverts()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeKwinManager fake(bus);
+        fake.seed({{QStringLiteral("one"), QStringLiteral("One")},
+                   {QStringLiteral("two"), QStringLiteral("Two")},
+                   {QStringLiteral("extra"), QStringLiteral("Extra")}});
+        QVERIFY(registerFake(bus, &fake));
+        QDBusConnection client = makeClientBus();
+        WorkspaceReceiver receiver(client);
+        receiver.setTimingForTest(200, {20, 40});
+        QVERIFY(receiver.start());
+        QTRY_COMPARE(receiver.state().availability, WorkspaceAvailability::Available);
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        DesktopMutator mutator(client);
+        const QString checkpointPath = dir.path() + QStringLiteral("/workspace-checkpoint.json");
+        mutator.setCheckpointPath(checkpointPath);
+
+        const WorkspaceSession session = makeSession({QStringLiteral("One"), QStringLiteral("Two")});
+        const ProfileDocument document = documentFor(session);
+        const WorkspacePlan plan = computeWorkspacePlan(document, session.id, receiver.state(), {});
+        fake.setFailMethod(QStringLiteral("Set"), 1);
+        WorkspaceMutationOptions options;
+        options.switchCurrent = true;
+        options.removeExtras = true;
+        const WorkspaceMutationResult result = mutator.apply(plan, receiver.state(), options);
+
+        QVERIFY(!result.ok);
+        QCOMPARE(result.failureClass, QStringLiteral("mutation-error"));
+        QVERIFY(result.reverted);
+        QVERIFY(!result.revertFailed);
+        QVERIFY(!result.currentSwitched);
+        QCOMPARE(result.removedCount, 0);
+        QCOMPARE(fake.callCount(QStringLiteral("removeDesktop")), 0);
+        QVERIFY(fake.containsId(QStringLiteral("extra")));
+        QCOMPARE(fake.desktopCount(), 3);
+        bool currentAttempted = false;
+        for (const FakeKwinManager::Call &call : fake.callsOf(QStringLiteral("Set"))) {
+            if (call.property == QLatin1String("current")) {
+                currentAttempted = true;
+                QCOMPARE(call.value.toString(), QStringLiteral("one"));
+            }
+        }
+        QVERIFY(currentAttempted);
+        QVERIFY(!QFile::exists(checkpointPath));
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void currentTargetMissingAbortsBeforeRemoval()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        FakeKwinManager fake(bus);
+        fake.seed({{QStringLiteral("two"), QStringLiteral("Two")}});
+        QVERIFY(registerFake(bus, &fake));
+
+        QDBusConnection client = makeClientBus();
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        DesktopMutator mutator(client);
+        const QString checkpointPath = dir.path() + QStringLiteral("/workspace-checkpoint.json");
+        mutator.setCheckpointPath(checkpointPath);
+
+        WorkspaceState observed;
+        observed.availability = WorkspaceAvailability::Available;
+        observed.currentId = QStringLiteral("two");
+        observed.currentOrdinal = 2;
+        observed.rows = 1;
+        observed.navigationWrappingAround = false;
+        WorkspaceDesktop desktop;
+        desktop.position = 1;
+        desktop.ordinal = 2;
+        desktop.id = QStringLiteral("two");
+        desktop.displayName = QStringLiteral("Two");
+        observed.desktops.push_back(desktop);
+
+        WorkspacePlan plan;
+        plan.sessionFound = true;
+        plan.sessionId = QStringLiteral("coding");
+        plan.managementEnabled = true;
+        plan.observationAvailable = true;
+        plan.desiredDesktopCount = 2;
+        plan.observedDesktopCount = 1;
+        WorkspaceDesktopPlan entry;
+        entry.ordinal = 2;
+        entry.name = QStringLiteral("Two");
+        entry.observedName = QStringLiteral("Two");
+        plan.desktops.push_back(entry);
+
+        WorkspaceMutationOptions options;
+        options.switchCurrent = true;
+        options.removeExtras = true;
+        const WorkspaceMutationResult result = mutator.apply(plan, observed, options);
+
+        QVERIFY(!result.ok);
+        QCOMPARE(result.failureClass, QStringLiteral("current-target-missing"));
+        QVERIFY(result.reverted);
+        QVERIFY(!result.revertFailed);
+        QVERIFY(!result.currentSwitched);
+        QCOMPARE(fake.callCount(QStringLiteral("removeDesktop")), 0);
+        QVERIFY(!QFile::exists(checkpointPath));
+        bus.unregisterService(QStringLiteral("org.kde.KWin"));
+        bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
     void abortOnRenameErrorRunsRevert()
     {
         QDBusConnection bus = QDBusConnection::sessionBus();

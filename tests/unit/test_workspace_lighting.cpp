@@ -13,6 +13,8 @@
 #include <QDBusVariant>
 #include <QDBusVirtualObject>
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QMetaObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -691,6 +693,35 @@ private slots:
         QCOMPARE(fake.desktopCount(), 2);
         bus.unregisterService(QStringLiteral("org.kde.KWin"));
         bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void productionCheckpointPathUsesProductDirectory()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString productPath = dir.path() + QStringLiteral("/contextdeck/workspace-checkpoint.json");
+        const QString bareRootPath = dir.path() + QStringLiteral("/workspace-checkpoint.json");
+
+        QVERIFY(QDir().mkpath(dir.path() + QStringLiteral("/contextdeck")));
+        {
+            QFile product(productPath);
+            QVERIFY(product.open(QIODevice::WriteOnly));
+            QCOMPARE(product.write("{}"), qint64(2));
+        }
+
+        ContextReceiver context;
+        OpenRgbClient rgb;
+        PowerActions power;
+        AppController controller(&context, &rgb, &power, nullptr, dir.path());
+        QVERIFY(controller.workspaceCheckpointAvailable());
+
+        QVERIFY(QFile::remove(productPath));
+        {
+            QFile bareRoot(bareRootPath);
+            QVERIFY(bareRoot.open(QIODevice::WriteOnly));
+            QCOMPARE(bareRoot.write("{}"), qint64(2));
+        }
+        QVERIFY(!controller.workspaceCheckpointAvailable());
     }
 
     void liveCaptionPrivacyGuard()

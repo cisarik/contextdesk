@@ -195,7 +195,7 @@ AppController::AppController(ContextReceiver *context, OpenRgbClient *rgb, Power
     , m_store(std::move(configRoot))
 {
     m_document.globalLighting = defaultLighting();
-    m_mutator.setCheckpointPath(m_store.configRoot() + QStringLiteral("/workspace-checkpoint.json"));
+    m_mutator.setCheckpointPath(m_store.configRoot() + QStringLiteral("/contextdeck/workspace-checkpoint.json"));
     connect(m_context, &ContextReceiver::currentIdentityChanged, this, &AppController::onContextInputsChanged);
     connect(m_context, &ContextReceiver::bridgeLost, this, &AppController::onContextInputsChanged);
     connect(m_context, &ContextReceiver::bridgeConnectedChanged, this, &AppController::contextChanged);
