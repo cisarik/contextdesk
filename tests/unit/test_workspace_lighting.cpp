@@ -82,6 +82,30 @@ WorkspaceState twoDesktops(int current)
     return state;
 }
 
+void collectDiagnosticStrings(const QVariant &value, QStringList &out)
+{
+    switch (value.typeId()) {
+    case QMetaType::QVariantMap: {
+        const QVariantMap map = value.toMap();
+        for (auto it = map.cbegin(); it != map.cend(); ++it) {
+            out.push_back(it.key());
+            collectDiagnosticStrings(it.value(), out);
+        }
+        return;
+    }
+    case QMetaType::QVariantList: {
+        const QVariantList list = value.toList();
+        for (const QVariant &entry : list) {
+            collectDiagnosticStrings(entry, out);
+        }
+        return;
+    }
+    default:
+        out.push_back(value.toString());
+        return;
+    }
+}
+
 class FakeDesktopManager : public QDBusVirtualObject
 {
 public:
@@ -349,6 +373,97 @@ private slots:
         QCOMPARE(workspace.state().currentOrdinal, 1);
         bus.unregisterService(QStringLiteral("org.kde.KWin"));
         bus.unregisterObject(QStringLiteral("/VirtualDesktopManager"));
+    }
+
+    void diagnosticsOmitWorkspacePrivacySentinels()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        const QString sessionSentinel = QStringLiteral("contextdeck-sentinel-session-4f9c1a37");
+        const QString desktopSentinel = QStringLiteral("contextdeck-sentinel-desktop-4f9c1a37");
+        const QString patternSentinel = QStringLiteral("contextdeck-sentinel-title-pattern-4f9c1a37");
+
+        ProfileStore store(dir.path());
+        ProfileDocument document;
+        document.globalLighting = defaultWorkspaceLayout();
+
+        WorkspaceSession session;
+        session.id = QStringLiteral("sentinel-session-4f9c1a37");
+        session.displayName = sessionSentinel;
+        WorkspaceDesktopEntry desktop;
+        desktop.ordinal = 1;
+        desktop.name = desktopSentinel;
+        session.desktops.push_back(desktop);
+        document.workspaceSessions.push_back(session);
+
+        ApplicationProfile profile;
+        profile.id = QStringLiteral("sentinel-application-4f9c1a37");
+        profile.displayName = QStringLiteral("Sentinel Application");
+        profile.match.resourceClass = QStringLiteral("SentinelResource4f9c1a37");
+        WorkspaceAssignment assignment;
+        assignment.sessionId = session.id;
+        assignment.desktopOrdinal = 1;
+        TitleFallback fallback;
+        fallback.enabled = true;
+        fallback.mode = TitleMatchMode::Contains;
+        fallback.pattern = patternSentinel;
+        assignment.titleFallback = fallback;
+        profile.workspace = assignment;
+        document.applications.push_back(profile);
+
+        document.preferences.workspaceManagementEnabled = true;
+        document.preferences.titleFallbackEnabled = true;
+        document.preferences.activeWorkspaceSessionId = session.id;
+
+        const SaveOutcome saved = store.save(document);
+        QVERIFY2(saved.ok, qPrintable(saved.error.reason));
+
+        ContextReceiver context;
+        OpenRgbClient rgb;
+        PowerActions power;
+        AppController controller(&context, &rgb, &power, nullptr, dir.path());
+        controller.load();
+
+        QCOMPARE(controller.document().workspaceSessions.size(), 1);
+        QCOMPARE(controller.document().workspaceSessions.at(0).displayName, sessionSentinel);
+        QCOMPARE(controller.document().workspaceSessions.at(0).desktops.at(0).name, desktopSentinel);
+        QCOMPARE(controller.document().applications.size(), 1);
+        const std::optional<WorkspaceAssignment> &loadedAssignment =
+            controller.document().applications.at(0).workspace;
+        QVERIFY(loadedAssignment.has_value());
+        QVERIFY(loadedAssignment->titleFallback.has_value());
+        QVERIFY(loadedAssignment->titleFallback->enabled);
+        QCOMPARE(loadedAssignment->titleFallback->pattern, patternSentinel);
+        QVERIFY(controller.workspaceManagementEnabled());
+        QVERIFY(controller.titleFallbackEnabled());
+
+        const QVariantMap diagnostics = controller.diagnostics();
+        QStringList diagnosticsStrings;
+        for (auto it = diagnostics.cbegin(); it != diagnostics.cend(); ++it) {
+            diagnosticsStrings.push_back(it.key());
+            collectDiagnosticStrings(it.value(), diagnosticsStrings);
+        }
+        const QStringList sentinels{sessionSentinel, desktopSentinel, patternSentinel};
+        for (const QString &sentinel : sentinels) {
+            for (const QString &text : diagnosticsStrings) {
+                QVERIFY2(!text.contains(sentinel),
+                         qPrintable(QStringLiteral("diagnostics leaked a sensitive sentinel: %1").arg(text)));
+            }
+        }
+
+        const QStringList forbiddenKeyFragments{QStringLiteral("pattern"), QStringLiteral("caption"),
+                                                QStringLiteral("desktopname"), QStringLiteral("desktopuuid"),
+                                                QStringLiteral("desktopid"), QStringLiteral("uuid")};
+        for (auto it = diagnostics.cbegin(); it != diagnostics.cend(); ++it) {
+            QString normalized = it.key().toLower();
+            normalized.remove(QLatin1Char('_'));
+            normalized.remove(QLatin1Char('-'));
+            for (const QString &fragment : forbiddenKeyFragments) {
+                QVERIFY2(!normalized.contains(fragment),
+                         qPrintable(QStringLiteral("diagnostics key exposes a sensitive category: %1").arg(it.key())));
+            }
+        }
     }
 };
 
