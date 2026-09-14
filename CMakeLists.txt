@@ -213,6 +213,7 @@ contextdeck_add_unit_test(test_udev_policy
 find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
 contextdeck_add_unit_test(test_workspace_receiver
     DBUS_SESSION
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/tests/support"
     LIBRARIES contextdeck_context Qt6::Test Qt6::DBus)
 
 contextdeck_add_unit_test(test_workspace_lighting
@@ -221,7 +222,9 @@ contextdeck_add_unit_test(test_workspace_lighting
         tests/unit/test_workspace_lighting.cpp
         src/app/AppController.cpp
         src/app/BrokerIpcClient.cpp
-    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
+    INCLUDE_DIRECTORIES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/support"
     LIBRARIES
         contextdeck_core
         contextdeck_context

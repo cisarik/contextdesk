@@ -5,6 +5,8 @@
 #include "rgb/OpenRgbClient.h"
 #include "rgb/OpenRgbProtocol.h"
 
+#include "FakeVirtualDesktopMap.h"
+
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -25,30 +27,6 @@
 
 using namespace contextdeck;
 using namespace contextdeck::openrgb;
-
-struct DesktopTuple {
-    qint32 position = 0;
-    QString id;
-    QString name;
-};
-
-Q_DECLARE_METATYPE(DesktopTuple)
-
-QDBusArgument &operator<<(QDBusArgument &argument, const DesktopTuple &tuple)
-{
-    argument.beginStructure();
-    argument << tuple.position << tuple.id << tuple.name;
-    argument.endStructure();
-    return argument;
-}
-
-const QDBusArgument &operator>>(const QDBusArgument &argument, DesktopTuple &tuple)
-{
-    argument.beginStructure();
-    argument >> tuple.position >> tuple.id >> tuple.name;
-    argument.endStructure();
-    return argument;
-}
 
 namespace {
 
@@ -252,20 +230,7 @@ public:
 
     bool sendAll(const QDBusMessage &message, const QDBusConnection &connection) const
     {
-        QVariantMap map;
-        map.insert(QStringLiteral("count"), QVariant::fromValue(static_cast<uint>(m_desktops.size())));
-        map.insert(QStringLiteral("current"), m_current);
-        map.insert(QStringLiteral("rows"), QVariant::fromValue(m_rows));
-        map.insert(QStringLiteral("navigationWrappingAround"), QVariant(m_wrapping));
-        QList<VirtualDesktopDBus> rows;
-        for (const DesktopTuple &tuple : m_desktops) {
-            VirtualDesktopDBus row;
-            row.position = tuple.position;
-            row.id = tuple.id;
-            row.name = tuple.name;
-            rows.push_back(row);
-        }
-        map.insert(QStringLiteral("desktops"), QVariant::fromValue(rows));
+        const QVariantMap map = makeVirtualDesktopGetAllMap(m_desktops, m_current, m_rows, m_wrapping);
         return connection.send(message.createReply(QVariantList{QVariant::fromValue(map)}));
     }
 

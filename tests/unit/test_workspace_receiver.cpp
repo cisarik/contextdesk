@@ -2,6 +2,8 @@
 #include "context/WorkspaceReceiver.h"
 #include "context/WorkspaceStateCodec.h"
 
+#include "FakeVirtualDesktopMap.h"
+
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -20,36 +22,13 @@
 
 using namespace contextdeck;
 
-struct DesktopTuple {
-    qint32 position = 0;
-    QString id;
-    QString name;
-};
-
 struct UnsignedDesktopTuple {
     quint32 position = 0;
     QString id;
     QString name;
 };
 
-Q_DECLARE_METATYPE(DesktopTuple)
 Q_DECLARE_METATYPE(UnsignedDesktopTuple)
-
-QDBusArgument &operator<<(QDBusArgument &argument, const DesktopTuple &tuple)
-{
-    argument.beginStructure();
-    argument << tuple.position << tuple.id << tuple.name;
-    argument.endStructure();
-    return argument;
-}
-
-const QDBusArgument &operator>>(const QDBusArgument &argument, DesktopTuple &tuple)
-{
-    argument.beginStructure();
-    argument >> tuple.position >> tuple.id >> tuple.name;
-    argument.endStructure();
-    return argument;
-}
 
 QDBusArgument &operator<<(QDBusArgument &argument, const UnsignedDesktopTuple &tuple)
 {
@@ -273,64 +252,22 @@ public:
 
     bool sendAll(const QDBusMessage &message, const QDBusConnection &connection) const
     {
+        FakeVirtualDesktopGetAll spec;
+        spec.desktops = m_desktops;
+        spec.current = m_current;
+        spec.rows = m_rows;
+        spec.wrapping = m_wrapping;
+        spec.malformed = m_malformed;
+        spec.missingCurrent = m_missingCurrent;
+        spec.emptyCurrent = m_emptyCurrent;
+        spec.unsignedPositions = m_unsigned;
+        spec.emptyName = m_emptyName;
+        spec.malformedWrapping = m_malformedWrapping;
+        spec.extraKey = m_extraKey;
+        spec.countOverride = m_countOverride;
+
         QDBusArgument mapArg;
-        mapArg.beginMap(QMetaType::fromType<QString>(), QMetaType::fromType<QDBusVariant>());
-        auto put = [&](const QString &key, const QVariant &value) {
-            mapArg.beginMapEntry();
-            mapArg << key << QDBusVariant(value);
-            mapArg.endMapEntry();
-        };
-
-        if (m_malformed) {
-            put(QStringLiteral("count"), QVariant::fromValue(uint(2)));
-            put(QStringLiteral("current"), QVariant(m_current));
-            put(QStringLiteral("desktops"), QVariant(QStringLiteral("nope")));
-        } else {
-            const int count = m_countOverride.value_or(static_cast<int>(m_desktops.size()));
-            put(QStringLiteral("count"), QVariant::fromValue(static_cast<uint>(count)));
-            QString current = m_current;
-            if (m_emptyCurrent) {
-                current.clear();
-            } else if (m_missingCurrent) {
-                current = QStringLiteral("missing");
-            }
-            put(QStringLiteral("current"), QVariant(current));
-            put(QStringLiteral("rows"), QVariant::fromValue(m_rows));
-            if (m_malformedWrapping) {
-                put(QStringLiteral("navigationWrappingAround"), QVariant(QStringLiteral("yes")));
-            } else {
-                put(QStringLiteral("navigationWrappingAround"), QVariant(m_wrapping));
-            }
-            if (m_extraKey) {
-                put(QStringLiteral("futureProperty"), QVariant(1));
-            }
-
-            QDBusArgument desktopsArg;
-            if (m_unsigned) {
-                desktopsArg.beginArray(qMetaTypeId<VirtualDesktopDBusUnsigned>());
-                for (const DesktopTuple &tuple : m_desktops) {
-                    VirtualDesktopDBusUnsigned row;
-                    row.position = static_cast<quint32>(tuple.position);
-                    row.id = tuple.id;
-                    row.name = m_emptyName ? QString() : tuple.name;
-                    desktopsArg << row;
-                }
-                desktopsArg.endArray();
-            } else {
-                desktopsArg.beginArray(qMetaTypeId<VirtualDesktopDBus>());
-                for (const DesktopTuple &tuple : m_desktops) {
-                    VirtualDesktopDBus row;
-                    row.position = tuple.position;
-                    row.id = tuple.id;
-                    row.name = m_emptyName ? QString() : tuple.name;
-                    desktopsArg << row;
-                }
-                desktopsArg.endArray();
-            }
-            put(QStringLiteral("desktops"), QVariant::fromValue(desktopsArg));
-        }
-        mapArg.endMap();
-
+        writeVirtualDesktopGetAllArg(mapArg, spec);
         QDBusMessage reply = message.createReply();
         reply << QVariant::fromValue(mapArg);
         return connection.send(reply);
