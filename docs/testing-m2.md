@@ -9,9 +9,10 @@ One named physical slice is recorded as accepted on candidate `cb72ae0`
 (explicit ARM, sampled G213 pass-through, matching-invocation cutoff,
 post-death typing; META Worker 16). A second named slice on the same runtime
 candidate / docs descendant `9a89095` recorded armed watchdog abort with a
-held modifier (META Worker 19). **Full G4 remains open:** LED-return
-behavior, all-control fidelity, live host suspend/resume, input-remapper
-coexistence beyond those samples, and production/autostart readiness.
+held modifier (META Worker 19). **Full G4 remains open:** production/autostart readiness (G8/M5),
+hibernate/hybrid-sleep, and general input-remapper coexistence. Named slices
+from Workers 16, 19, 22, 23, and 24 are recorded as accepted and are not
+rerun.
 
 ## What S3 proves without a keyboard
 
@@ -247,9 +248,10 @@ death; recovery requires rebooting as the first step.
 
 The named physical slices covered sampled grab, pass-through, matching-invocation
 cutoff death, typing after descriptor close, and armed watchdog abort with a
-held modifier. Remaining G4 claims: LED return, all-control fidelity,
-input-remapper coexistence beyond those samples, and live host suspend/resume.
-Autostart (G8) stays forbidden until those pass. Session IPC (S4) is covered by
+held modifier, one live suspend/resume cycle, LED return and all-control
+fidelity, and one bounded input-remapper mapping. Remaining G4 claims:
+production/autostart readiness (G8/M5), hibernate/hybrid-sleep, and general
+input-remapper coexistence. Autostart (G8) stays forbidden until those pass. Session IPC (S4) is covered by
 `test_broker_ipc` / `test_broker_ipc_client` and `docs/operations.md` §8;
 production install is `docs/operations.md` §9. The sleep hook is covered by
 `test_sleep_hook`; do not invoke `systemctl suspend` from this file. Do not

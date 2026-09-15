@@ -7,9 +7,9 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 > (M1) are implemented and recorded as accepted on hardware. The input broker
 > (M2) exists in this repository and can be installed **inactive**. The named
 > live G4 slices are accepted, but the M2 logical whole remains open. M2 is
-> parked with G3 host-mitigated on the authorized reference host; the current
-> bounded whole reconciles the accepted M1–M4 state and disposes of the carried
-> M4 ledger candidates. **Full G4 remains open**: the named live slices
+> parked with G3 host-mitigated on the authorized reference host. The M4
+> state and ledger reconciliation is closed on `235d467...`. The current bounded
+> whole is behavior-preserving code health and refactoring. **Full G4 remains open**: the named live slices
 > (Sessions 16, 19, 22, 23, 24) are accepted, and the remaining work is
 > production/autostart readiness, hibernate/hybrid-sleep, and general
 > input-remapper coexistence. Independent G3 re-audit of the residual ACL gap

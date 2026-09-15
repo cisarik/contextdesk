@@ -38,10 +38,12 @@ COOPERATOR action, separate from any authorized report-file preparation.
   deferred by explicit COOPERATOR decision. M4 is not closed, and code acceptance
   is not live or physical acceptance. Nothing mutates without the user's explicit
   Apply and no launch happens at Plasma login.
-- Current whole: **M4 state and ledger reconciliation** — documentation-only
-  reconciliation of the accepted M1–M4 state and disposition of the carried M4
-  ledger candidates; no host, device, desktop, launch, broker, packaging, or
-  license mutation. Ledger dispositions are recorded in the M4 backlog section.
+- Closed documentation whole: **M4 state and ledger reconciliation** — accepted
+  on `235d467...`; ledger dispositions recorded in the M4 backlog section.
+- Current whole: **code health and refactoring** — behavior-preserving
+  internal structure on the session app, core, receivers, and tests. No
+  behavior, visuals, product-claim, or safety-boundary change. No host, device,
+  desktop, launch, broker, packaging, or license mutation.
 - Parked whole: **M2 `g213-contextdeck-input-passthrough-safety`**. Planning
   and production implementation are in the repository. Exact candidate
   `cb72ae0388307b514182efc6936712e3da42cda4` was installed and verified on
@@ -428,8 +430,9 @@ in the repository (tree content, not a G4 close):
   `99-contextdeck-broker-uinput.rules` after seat `uaccess` (not from `62-*`).
 - **Suspend/resume hook** — `packaging/systemd/contextdeck-sleep.sh` stops an
   active broker on systemd-sleep `pre` and may start it once, disarmed, on
-  `post` only with a valid active-before-sleep marker. Not autostart. Not live
-  suspend evidence. ADR 0001.
+  `post` only with a valid active-before-sleep marker. Not autostart. One named
+  live suspend/resume slice is recorded (Session 22).
+  Hibernate and hybrid-sleep remain open. ADR 0001.
 
 **G4 remains open.** Named slices from Sessions 16, 19, 22, 23, and 24 are
 recorded as accepted (ARM / pass-through / cutoff and typing after descriptor
@@ -453,11 +456,15 @@ replacement. Device-free S3 procedures may remain keyboard-free.
 authorized fresh task remains for production/autostart readiness (G8/M5),
 hibernate/hybrid-sleep, or general input-remapper coexistence. Documentation
 here does not grant grab, ARM, autostart, live suspend, or host mutation, and
-does not choose which remainder comes next. Production safety gaps already
-visible in source (silent uinput write errors; virtual-device capabilities from
-`passthroughCapabilities()` rather than measured source bits / LED return
-path; logind `sd_pid_get_session` vs user-manager-launched session apps) stay
-in that remainder unless a later prompt names them.
+does not choose which remainder comes next. Previously listed source gaps are
+addressed in tree: `ForwardingEngine` fails closed on `sink-write-failed`;
+production ARM measures the live capability union and applies it before
+virtual creation (`passthroughCapabilities()` is a test helper, not the ARM
+path); `LogindSeatAuthorizer` uses `sd_pid_get_session` first and, on no
+session, accepts exactly one eligible active local seated graphical session.
+Those items are not remaining source defects. Remaining M2 work is still
+production/autostart readiness (G8/M5), hibernate/hybrid-sleep, and general
+input-remapper coexistence.
 
 Registered tests live in `CMakeLists.txt`. Historical “N/N CTest” lines in META
 are not current suite truth.
