@@ -54,12 +54,18 @@ Kirigami.ApplicationWindow {
         modal: Kirigami.Settings.isMobile
         collapsible: false
         drawerOpen: !Kirigami.Settings.isMobile
+
+        Controls.ActionGroup {
+            id: sectionGroup
+        }
+
         actions: [
             Kirigami.Action {
                 text: "Stav"
                 icon.name: "view-visible"
                 checkable: true
                 checked: root.currentSection === "status"
+                Controls.ActionGroup.group: sectionGroup
                 onTriggered: root.showSection("status")
             },
             Kirigami.Action {
@@ -67,6 +73,7 @@ Kirigami.ApplicationWindow {
                 icon.name: "color-picker"
                 checkable: true
                 checked: root.currentSection === "colors"
+                Controls.ActionGroup.group: sectionGroup
                 onTriggered: root.showSection("colors")
             },
             Kirigami.Action {
@@ -74,6 +81,7 @@ Kirigami.ApplicationWindow {
                 icon.name: "object-group"
                 checkable: true
                 checked: root.currentSection === "apps"
+                Controls.ActionGroup.group: sectionGroup
                 onTriggered: root.showSection("apps")
             },
             Kirigami.Action {
@@ -81,6 +89,7 @@ Kirigami.ApplicationWindow {
                 icon.name: "virtual-desktops"
                 checkable: true
                 checked: root.currentSection === "workspace"
+                Controls.ActionGroup.group: sectionGroup
                 onTriggered: root.showSection("workspace")
             },
             Kirigami.Action {
@@ -88,6 +97,7 @@ Kirigami.ApplicationWindow {
                 icon.name: "help-about"
                 checkable: true
                 checked: root.currentSection === "diagnostics"
+                Controls.ActionGroup.group: sectionGroup
                 onTriggered: root.showSection("diagnostics")
             },
             Kirigami.Action {
@@ -95,6 +105,7 @@ Kirigami.ApplicationWindow {
                 icon.name: "configure"
                 checkable: true
                 checked: root.currentSection === "advanced"
+                Controls.ActionGroup.group: sectionGroup
                 onTriggered: root.showSection("advanced")
             }
         ]
