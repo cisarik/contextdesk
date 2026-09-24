@@ -27,6 +27,7 @@ Kirigami.ScrollablePage {
         Controls.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
+            opacity: 0.85
             text: "M4 Slice B: ContextDeck vie na výslovné Použitie vytvoriť chýbajúce plochy, premenovať odlišné, nastaviť mriežku/obtáčanie a voliteľne prepnúť plochu alebo odstrániť prebytočné plochy. Predvolený Apply nič neodstraňuje. Nič sa nedeje automaticky pri štarte relácie ani pri zmene fokusu."
         }
 
@@ -104,6 +105,7 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
             model: app.workspaceSessionOptions
             textRole: "label"
+            Accessible.description: "Aktívna relácia"
             currentIndex: page.sessionIndex(app.activeWorkspaceSession)
             onActivated: app.setActiveWorkspaceSession(app.workspaceSessionOptions[index].id)
         }
@@ -118,6 +120,7 @@ Kirigami.ScrollablePage {
                 id: newSessionName
                 Layout.fillWidth: true
                 placeholderText: "Názov novej relácie"
+                Accessible.description: "Názov novej relácie"
             }
             Controls.Button {
                 text: "Pridať reláciu"
@@ -158,6 +161,7 @@ Kirigami.ScrollablePage {
                         Controls.TextField {
                             Layout.fillWidth: true
                             text: modelData.displayName
+                            Accessible.description: "Názov:"
                             onEditingFinished: app.renameWorkspaceSession(modelData.id, text)
                         }
                     }
@@ -170,6 +174,7 @@ Kirigami.ScrollablePage {
                             from: 1
                             to: 32
                             value: modelData.desktopCount
+                            Accessible.description: "Počet plôch:"
                             onValueModified: app.setWorkspaceSessionDesktopCount(modelData.id, value)
                         }
                         Controls.CheckBox {
@@ -209,6 +214,7 @@ Kirigami.ScrollablePage {
                 Controls.TextField {
                     Layout.fillWidth: true
                     text: modelData.name
+                    Accessible.description: modelData.sessionLabel + " · Plocha " + modelData.ordinal
                     onEditingFinished: app.setWorkspaceSessionDesktopName(modelData.sessionId, modelData.ordinal, text)
                 }
             }
@@ -338,6 +344,7 @@ Kirigami.ScrollablePage {
         Controls.Label {
             text: app.saveStatus()
             opacity: 0.8
+            visible: app.saveStatus().length > 0
         }
     }
 }
