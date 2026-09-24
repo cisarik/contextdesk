@@ -61,6 +61,7 @@ Kirigami.ScrollablePage {
         Controls.Label {
             text: app.saveStatus()
             opacity: 0.8
+            visible: app.saveStatus().length > 0
         }
     }
 }

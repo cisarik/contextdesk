@@ -253,11 +253,17 @@ ColumnLayout {
             radius: 6
             color: root.breathingHex
             border.width: 1
-            border.color: Kirigami.Theme.disabledTextColor
+            border.color: breathingArea.activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
             MouseArea {
+                id: breathingArea
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
                 Accessible.name: "Farba dýchania"
+                Accessible.onPressAction: root.openBreathingPicker()
+                Keys.onReturnPressed: root.openBreathingPicker()
+                Keys.onSpacePressed: root.openBreathingPicker()
                 onClicked: root.openBreathingPicker()
             }
         }
@@ -292,6 +298,7 @@ ColumnLayout {
             Controls.ComboBox {
                 visible: !root.applicationLevel
                 Layout.preferredWidth: 140
+                Accessible.description: app.zoneNames[index]
                 model: ["Statická", "Indikátor plochy", "Farba aplikácie", "Vypnuté"]
                 property var roleIds: ["static", "desktop_indicator", "app_color", "off"]
                 currentIndex: {
@@ -311,8 +318,8 @@ ColumnLayout {
                 color: root.effectiveMode === "untouched"
                        ? "transparent"
                        : (root.displayZones.length === 5 ? root.displayZones[index] : root.displayZoneHex(index))
-                border.width: root.effectiveMode === "untouched" ? 0 : 1
-                border.color: Kirigami.Theme.disabledTextColor
+                border.width: swatchArea.activeFocus ? 1 : (root.effectiveMode === "untouched" ? 0 : 1)
+                border.color: swatchArea.activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
 
                 Canvas {
                     anchors.fill: parent
@@ -331,15 +338,22 @@ ColumnLayout {
                 }
 
                 MouseArea {
+                    id: swatchArea
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
                     Accessible.name: "Pick color for " + app.zoneNames[index]
+                    Accessible.onPressAction: root.openZonePicker(index)
+                    Keys.onReturnPressed: root.openZonePicker(index)
+                    Keys.onSpacePressed: root.openZonePicker(index)
                     onClicked: root.openZonePicker(index)
                 }
             }
 
             Controls.TextField {
                 visible: hexSwitch.checked
+                Accessible.description: app.zoneNames[index]
                 text: root.displayZoneHex(index)
                 placeholderText: "#rrggbb"
                 Layout.fillWidth: true
@@ -375,10 +389,18 @@ ColumnLayout {
                 height: 32
                 radius: 6
                 color: root.startHex
-                border.color: Kirigami.Theme.disabledTextColor
+                border.width: startSwatchArea.activeFocus ? 1 : 0
+                border.color: startSwatchArea.activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
                 MouseArea {
+                    id: startSwatchArea
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Start Color"
+                    Accessible.onPressAction: root.openGradientPicker("start")
+                    Keys.onReturnPressed: root.openGradientPicker("start")
+                    Keys.onSpacePressed: root.openGradientPicker("start")
                     onClicked: root.openGradientPicker("start")
                 }
             }
@@ -390,10 +412,18 @@ ColumnLayout {
                 height: 32
                 radius: 6
                 color: root.endHex
-                border.color: Kirigami.Theme.disabledTextColor
+                border.width: endSwatchArea.activeFocus ? 1 : 0
+                border.color: endSwatchArea.activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
                 MouseArea {
+                    id: endSwatchArea
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "End Color"
+                    Accessible.onPressAction: root.openGradientPicker("end")
+                    Keys.onReturnPressed: root.openGradientPicker("end")
+                    Keys.onSpacePressed: root.openGradientPicker("end")
                     onClicked: root.openGradientPicker("end")
                 }
             }
