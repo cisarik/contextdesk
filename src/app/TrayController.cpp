@@ -40,6 +40,7 @@ void TrayController::start()
     connect(m_controller, &AppController::contextChanged, this, &TrayController::rebuildMenu);
     connect(m_controller, &AppController::lightingModeChanged, this, &TrayController::rebuildMenu);
     connect(m_controller, &AppController::diagnosticsChanged, this, &TrayController::rebuildMenu);
+    connect(m_controller, &AppController::presentationChanged, this, &TrayController::rebuildMenu);
     qCInfo(lcTray) << "status notifier started";
 }
 
