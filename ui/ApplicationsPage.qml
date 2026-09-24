@@ -33,6 +33,7 @@ Kirigami.ScrollablePage {
         Controls.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
+            opacity: 0.85
             text: "Per-application profiles (picker lists identities from the KWin bridge; selecting a profile never launches or closes an app). Each profile can have its own lighting preset."
         }
 
@@ -47,7 +48,19 @@ Kirigami.ScrollablePage {
             enabled: inventoryBox.count > 0
             onClicked: app.addProfileFromInventory(inventoryBox.currentIndex)
         }
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: app.inventory.length === 0
+            type: Kirigami.MessageType.Information
+            text: "Inventár je prázdny."
+        }
 
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: app.profiles.length === 0
+            type: Kirigami.MessageType.Information
+            text: "Zatiaľ nemáte žiadne profily."
+        }
         Repeater {
             model: app.profiles
             delegate: ColumnLayout {
@@ -62,7 +75,7 @@ Kirigami.ScrollablePage {
                     }
                     Controls.Button {
                         text: "Remove"
-                        onClicked: app.removeProfile(modelData.id)
+                        onClicked: removeProfileDialog.open()
                     }
                 }
                 LightingPresetEditor {
@@ -92,6 +105,7 @@ Kirigami.ScrollablePage {
                         Layout.fillWidth: true
                         model: app.workspaceSessionOptions
                         textRole: "label"
+                        Accessible.description: "Relácia:"
                         currentIndex: page.sessionIndex(modelData.workspaceSessionId)
                         onActivated: app.setApplicationWorkspaceSession(modelData.id,
                                                                         app.workspaceSessionOptions[index].id)
@@ -106,6 +120,7 @@ Kirigami.ScrollablePage {
                         from: 1
                         to: 32
                         value: modelData.workspaceDesktopOrdinal
+                        Accessible.description: "Poradie plochy:"
                         onValueModified: app.setApplicationWorkspaceDesktop(modelData.id, value)
                     }
                     Controls.CheckBox {
@@ -128,6 +143,7 @@ Kirigami.ScrollablePage {
                         Layout.fillWidth: true
                         text: modelData.workspaceLaunchDesktopFile
                         placeholderText: "napr. org.kde.dolphin.desktop"
+                        Accessible.description: "Desktop file:"
                         onEditingFinished: app.setApplicationWorkspaceLaunchFile(modelData.id, text)
                     }
                 }
@@ -143,6 +159,7 @@ Kirigami.ScrollablePage {
                     Controls.ComboBox {
                         id: modeBox
                         model: ["contains", "exact", "prefix"]
+                        Accessible.description: "Title fallback"
                         currentIndex: page.titleModeIndex(modelData.workspaceTitleFallbackMode)
                         onActivated: app.setApplicationTitleFallback(modelData.id, fallbackToggle.checked,
                                                                      currentText, patternField.text)
@@ -152,9 +169,21 @@ Kirigami.ScrollablePage {
                         Layout.fillWidth: true
                         text: modelData.workspaceTitleFallbackPattern
                         placeholderText: "vzor (nikdy sa neloguje)"
+                        Accessible.description: "Title fallback"
                         onEditingFinished: app.setApplicationTitleFallback(modelData.id, fallbackToggle.checked,
                                                                            modeBox.currentText, text)
                     }
+                }
+                Controls.Dialog {
+                    id: removeProfileDialog
+                    title: "Odstrániť profil?"
+                    modal: true
+                    standardButtons: Controls.Dialog.Ok | Controls.Dialog.Cancel
+                    Controls.Label {
+                        wrapMode: Text.WordWrap
+                        text: "Profil a jeho uložené svetlo sa odstránia po uložení. Pokračovať?"
+                    }
+                    onAccepted: app.removeProfile(modelData.id)
                 }
             }
         }
@@ -167,6 +196,7 @@ Kirigami.ScrollablePage {
         Controls.Label {
             text: app.saveStatus()
             opacity: 0.8
+            visible: app.saveStatus().length > 0
         }
     }
 }
