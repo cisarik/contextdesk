@@ -8,8 +8,13 @@ built for **Linux / KDE Plasma 6 / Wayland**.
 > (M2) exists in this repository and can be installed **inactive**. The named
 > live G4 slices are accepted, but the M2 logical whole remains open. M2 is
 > parked with G3 host-mitigated on the authorized reference host. The M4
-> state and ledger reconciliation is closed on `235d467...`. The current bounded
-> whole is behavior-preserving code health and refactoring. **Full G4 remains open**: the named live slices
+> state and ledger reconciliation is closed on `235d467...`. The code health
+> and refactoring whole is closed on `ba87ba08...` (acceptance-PASS;
+> publication-PASS; QML runtime validation parked). The current bounded whole is
+> **ui-ux-refinement**: presentation-only refinement of the session
+> application's six sections, tray, accessibility, and one bounded
+> COOPERATOR-executed runtime QML validation; no behavior, broker, packaging, or
+> license change. **Full G4 remains open**: the named live slices
 > (Sessions 16, 19, 22, 23, 24) are accepted, and the remaining work is
 > production/autostart readiness, hibernate/hybrid-sleep, and general
 > input-remapper coexistence. Independent G3 re-audit of the residual ACL gap

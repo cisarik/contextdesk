@@ -64,10 +64,11 @@ this project.
 - An agent here is the **ORCHESTRATOR** unless a Worker prompt says otherwise.
   Workers act only inside one complete bounded prompt and lose authority at
   terminal report.
-- Access profile: **ChatOrchestrator** (mediated through the COOPERATOR; an
-  inspection clone is not the COOPERATOR’s uncommitted worktree). Selected
-  delivery for this project remains **manual** across subsequent exchanges.
-  Dispatch availability in a client does not change that selection.
+- Access profile: **Orchestrator** (full project orchestration when the
+  session environment exposes those capabilities; an inspection clone is not
+  the COOPERATOR’s uncommitted worktree). Selected delivery for this project
+  remains **manual** across subsequent exchanges. Dispatch availability in a
+  client does not change that selection.
 - COOPERATOR-facing chat is **Slovak**. Worker prompts, Worker reports, and
   repository documentation are **English**.
 - Foundation planning is done: Planner report 01/01 (logical whole
@@ -102,7 +103,7 @@ this project.
 
 ## Hard rule: manual delivery, no automated Worker dispatch
 
-- This project’s access profile is **ChatOrchestrator** with **manual**
+- This project’s access profile is **Orchestrator** with **manual**
   delivery preserved: the COOPERATOR carries every prompt and report.
 - Never use the Task/subagent tool or any agent-spawning mechanism to dispatch,
   substitute, or simulate a Worker. Never claim a Worker ran unless the COOPERATOR
@@ -127,7 +128,7 @@ this project.
   `historical-evidence-only`. **Exact report-file preparation** and **META Git
   archival are separate.** A Worker prepares a report file only under an explicit
   persistence grant; the COOPERATOR owns META add/commit/push in this
-  ChatOrchestrator workflow. Archive the exact issued prompt and exact actual
+  Orchestrator workflow. Archive the exact issued prompt and exact actual
   terminal report together, only after the report exists, in the same first-add
   commit. Reports are never rewritten or prettified. Archives must be public-safe:
   no secrets, tokens, private URLs, personal data, hidden reasoning, or raw tool

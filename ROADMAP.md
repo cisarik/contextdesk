@@ -4,7 +4,7 @@ Human-friendly plan of record. Authority lives elsewhere: the repository is the
 source of truth for code, the pinned AP protocol governs process, and META
 stores the exact Worker prompt/report history. This file summarizes "where we
 are and where we are going" and is maintained after each reconciliation. Access
-profile: ChatOrchestrator; delivery remains manual. META Git archival is a
+profile: Orchestrator; delivery remains manual. META Git archival is a
 COOPERATOR action, separate from any authorized report-file preparation.
 
 ## Where we are now
@@ -40,10 +40,18 @@ COOPERATOR action, separate from any authorized report-file preparation.
   Apply and no launch happens at Plasma login.
 - Closed documentation whole: **M4 state and ledger reconciliation** — accepted
   on `235d467...`; ledger dispositions recorded in the M4 backlog section.
-- Current whole: **code health and refactoring** — behavior-preserving
-  internal structure on the session app, core, receivers, and tests. No
-  behavior, visuals, product-claim, or safety-boundary change. No host, device,
-  desktop, launch, broker, packaging, or license mutation.
+- Closed whole: **code health and refactoring** — behavior-preserving internal
+  structure on the session app, core, receivers, and tests; closed by the
+  ORCHESTRATOR (acceptance-PASS on `ba87ba08...`; publication-PASS; QML runtime
+  validation parked). No behavior, visuals, product-claim, or safety-boundary
+  change. No host, device, desktop, launch, broker, packaging, or license
+  mutation.
+- Current whole: **ui-ux-refinement** — presentation-only refinement of the
+  session application's six sections, shared scaffold, flows and states,
+  accessibility, and tray presentation, plus one bounded COOPERATOR-executed
+  runtime QML validation and a small forward documentation reconciliation. No
+  product-semantics, behavior, persistence, IPC, broker, packaging, launch, or
+  license change; physical testing and G6 licensing remain deferred.
 - Parked whole: **M2 `g213-contextdeck-input-passthrough-safety`**. Planning
   and production implementation are in the repository. Exact candidate
   `cb72ae0388307b514182efc6936712e3da42cda4` was installed and verified on
