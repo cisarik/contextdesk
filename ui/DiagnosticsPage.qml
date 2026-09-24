@@ -175,6 +175,7 @@ Kirigami.ScrollablePage {
 
         Controls.Switch {
             text: "Pozastaviť sledovanie plôch"
+            Accessible.name: "Pozastaviť sledovanie plôch"
             checked: app.workspaceObservationPaused
             onToggled: app.setWorkspaceObservationPaused(checked)
         }
@@ -188,14 +189,17 @@ Kirigami.ScrollablePage {
         RowLayout {
             Controls.Button {
                 text: "Arm G213 pass-through…"
+                Accessible.name: "Arm G213 pass-through…"
                 onClicked: armPrompt.open()
             }
             Controls.Button {
                 text: "Disarm pass-through"
+                Accessible.name: "Disarm pass-through"
                 onClicked: app.disarmPassThrough()
             }
             Controls.Button {
                 text: "Release broker lease"
+                Accessible.name: "Release broker lease"
                 onClicked: app.releaseBrokerLease()
             }
         }
@@ -203,10 +207,12 @@ Kirigami.ScrollablePage {
         RowLayout {
             Controls.Button {
                 text: "Displays Off"
+                Accessible.name: "Displays Off"
                 onClicked: app.displaysOff()
             }
             Controls.Button {
                 text: "Suspend…"
+                Accessible.name: "Suspend…"
                 enabled: app.canSuspend()
                 onClicked: suspendPrompt.open()
             }
