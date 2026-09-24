@@ -8,6 +8,9 @@ Item {
     implicitHeight: 176
     implicitWidth: 560
 
+    Accessible.role: Accessible.Graphic
+    Accessible.name: root.badge + root.zoneNames.join()
+
     property string kind: app.heroKind
     property string badge: app.heroBadge
     property var zones: app.heroZones

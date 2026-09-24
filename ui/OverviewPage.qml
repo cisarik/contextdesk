@@ -30,6 +30,7 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             visible: app.workspaceLayoutActive
+            opacity: 0.8
             text: app.workspaceSummary
         }
 
