@@ -39,6 +39,8 @@ Kirigami.ScrollablePage {
             id: recorder
             implicitHeight: 48
             Layout.fillWidth: true
+            Accessible.role: Accessible.Grouping
+            Accessible.description: recorder.display
             Rectangle {
                 anchors.fill: parent
                 radius: 4
@@ -54,15 +56,18 @@ Kirigami.ScrollablePage {
         RowLayout {
             Controls.Button {
                 text: recorder.recording ? "Recording…" : "Record chord"
+                Accessible.name: recorder.recording ? "Recording…" : "Record chord"
                 onClicked: recorder.begin()
             }
             Controls.Button {
                 text: "Cancel"
+                Accessible.name: "Cancel"
                 enabled: recorder.recording
                 onClicked: recorder.cancel()
             }
             Controls.Button {
                 text: "Store on global F5"
+                Accessible.name: "Store on global F5"
                 enabled: recorder.key.length > 0
                 onClicked: app.assignEmitShortcut("F5", recorder.key, recorder.modifiers, false, "")
             }
